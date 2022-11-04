@@ -7,6 +7,10 @@ class Projectile {
         this.vel = velocity;
     }
 
+    Projectile tick(Environment e){
+        return new Projectile( pos.add(vel), vel.add(e.grav(), e.wind()) );
+    }
+
     Point  pos() { return pos; }
     Vector vel() { return vel; }
  
