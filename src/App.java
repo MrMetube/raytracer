@@ -12,9 +12,9 @@ enum ImageMode{
 
 class App {
     public static void main(String[] args) throws IOException{
-        makeImage(ImageMode.PIXEL, 512);
-        makeImage(ImageMode.RAY, 512);
-        makeImage(ImageMode.DISTANCE, 512);
+        makeImage(ImageMode.PIXEL, 2160);
+        // makeImage(ImageMode.RAY, 512);
+        // makeImage(ImageMode.DISTANCE, 512);
     }
 
     static void makeImage(ImageMode mode, int size){
@@ -23,7 +23,7 @@ class App {
         for (int x = 0; x < size; x++) for (int y = 0; y < size; y++) {
             switch(mode){
                 case PIXEL:
-                    c = new Color(x+0.5,y+0.5,0);
+                    c = new Color((x+0.5)*255/size,(y+0.5)*255/size,0);
                     break;
                 case RAY:
                     Vector v = new Vector(x+0.5-size/2,y+0.5-size/2,100);
