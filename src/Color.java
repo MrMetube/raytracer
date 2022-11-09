@@ -15,6 +15,10 @@ class Color extends Tuple {
         return res;
     }
 
+    Color mul(Color c){
+        return new Color(r() * c.r()/255,g() * c.g()/255,b() *c.b()/255);
+    }
+
     double r(){ return x; }
     double g(){ return y; }
     double b(){ return z; }

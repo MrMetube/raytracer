@@ -11,6 +11,8 @@ class Vector extends Tuple{
     }
     Vector cross(Tuple t){ return new Vector( y*t.z() - z*t.y(), z*t.x() - x*t.z(), x*t.y() - y*t.x()); }
 
+    Vector mul(double scl){ return new Vector(x*scl, y*scl, z*scl);}
+
     Vector norm() {
         double mag = this.mag();
         return new Vector(x/mag, y/mag, z/mag);

@@ -11,6 +11,12 @@ class Ray{
     Vector dir() { return dir; }
     Point origin() { return origin; }
     double t() { return t; }
+
+    Point hitPoint(){
+        Vector v = dir.mul(t);
+        return origin.add(v);
+    }
+
     void hit(Object target){
         this.target = target;
     }
@@ -23,5 +29,4 @@ class Ray{
     }
 
     double len(){ return dir.mag(); }
-    Ray norm(){return new Ray(origin, dir.norm());}
 }

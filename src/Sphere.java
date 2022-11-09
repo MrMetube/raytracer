@@ -19,4 +19,8 @@ class Sphere {
         ray.hit(this);
         return true;
     }
+
+    Vector normal(Point hit){
+        return c.sub(hit);
+    }
 }
