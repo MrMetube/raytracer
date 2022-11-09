@@ -11,11 +11,11 @@ enum ImageMode{
 class App {
     public static void main(String[] args) throws IOException{
         int size = 512;
-        makeImage(ImageMode.PIXEL, size);
-        makeImage(ImageMode.RAY, size);
-        makeImage(ImageMode.DISTANCE, size);
-        makeImage(ImageMode.SPHERE_INTER, size);
-        makeImage(ImageMode.SPHERE_DIST, size);
+        // makeImage(ImageMode.PIXEL, size);
+        // makeImage(ImageMode.RAY, size);
+        // makeImage(ImageMode.DISTANCE, size);
+        // makeImage(ImageMode.SPHERE_INTER, size);
+        // makeImage(ImageMode.SPHERE_DIST, size);
         makeImage(ImageMode.SPHERE_NORMAL, size);
     }
 

@@ -1,4 +1,4 @@
-class Sphere {
+class Sphere extends Geometry{
     final Point c;    //center
     final double r;   //radius
     
