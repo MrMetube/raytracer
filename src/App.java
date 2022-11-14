@@ -50,9 +50,13 @@ class App {
                     c = s.intersect(r) ? new Color(dis,dis,dis).mul(def) : def;
                     break;
                 case SPHERE_NORMAL:
+                    Sphere s2 = new Sphere(new Point(100,50,100),100);
                     r = new Ray(new Point(0, 0, -100), new Vector(x+0.5-size/2,y+0.5-size/2,100));
                     if(s.intersect(r)){
                         v = s.normal(r.hitPoint());
+                        c = new Color(Math.abs(v.x()),Math.abs(v.y()),Math.abs(v.z()));
+                    }else if (s2.intersect(r)){
+                        v = s2.normal(r.hitPoint());
                         c = new Color(Math.abs(v.x()),Math.abs(v.y()),Math.abs(v.z()));
                     }else{
                         c = def;
