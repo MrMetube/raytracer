@@ -1,7 +1,7 @@
 class Ray{
     Point origin;
     Vector dir;
-    double t;
+    double t = Double.MAX_VALUE;
     Object target;
     public Ray(Point origin, Vector dir) {
         this.origin = origin;

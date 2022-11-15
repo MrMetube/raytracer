@@ -13,12 +13,22 @@ class Tuple {
 
     Tuple add(Tuple... tups){
         Tuple sum = new Tuple(x,y,z,w);
-        for (Tuple t : tups) sum = new Tuple(sum.x()+t.x(), sum.y+t.y(), sum.z()+t.z(), sum.w()+t.w());
+        for (Tuple t : tups) sum = new Tuple(
+            sum.x()+t.x(), 
+            sum.y()+t.y(), 
+            sum.z()+t.z(), 
+            sum.w()+t.w()
+        );
         return sum;
     }
     Tuple sub(Tuple... tups){
         Tuple dif = new Tuple(x,y,z,w);
-        for (Tuple t : tups) dif = new Tuple(dif.x()-t.x(), dif.y()-t.y(), dif.z()-t.z(), dif.w()-t.w());
+        for (Tuple t : tups) dif = new Tuple(
+            dif.x()-t.x(), 
+            dif.y()-t.y(), 
+            dif.z()-t.z(), 
+            dif.w()-t.w()
+        );
         return dif;
     }
     Tuple neg(){ return new Tuple(0,0,0,0).sub(this); }

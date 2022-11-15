@@ -1,4 +1,4 @@
 interface Shader {
-    Color getColor(int x, int y, int size, Geometry geometry);
+    Color getColor(Ray ray, Geometry geometry);
     String getName();
 }
