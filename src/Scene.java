@@ -1,29 +1,35 @@
 import java.util.HashSet;
 
+import geometry.Camera;
 import geometry.Geometry;
 import math.Ray;
-import shader.IntersectShader;
-import shader.Shader;
 
 public class Scene {
     HashSet<Geometry> geometries;
     HashSet<LightSource> lightSources;
     HashSet<Material> materials;
+    Camera camera;
 
-    public Scene(HashSet<Geometry> geometries) {
+    public Scene(HashSet<Geometry> geometries, Camera camera) {
         this.geometries = geometries;
+        this.camera = camera;
     }
 
     public boolean traceRay(Ray ray){
         double z = Double.MAX_VALUE;
+        Geometry g = null;
         for(Geometry geometry : geometries){
-            // TODO generalize shader
-            Shader shader = new IntersectShader();
-            shader.getColor(ray, geometry);
-            z = Math.min(z,ray.t());
+            Ray clone = ray.clone();
+            geometry.intersect(clone);
+            if(clone.t()<z){
+                z = clone.t();
+                g = clone.target();
+            }
         }
-        return z!= Double.MAX_VALUE;
+        ray.hit(g,z);
+        return z != Double.MAX_VALUE;
     }
 
     public HashSet<Geometry> getGeometries() { return geometries; }
+    public Camera getCamera() { return camera; }
 }

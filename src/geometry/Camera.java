@@ -10,8 +10,6 @@ public class Camera {
     int width;
     int height;
 
-    double aspectRatio;
-    double halfHeight;
     double pixelSize;
 
     Vector vpn;
@@ -26,8 +24,8 @@ public class Camera {
         this.width = width;
         this.height = height;
 
-        this.aspectRatio = width/height;
-        this.halfHeight = Math.tan(fov/2);
+        double aspectRatio = width/height;
+        double halfHeight = Math.tan(fov/2);
         this.pixelSize = (aspectRatio > 0 ? halfHeight : halfHeight/aspectRatio) * 2/height ;
 
         this.vpn = lookAt.sub(pos).norm();
@@ -50,7 +48,6 @@ public class Camera {
     }
 
     public int getWidth() {return width;}
-
     public int getHeight() {return height;}
     
 }
