@@ -2,6 +2,7 @@ class Plane extends Geometry {
     Vector n;
     Point  p;
     double r = 0;
+    static double DRAW_DISTANCE = 1000;
 
     public Plane(Vector normal, Point p) {
         this.n = normal;
@@ -18,13 +19,12 @@ class Plane extends Geometry {
         Point  o = ray.origin();
         Vector d = ray.dir();
         double t = n.dot(p.sub(o)) / n.dot(d);
-        if(t>0){
-            if(r != 0 && 
-                p.sub(o.add(d.mul(t))).mag() < r ){
-                ray.hit(this,t);
-                return true;
-            }
-        } 
+        if( t>0 && (
+            r != 0 && p.sub(o.add(d.mul(t))).mag() < r ||
+            r == 0 && p.sub(o.add(d.mul(t))).mag() < DRAW_DISTANCE )){
+            ray.hit(this,t);
+            return true;
+        }
         return false;
     }
 

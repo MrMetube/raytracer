@@ -12,25 +12,22 @@ class App {
         HashSet<Geometry> geometries = new HashSet<>();
         geometries.add(new Sphere(new Point(0, 0, 200), 150));
 
-        geometries.add(new Plane(new Vector(0, 0, 100), new Point(0, -100, 0)));
+        geometries.add(new Plane(new Vector(0, 100, 0), new Point(0, -200, 100)));
 
-        geometries.add(new Sphere(new Point( 200, 000, 100), 75));
-        geometries.add(new Sphere(new Point(-200, 000, 100), 75));
-        geometries.add(new Sphere(new Point( 000, 200, 100), 75));
-        geometries.add(new Sphere(new Point( 000,-200, 100), 75));
+        geometries.add(new Sphere(new Point( 200, 000, 200), 100));
+        geometries.add(new Sphere(new Point(-200, 000, 200), 100));
+        geometries.add(new Sphere(new Point( 000,-200, 200), 100));
 
-        geometries.add(new Plane(new Vector( 90, 45, 90), new Point( 100, 100, 100), 120));
-        geometries.add(new Plane(new Vector(-90, 45, 90), new Point(-100, 100, 100), 120));
-        geometries.add(new Plane(new Vector( 90,-45, 90), new Point( 100,-100, 100), 120));
-        geometries.add(new Plane(new Vector(-90,-45, 90), new Point(-100,-100, 100), 120));
+        geometries.add(new Plane(new Vector( 90,-45, 90), new Point( 100,-100, 150), 120));
+        geometries.add(new Plane(new Vector(-90,-45, 90), new Point(-100,-100, 150), 120));
 
         // makeImage(size, new ScreenPixelShader());
         // makeImage(size, new ScreenDistanceShader());
         // makeImage(size, new ScreenNormalShader());
 
-        makeImage(size, new DistanceShader(),  geometries);
-        makeImage(size, new NormalShader(),    geometries);
+        // makeImage(size, new DistanceShader(),  geometries);
         makeImage(size, new IntersectShader(), geometries);
+        makeImage(size, new NormalShader(),    geometries);
     }
 
     static void makeImage(int size, Shader shader, HashSet<Geometry> geometries){
