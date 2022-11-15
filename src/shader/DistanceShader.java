@@ -10,8 +10,7 @@ public class DistanceShader implements Shader{
     public Color getColor(Ray ray, Geometry geometry) {
         if(geometry.intersect(ray)){
             double dis = ray.dir().mul(ray.t()).mag();
-            //TODO clean up this
-            dis = Math.sqrt(dis)*4;
+            dis = ray.t();
             return new Color(dis,dis,dis);
         }
         return null;
