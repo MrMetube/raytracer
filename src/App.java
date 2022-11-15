@@ -1,76 +1,66 @@
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.HashSet;
 
 import javax.imageio.ImageIO;
-
-enum ImageMode{
-    PIXEL,RAY,DISTANCE, SPHERE_INTER, SPHERE_NORMAL, SPHERE_DIST
-}
 
 class App {
     public static void main(String[] args) throws IOException{
         int size = 512;
-        // makeImage(ImageMode.PIXEL, size);
-        // makeImage(ImageMode.RAY, size);
-        // makeImage(ImageMode.DISTANCE, size);
-        // makeImage(ImageMode.SPHERE_INTER, size);
-        // makeImage(ImageMode.SPHERE_DIST, size);
-        makeImage(ImageMode.SPHERE_NORMAL, size);
+        Plane p = new Plane(new Vector(0, 100, 0), new Point(0, 100, 100), 500);
+        Sphere s = new Sphere(new Point(0, 0, 100), 150);
+        Sphere s2 = new Sphere(new Point(100, 100, 200), 150);
+
+        HashSet<Geometry> geometries = new HashSet<>();
+        geometries.add(s);
+        geometries.add(s2);
+        geometries.add(p);
+
+        // makeImage(size, new ScreenPixelShader());
+        // makeImage(size, new ScreenDistanceShader());
+        // makeImage(size, new ScreenNormalShader());
+
+        makeImage(size, new DistanceShader(), geometries);
+        makeImage(size, new NormalShader(), geometries);
+        makeImage(size, new IntersectShader(), geometries);
     }
 
-    static void makeImage(ImageMode mode, int size){
+    static void makeImage(int size, Shader shader, HashSet<Geometry> geometries){
         BufferedImage image = new BufferedImage(size,size,BufferedImage.TYPE_INT_RGB);
-        Sphere s = new Sphere(new Point(0, 0, 100), 150);;
         Color def = new Color(41, 139, 95); // default color
-        Color c;
-        Ray r;
-        double dis;
-        Vector v;
         for (int x = 0; x < size; x++) for (int y = 0; y < size; y++) {
-            switch(mode){
-                case PIXEL:
-                    c = new Color((x+0.5)*255/size,(y+0.5)*255/size,0);
-                    break;
-                case RAY:
-                    r = new Ray(new Point(0, 0, -100), new Vector(x+0.5-size/2,y+0.5-size/2,100));
-                    c = new Color(Math.abs(r.dir().x()),Math.abs(r.dir().y()),Math.abs(r.dir().z()));
-                    break;
-                case DISTANCE:
-                    dis = new Vector(x+0.5-size/2,y+0.5-size/2,100).mag();
-                    c = new Color(dis,dis,dis);
-                    break;
-                case SPHERE_INTER:
-                    r = new Ray(new Point(0, 0, -100), new Vector(x+0.5-size/2,y+0.5-size/2,100));
-                    c = s.intersect(r) ? new Color(50, 51, 68) : def;
-                    break;
-                case SPHERE_DIST:
-                    r = new Ray(new Point(0, 0, -100), new Vector(x+0.5-size/2,y+0.5-size/2,100));
-                    dis = r.dir().mag();
-                    c = s.intersect(r) ? new Color(dis,dis,dis).mul(def) : def;
-                    break;
-                case SPHERE_NORMAL:
-                    Sphere s2 = new Sphere(new Point(100,50,100),100);
-                    r = new Ray(new Point(0, 0, -100), new Vector(x+0.5-size/2,y+0.5-size/2,100));
-                    if(s.intersect(r)){
-                        v = s.normal(r.hitPoint());
-                        c = new Color(Math.abs(v.x()),Math.abs(v.y()),Math.abs(v.z()));
-                    }else if (s2.intersect(r)){
-                        v = s2.normal(r.hitPoint());
-                        c = new Color(Math.abs(v.x()),Math.abs(v.y()),Math.abs(v.z()));
-                    }else{
-                        c = def;
-                    }
-                    break;
-                default:
-                    c = new Color(0, 0, 0);
-                    break;
+            Color c = null;
+            for(Geometry geometry : geometries){
+                // TODO only save the closest color
+                c = shader.getColor(x, y, size, geometry);
             }
             // apply the color
+            if(c == null) c = def;
             image.setRGB(x, y, c.rgb());
         };
+
         //write to file
-        File file = new File("./images/"+mode+".png");
+        File file = new File("./images/"+shader.getName()+".png");
+        try {
+            ImageIO.write(image, "png", file);   
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+        }
+    }
+    static void makeImage(int size, ScreenShader shader){
+        BufferedImage image = new BufferedImage(size,size,BufferedImage.TYPE_INT_RGB);
+        Color def = new Color(41, 139, 95); // default color
+        Color c = null;
+        for (int x = 0; x < size; x++) for (int y = 0; y < size; y++) {
+            c = shader.getColor(x, y, size);
+            // apply the color
+            if(c == null) c = def;
+            image.setRGB(x, y, c.rgb());
+        };
+
+        //write to file
+        File file = new File("./images/"+shader.getName()+".png");
         try {
             ImageIO.write(image, "png", file);   
         } catch (Exception e) {
