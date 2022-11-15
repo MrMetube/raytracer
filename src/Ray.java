@@ -1,4 +1,4 @@
-class Ray{
+public class Ray{
     Point origin;
     Vector dir;
     double t = Double.MAX_VALUE;

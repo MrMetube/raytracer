@@ -1,4 +1,4 @@
-class ScreenNormalShader implements ScreenShader{
+public class ScreenNormalShader implements ScreenShader{
 
     @Override
     public Color getColor(int x, int y, int size) {

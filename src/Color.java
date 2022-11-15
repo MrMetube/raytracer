@@ -1,4 +1,4 @@
-class Color extends Tuple {
+public class Color extends Tuple {
     Color(double r, double g, double b){ 
         super(
             MUtils.normRGB(r),

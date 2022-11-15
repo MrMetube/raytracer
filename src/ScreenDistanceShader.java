@@ -1,4 +1,4 @@
-class ScreenDistanceShader implements ScreenShader{
+public class ScreenDistanceShader implements ScreenShader{
 
     @Override
     public Color getColor(int x, int y, int size) {

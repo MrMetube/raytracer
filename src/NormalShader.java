@@ -1,4 +1,4 @@
-class NormalShader implements Shader {
+public class NormalShader implements Shader {
 
     @Override
     public Color getColor(Ray ray, Geometry geometry) {

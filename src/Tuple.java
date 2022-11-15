@@ -1,4 +1,4 @@
-class Tuple {
+public class Tuple {
     final double x;
     final double y;
     final double z;

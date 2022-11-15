@@ -1,4 +1,4 @@
-class Vector extends Tuple{    
+public class Vector extends Tuple{    
     Vector(double x, double y, double z){ super(x,y,z,0); }
 
     Vector add(Vector... vecs){

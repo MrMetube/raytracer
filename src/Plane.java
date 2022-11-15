@@ -1,4 +1,4 @@
-class Plane extends Geometry {
+public class Plane extends Geometry {
     Vector n;
     Point  p;
     double r = 0;

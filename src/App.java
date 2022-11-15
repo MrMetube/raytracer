@@ -52,13 +52,7 @@ class App {
             image.setRGB(x, size-y-1, color.rgb() );
         };
 
-        //write to file
-        File file = new File("./images/"+shader.getName()+".png");
-        try {
-            ImageIO.write(image, "png", file);   
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-        }
+        writeImage(image, shader.getName());
     }
     static void makeImage(int size, ScreenShader shader){
         BufferedImage image = new BufferedImage(size,size,BufferedImage.TYPE_INT_RGB);
@@ -71,8 +65,11 @@ class App {
             image.setRGB(x, y, c.rgb());
         };
 
-        //write to file
-        File file = new File("./images/"+shader.getName()+".png");
+        writeImage(image, shader.getName());
+    }
+
+    static void writeImage(BufferedImage image, String name){
+        File file = new File("./images/"+name+".png");
         try {
             ImageIO.write(image, "png", file);   
         } catch (Exception e) {

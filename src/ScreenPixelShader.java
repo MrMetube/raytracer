@@ -1,4 +1,4 @@
-class ScreenPixelShader implements ScreenShader {
+public class ScreenPixelShader implements ScreenShader {
 
     @Override
     public Color getColor(int x, int y, int size) {
