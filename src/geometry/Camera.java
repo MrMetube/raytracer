@@ -17,7 +17,6 @@ public class Camera {
     Vector right;
 
     public Camera(Point pos, Point lookAt, double fovDeg, int width, int height) {
-        // TODO: Cleanup variables at the end
         this.pos = pos;
         this.lookAt = lookAt;
         this.fov = Math.toRadians(fovDeg);

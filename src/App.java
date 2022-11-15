@@ -28,10 +28,8 @@ class App {
 
         geometries.add(new Sphere(new Point( 200, 000, 150), 100));
         geometries.add(new Sphere(new Point(-200, 000, 150), 100));
-        geometries.add(new Sphere(new Point( 000,-200, 150), 100));
 
-        geometries.add(new Plane(new Vector( 90,-45, 90), new Point( 100,-100, 150), 120));
-        geometries.add(new Plane(new Vector(-90,-45, 90), new Point(-100,-100, 150), 120));
+        geometries.add(new Plane(new Vector(0, -200, 100), new Point(0, 0, 150), 200));
 
         Camera camera = new Camera(new Point(0, 0, -100), new Point(0, 0, 0), 110, size, size);
 
@@ -80,6 +78,8 @@ class App {
                 System.out.println(e.getMessage());
             }
         }
+
+
 
     static void screen(){
         int size = 512;
