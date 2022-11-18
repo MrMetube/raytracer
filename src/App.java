@@ -54,7 +54,6 @@ class App {
         Color c = null;
         for (int x = 0; x < size; x++) for (int y = 0; y < size; y++) {
             c = shader.getColor(x, y, size);
-            // apply the color
             if(c == null) c = def;
             image.setRGB(x, y, c.rgb());
         };

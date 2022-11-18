@@ -8,7 +8,7 @@ public class Plane extends Geometry {
     Vector n;
     Point  p;
     double r = 0;
-    static double DRAW_DISTANCE = 1000;
+    static double DRAW_DISTANCE = Double.POSITIVE_INFINITY;
 
     public Plane(Vector normal, Point p) {
         this.n = normal;

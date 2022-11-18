@@ -7,9 +7,15 @@ public class Ray{
     Vector dir;
     double t = Double.MAX_VALUE;
     Geometry target;
+
     public Ray(Point origin, Vector dir) {
         this.origin = origin;
         this.dir = dir;
+    }
+
+    public Ray(Ray ray){
+        this.dir = ray.dir();
+        this.origin = ray.origin();
     }
 
     public Vector dir() { return dir; }
@@ -33,8 +39,4 @@ public class Ray{
     }
 
     public double len(){ return dir.mag(); }
-
-    public Ray clone(){
-        return new Ray(origin,dir);
-    }
 }

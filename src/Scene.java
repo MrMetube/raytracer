@@ -26,7 +26,7 @@ public class Scene {
         Geometry target = null;
         Ray clone;
         for(Geometry geometry : geometries){
-            clone = ray.clone();
+            clone = new Ray(ray);
             geometry.intersect(clone);
             if(clone.t()<t){
                 t = clone.t();
