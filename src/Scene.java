@@ -19,7 +19,7 @@ public class Scene {
 
     public void addGeometry(Geometry g){       geometries.add(g); }
     public void addLightSource(LightSource l){ lightSources.add(l); }
-    public void addMaterial(Material m){       materials.add(m); }
+    public void addMaterial(Material m){       materials.add(m); } 
 
     public boolean traceRay(Ray ray){
         double t = Double.MAX_VALUE;

@@ -11,6 +11,7 @@ import shader.*;
 class App {
     public static void main(String[] args) throws IOException{
         myScene();
+        // examples();
     }
 
     static void myScene(){

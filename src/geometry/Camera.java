@@ -25,12 +25,12 @@ public class Camera {
 
         double aspectRatio = width/height;
         double halfHeight = Math.tan(fov/2);
-        this.pixelSize = (aspectRatio > 0 ? halfHeight : halfHeight/aspectRatio) * 2/height ;
+        this.pixelSize = (aspectRatio < 1 ? halfHeight : halfHeight/aspectRatio) * 2/height ;
 
         this.vpn = lookAt.sub(pos).norm();
         // Dieser Trick funtioniert nicht, wenn vpn = (0,1,0) ist, weil dann ein Null-Vektor entsteht.
         // Wenn dies der Fall ist, drehen wir die Reihenfolge um und berechnen zuerst up.
-        if(vpn != new Vector(0, 1, 0)){
+        if(vpn.cross(new Vector(0, 1, 0)) != new Vector(0, 0, 0)){
             this.right = new Vector(0, 1, 0).cross(vpn).norm();
             this.up = vpn.cross(right).norm();
         }else{
