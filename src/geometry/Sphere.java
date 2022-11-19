@@ -13,6 +13,7 @@ public class Sphere extends Geometry{
         this.c = p;
         this.r = r;
     }
+
     @Override
     public boolean intersect(Ray ray){
         Vector dir = ray.dir();

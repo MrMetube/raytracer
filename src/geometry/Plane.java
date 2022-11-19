@@ -4,7 +4,7 @@ import math.Point;
 import math.Ray;
 import math.Vector;
 
-public class Plane extends Geometry {
+public class Plane extends Geometry{
     Vector n;
     Point  p;
     double r = 0;
@@ -38,6 +38,5 @@ public class Plane extends Geometry {
     @Override
     public Vector normal(Point hit) {
         return n;
-    }
-   
+    } 
 }
