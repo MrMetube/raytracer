@@ -1,4 +1,4 @@
-package geometry;
+package scene;
 import math.Point;
 import math.Ray;
 import math.Vector;

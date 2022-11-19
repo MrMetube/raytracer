@@ -1,3 +1,4 @@
+package scene;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -10,7 +11,6 @@ import javax.imageio.ImageIO;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
-import geometry.Camera;
 import geometry.Geometry;
 import geometry.GeometryAdapter;
 import math.Color;
