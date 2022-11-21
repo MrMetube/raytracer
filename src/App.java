@@ -1,9 +1,8 @@
-import geometry.*;
-import math.*;
 import shader.*;
+import scene.*;
 
 class App {
     public static void main(String[] args){
-        // new Scene("./scenes/myScene.json").makeImage(new NormalShader(), "gson");
+        new Scene("./scenes/myScene.json").makeImage(new NormalShader(), "test");
     }
 }
