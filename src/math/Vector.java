@@ -35,7 +35,6 @@ public class Vector extends Tuple{
         Vector n = normal.norm();
         return this.sub(n.mul(2*this.dot(n)));
     }
-
     @Override
-    public String toString(){ return String.format("x: %.2f, y: %.2f, z: %.2f",x,y,z); }
+    public String toString(){ return String.format("(%.02f | %.02f | %.02f)",x,y,z); }
 }

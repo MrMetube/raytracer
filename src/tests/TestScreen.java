@@ -6,10 +6,10 @@ import java.io.File;
 import javax.imageio.ImageIO;
 
 import math.Color;
-import shader.ScreenDistanceShader;
-import shader.ScreenNormalShader;
-import shader.ScreenPixelShader;
-import shader.ScreenShader;
+import shader.screenshader.ScreenDistanceShader;
+import shader.screenshader.ScreenNormalShader;
+import shader.screenshader.ScreenPixelShader;
+import shader.screenshader.ScreenShader;
 
 public class TestScreen {
     public static void runTest(){

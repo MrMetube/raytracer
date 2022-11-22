@@ -1,4 +1,4 @@
-package shader;
+package shader.screenshader;
 
 import math.Color;
 import math.Point;

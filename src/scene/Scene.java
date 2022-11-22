@@ -6,7 +6,6 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 
 import javax.imageio.ImageIO;
 
@@ -34,7 +33,7 @@ public class Scene {
         this.geometries = new HashSet<>();
         this.lightSources = new HashSet<>();
         this.materials = new HashMap<String,Material>();
-        this.materials.put(Geometry.NO_MATERIAL,new Material(new Color(1, 0, 1), 0.2, 1, 0, 0));
+        this.materials.put(Geometry.NO_MATERIAL,new Material(new Color(1, 0, 1), 0.2, 1, 0, 0, false));
         this.camera = camera;
     }
 
@@ -51,12 +50,11 @@ public class Scene {
         }
     }
 
-    public boolean addGeometry(Geometry g){ 
-        if(materials.containsKey(g.material())){
-            geometries.add(g);
-            return true;
+    public void addGeometry(Geometry g){ 
+        if(!materials.containsKey(g.material())){
+            g.setMaterial(Geometry.NO_MATERIAL);
         }
-        return false;
+        geometries.add(g);
     }
     public void addLightSource(LightSource l){ lightSources.add(l); }
     public void addMaterial(String key, Material m){ materials.put(key,m); } 
@@ -94,6 +92,7 @@ public class Scene {
         for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
             Ray ray = camera.generateRay(x, y);
             Color color = (traceRay(ray)) ? shader.getColor(ray, ray.target(), this) : def;
+            color = color != null ? color : def;
             image.setRGB(x, height-y-1, color.rgb() );
         }
 

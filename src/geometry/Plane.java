@@ -8,7 +8,6 @@ public class Plane extends Geometry{
     Vector n;
     Point  p;
     double r;
-    String m;
     
     static double DRAW_DISTANCE = Double.POSITIVE_INFINITY;
 
@@ -45,6 +44,4 @@ public class Plane extends Geometry{
     }
 
     @Override public Vector normal(Point hit) { return n.norm(); } 
-    @Override public String material(){ return m; }
-
 }

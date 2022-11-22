@@ -5,9 +5,6 @@ public class MUtils {
         double x = Math.abs(a - b);
         return x < 0.00001;
     }
-    public static double normRGB(double x){
-        return Math.min(1, Math.max(0, x));
-    }
 
     public static boolean solveQuadratic(double a, double b, double c, Ray ray){
         double t1,t2;

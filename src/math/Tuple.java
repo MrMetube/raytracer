@@ -64,5 +64,5 @@ public class Tuple {
     }
 
     @Override
-    public String toString(){ return String.format("(%.02f, %.02f, %.02f, %.02f)",x,y,z,w); }
+    public String toString(){ return String.format("(%.02f | %.02f | %.02f | %.02f)",x,y,z,w); }
 }

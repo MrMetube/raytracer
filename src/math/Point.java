@@ -12,5 +12,5 @@ public class Point extends Tuple{
     public Vector sub(Point t){ return new Vector(x-t.x(), y-t.y(), z-t.z()); }
 
     @Override
-    public String toString(){ return String.format("x: %.2f, y: %.2f, z: %.2f",x,y,z); }
+    public String toString(){ return String.format("(%.02f | %.02f | %.02f)",x,y,z); }
 }

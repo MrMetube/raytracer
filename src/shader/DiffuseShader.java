@@ -10,12 +10,12 @@ public class DiffuseShader extends Shader{
 
     @Override
     public Color getColor(Ray ray, Geometry geometry, Scene scene) {
-        Color out = new Color(0, 0, 0);
         Material m = scene.getMaterials().get(geometry.material());
+        Color out = m.color();
         for (LightSource ls : scene.getLightSources()) {
             Vector n = geometry.normal(ray.hitPoint());
-            Vector l = ray.hitPoint().sub(ls.pos());
-            out.mul(ls.color()).mul(m.diffuse()).mul(n.dot(l));
+            Vector l = ls.pos().sub(ray.hitPoint()).norm();
+            out = out.mul(ls.color().mul(ls.intensity())).mul(n.dot(l)).mul(m.diffuse());
         }
         return out;
     }

@@ -8,7 +8,6 @@ import math.Vector;
 public class Sphere extends Geometry{
     final Point c;    //center
     final double r;   //radius
-    final String m;
     
     public Sphere(Point p, double r) {
         this.c = p;
@@ -38,6 +37,4 @@ public class Sphere extends Geometry{
     @Override public Vector normal(Point hit){
         return hit.sub(c).norm();
     }
-
-    @Override public String material(){ return m; }
 }
