@@ -5,6 +5,6 @@ import scene.*;
 
 class App {
     public static void main(String[] args){
-        new Scene("./scenes/myScene.json").makeImage(new NormalShader(), "Test");
+        new Scene("./scenes/myScene.json").makeImage(new NormalShader());
     }
 }

@@ -12,13 +12,13 @@ public class NormalShader implements Shader {
         if(geometry == null) return null;
         if(geometry.intersect(ray)){
             Vector v = geometry.normal(ray.hitPoint());
-            return new Color(Math.abs(v.x())*255,Math.abs(v.y())*255,Math.abs(v.z())*255);
+            return new Color(Math.abs(v.x()),Math.abs(v.y()),Math.abs(v.z()));
         }
         return null;
     }
         
     @Override
     public String getName() {
-        return "NORMAL";
+        return "Normal";
     }
 }

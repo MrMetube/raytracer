@@ -9,7 +9,7 @@ public class DistanceShader implements Shader{
     @Override
     public Color getColor(Ray ray, Geometry geometry) {
         if(geometry.intersect(ray)){
-            double dis = ray.origin().sub(ray.hitPoint()).mag();
+            double dis = ray.origin().sub(ray.hitPoint()).mag()/255;
             return new Color(dis,dis,dis);
         }
         return null;
@@ -17,7 +17,7 @@ public class DistanceShader implements Shader{
 
     @Override
     public String getName() {
-        return "DISTANCE";
+        return "Distance";
     }
     
 }

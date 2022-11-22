@@ -48,6 +48,6 @@ public class Plane extends Geometry{
 
     @Override
     public Vector normal(Point hit) {
-        return n;
+        return n.norm();
     } 
 }

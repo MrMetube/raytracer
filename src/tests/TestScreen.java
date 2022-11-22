@@ -20,7 +20,7 @@ public class TestScreen {
         makeScreenImage(size, new ScreenNormalShader());
     }
 
-    static void makeScreenImage(int size, ScreenShader shader){
+    public static void makeScreenImage(int size, ScreenShader shader){
         BufferedImage image = new BufferedImage(size,size,BufferedImage.TYPE_INT_RGB);
         Color def = new Color(41, 139, 95); // default color
         Color c = null;

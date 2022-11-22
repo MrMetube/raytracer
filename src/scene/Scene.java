@@ -80,7 +80,7 @@ public class Scene {
         int height = camera.getHeight();
 
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        Color def = new Color(113, 216, 237); // default background color
+        Color def = new Color(0.44, 0.85, 0.93); // default background color
         
         for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
             Ray ray = camera.generateRay(x, y);
@@ -94,6 +94,10 @@ public class Scene {
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }
+    }
+
+    public void makeImage(Shader shader){
+        makeImage(shader,shader.getName());
     }
 
     public void toJson(String name){
