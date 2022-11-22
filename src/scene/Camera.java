@@ -33,7 +33,7 @@ public class Camera {
         if(vpn.cross(new Vector(0, 1, 0)) != new Vector(0, 0, 0)){
             this.right = new Vector(0, 1, 0).cross(vpn).norm();
             this.up = vpn.cross(right).norm();
-        }else{
+        }else{//man sollte einfach einen leicht anderen nehmen. Das umzudrehen ist kA
             this.up = new Vector(0, 0, 1).cross(vpn).norm();
             this.right = vpn.cross(up).norm();
         }

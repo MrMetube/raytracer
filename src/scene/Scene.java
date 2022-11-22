@@ -62,8 +62,8 @@ public class Scene {
                 target = clone.target();
             }
         }
-        ray.hit(target,t);
-        return t != Double.MAX_VALUE;
+        if(target != null) ray.hit(target,t);
+        return t != Double.MAX_VALUE && target != null;
     }
 
     public HashSet<Geometry> getGeometries() { return geometries; }
