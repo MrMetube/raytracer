@@ -19,17 +19,19 @@ import shader.Shader;
 
 public class Scene {
     HashSet<Geometry> geometries;
-    // HashSet<LightSource> lightSources;
-    // HashSet<Material> materials;
+    HashSet<LightSource> lightSources;
+    HashSet<Material> materials;
     Camera camera;
 
-    static GsonBuilder gB = new GsonBuilder();
-    static Gson gson = gB.registerTypeAdapter(Geometry.class, new GeometryAdapter()).create();
+    static Gson gson = new GsonBuilder()
+                            .registerTypeAdapter(Geometry.class, new GeometryAdapter())
+                            .registerTypeAdapter(LightSource.class, new LightSourceAdapter())
+                            .create();
 
     public Scene(Camera camera) {
         this.geometries = new HashSet<>();
-        // this.lightSources = new HashSet<>();
-        // this.materials = new HashSet<>();
+        this.lightSources = new HashSet<>();
+        this.materials = new HashSet<>();
         this.camera = camera;
     }
 
@@ -38,8 +40,8 @@ public class Scene {
             FileReader fR = new FileReader(new File(path));
             Scene s = gson.fromJson(fR, Scene.class);
             this.geometries = s.getGeometries();
-            // this.lightSources = s.getLightSources();
-            // this.materials = s.getMaterials();
+            this.lightSources = s.getLightSources();
+            this.materials = s.getMaterials();
             this.camera = s.getCamera();
         } catch (FileNotFoundException e) {
             e.printStackTrace();
@@ -47,8 +49,8 @@ public class Scene {
     }
 
     public void addGeometry(Geometry g){       geometries.add(g); }
-    // public void addLightSource(LightSource l){ lightSources.add(l); }
-    // public void addMaterial(Material m){       materials.add(m); } 
+    public void addLightSource(LightSource l){ lightSources.add(l); }
+    public void addMaterial(Material m){       materials.add(m); } 
 
     public boolean traceRay(Ray ray){
         double t = Double.MAX_VALUE;
@@ -66,7 +68,9 @@ public class Scene {
         return t != Double.MAX_VALUE && target != null;
     }
 
-    public HashSet<Geometry> getGeometries() { return geometries; }
+    public HashSet<Geometry>    getGeometries()   { return geometries; }
+    public HashSet<Material>    getMaterials()    { return materials; }
+    public HashSet<LightSource> getLightSources() { return lightSources; }
     public Camera getCamera() { return camera; }
 
     public void makeImage(Shader shader, String name){

@@ -4,14 +4,23 @@ import math.MUtils;
 import math.Point;
 import math.Ray;
 import math.Vector;
+import scene.Material;
 
 public class Sphere extends Geometry{
     final Point c;    //center
     final double r;   //radius
+    final Material m;
     
     public Sphere(Point p, double r) {
         this.c = p;
         this.r = r;
+        this.m = standardMaterial;
+    }
+
+    public Sphere(Point p, double r, Material m) {
+        this.c = p;
+        this.r = r;
+        this.m = m;
     }
 
     @Override
@@ -30,6 +39,6 @@ public class Sphere extends Geometry{
     
     @Override
     public Vector normal(Point hit){
-        return c.sub(hit);
+        return hit.sub(c).norm();
     }
 }

@@ -7,7 +7,7 @@ import math.Vector;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class Tester {
+class TestMath {
     @Test void isPoint(){
         Tuple a = new Point(4.3, -4.2, 3.1);
         assertEquals( 4.3, a.x());
@@ -112,5 +112,18 @@ class Tester {
         Vector b = new Vector(2, 3, 4);
         assertEquals(new Vector(-1, 2, -1),a.cross(b));
         assertEquals(new Vector(1, -2, 1),b.cross(a));
+    }
+
+    @Test void reflectionOfVec45deg(){
+        Vector v = new Vector(1, -1, 0);
+        Vector n = new Vector(0, 1, 0);
+        assertEquals(new Vector(1, 1, 0), v.refl(n));
+    }
+
+    @Test void reflectionOfVecSlanted(){
+        Vector v = new Vector(0, -1, 0);
+        double r = Math.sqrt(2)/2;
+        Vector n = new Vector(r, r, 0);
+        assertEquals(new Vector(1, 0, 0), v.refl(n));
     }
 }

@@ -11,7 +11,7 @@ import shader.ScreenNormalShader;
 import shader.ScreenPixelShader;
 import shader.ScreenShader;
 
-public class ScreenTest {
+public class TestScreen {
     public static void runTest(){
         int size = 512;
 

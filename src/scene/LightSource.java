@@ -1,3 +1,4 @@
 package scene;
-public class LightSource {
+public abstract class LightSource {
+    
 }

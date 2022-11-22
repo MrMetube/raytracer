@@ -3,22 +3,33 @@ package geometry;
 import math.Point;
 import math.Ray;
 import math.Vector;
+import scene.Material;
 
 public class Plane extends Geometry{
     Vector n;
     Point  p;
-    double r = 0;
+    double r;
+    Material m;
     
     static double DRAW_DISTANCE = Double.POSITIVE_INFINITY;
 
     public Plane(Vector normal, Point p) {
-        this.n = normal;
+        this.n = normal.norm();
         this.p = p;
+        this.r = 0;
+        this.m = standardMaterial;
     }
-    public Plane(Vector normal, Point p, double r) {
-        this.n = normal;
+    public Plane(Vector normal, Point p, Material m) {
+        this.n = normal.norm();
+        this.p = p;
+        this.r = 0;
+        this.m = m;
+    }
+    public Plane(Vector normal, Point p, double r, Material m) {
+        this.n = normal.norm();
         this.p = p;
         this.r = r;
+        this.m = m;
     }
 
     @Override
