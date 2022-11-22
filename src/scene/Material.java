@@ -17,9 +17,9 @@ public final class Material {
         this.shininess = shininess;
     }
 
-    public Color getColor() { return color; }
-    public double getAmbient() { return ambient; }
-    public double getDiffuse() { return diffuse; }
-    public double getSpecular() { return specular; }
-    public int getShininess() { return shininess; }
+    public Color color() { return color; }
+    public double ambient() { return ambient; }
+    public double diffuse() { return diffuse; }
+    public double specular() { return specular; }
+    public int shininess() { return shininess; }
 }

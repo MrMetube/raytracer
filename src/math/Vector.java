@@ -23,8 +23,8 @@ public class Vector extends Tuple{
     }
 
     public Vector cross(Tuple t){ return new Vector( y*t.z() - z*t.y(), z*t.x() - x*t.z(), x*t.y() - y*t.x()); }
-
     public Vector mul(double scl){ return new Vector(x*scl, y*scl, z*scl);}
+    public Vector neg(){ return new Vector(0, 0, 0).sub(this);}
 
     public Vector norm() {
         double mag = this.mag();

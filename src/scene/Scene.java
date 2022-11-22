@@ -4,7 +4,9 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 
 import javax.imageio.ImageIO;
 
@@ -20,7 +22,7 @@ import shader.Shader;
 public class Scene {
     HashSet<Geometry> geometries;
     HashSet<LightSource> lightSources;
-    HashSet<Material> materials;
+    HashMap<String,Material> materials;
     Camera camera;
 
     static Gson gson = new GsonBuilder()
@@ -31,7 +33,8 @@ public class Scene {
     public Scene(Camera camera) {
         this.geometries = new HashSet<>();
         this.lightSources = new HashSet<>();
-        this.materials = new HashSet<>();
+        this.materials = new HashMap<String,Material>();
+        this.materials.put(Geometry.NO_MATERIAL,new Material(new Color(1, 0, 1), 0.2, 1, 0, 0));
         this.camera = camera;
     }
 
@@ -48,9 +51,15 @@ public class Scene {
         }
     }
 
-    public void addGeometry(Geometry g){       geometries.add(g); }
+    public boolean addGeometry(Geometry g){ 
+        if(materials.containsKey(g.material())){
+            geometries.add(g);
+            return true;
+        }
+        return false;
+    }
     public void addLightSource(LightSource l){ lightSources.add(l); }
-    public void addMaterial(Material m){       materials.add(m); } 
+    public void addMaterial(String key, Material m){ materials.put(key,m); } 
 
     public boolean traceRay(Ray ray){
         double t = Double.MAX_VALUE;
@@ -68,10 +77,10 @@ public class Scene {
         return t != Double.MAX_VALUE && target != null;
     }
 
-    public HashSet<Geometry>    getGeometries()   { return geometries; }
-    public HashSet<Material>    getMaterials()    { return materials; }
-    public HashSet<LightSource> getLightSources() { return lightSources; }
-    public Camera getCamera() { return camera; }
+    public HashSet<Geometry>        getGeometries()   { return geometries; }
+    public HashMap<String,Material> getMaterials()    { return materials; }
+    public HashSet<LightSource>     getLightSources() { return lightSources; }
+    public Camera                   getCamera()       { return camera; }
 
     public void makeImage(Shader shader, String name){
         Camera camera = getCamera();
@@ -84,7 +93,7 @@ public class Scene {
         
         for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
             Ray ray = camera.generateRay(x, y);
-            Color color = (traceRay(ray)) ? shader.getColor(ray, ray.target()) : def;
+            Color color = (traceRay(ray)) ? shader.getColor(ray, ray.target(), this) : def;
             image.setRGB(x, height-y-1, color.rgb() );
         }
 

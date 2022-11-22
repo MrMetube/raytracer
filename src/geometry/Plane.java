@@ -3,13 +3,12 @@ package geometry;
 import math.Point;
 import math.Ray;
 import math.Vector;
-import scene.Material;
 
 public class Plane extends Geometry{
     Vector n;
     Point  p;
     double r;
-    Material m;
+    String m;
     
     static double DRAW_DISTANCE = Double.POSITIVE_INFINITY;
 
@@ -17,23 +16,22 @@ public class Plane extends Geometry{
         this.n = normal.norm();
         this.p = p;
         this.r = 0;
-        this.m = standardMaterial;
+        this.m = NO_MATERIAL;
     }
-    public Plane(Vector normal, Point p, Material m) {
+    public Plane(Vector normal, Point p, String m) {
         this.n = normal.norm();
         this.p = p;
         this.r = 0;
         this.m = m;
     }
-    public Plane(Vector normal, Point p, double r, Material m) {
+    public Plane(Vector normal, Point p, double r, String m) {
         this.n = normal.norm();
         this.p = p;
         this.r = r;
         this.m = m;
     }
 
-    @Override
-    public boolean intersect(Ray ray) {
+    @Override public boolean intersect(Ray ray) {
         Point  o = ray.origin();
         Vector d = ray.dir();
         double t = n.dot(p.sub(o)) / n.dot(d);
@@ -46,8 +44,7 @@ public class Plane extends Geometry{
         return false;
     }
 
-    @Override
-    public Vector normal(Point hit) {
-        return n.norm();
-    } 
+    @Override public Vector normal(Point hit) { return n.norm(); } 
+    @Override public String material(){ return m; }
+
 }
