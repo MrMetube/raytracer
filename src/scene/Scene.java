@@ -80,7 +80,10 @@ public class Scene {
     public HashSet<LightSource>     getLightSources() { return lightSources; }
     public Camera                   getCamera()       { return camera; }
 
-    public void makeImage(Shader shader, String name){
+    public void makeImage(Shader shader){ makeImage(shader,shader.getName(), false); }
+    public void makeImage(Shader shader, boolean time){ makeImage(shader,shader.getName(), time); }
+
+    public void makeImage(Shader shader, String name, boolean time){
         Camera camera = getCamera();
 
         int width = camera.getWidth();
@@ -89,6 +92,8 @@ public class Scene {
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         Color def = new Color(0.44, 0.85, 0.93); // default background color
         
+        long start = System.currentTimeMillis();
+        
         for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
             Ray ray = camera.generateRay(x, y);
             Color color = (traceRay(ray)) ? shader.getColor(ray, ray.target(), this) : def;
@@ -96,16 +101,14 @@ public class Scene {
             image.setRGB(x, height-y-1, color.rgb() );
         }
 
+        if(time) System.out.printf(name + "Shader took %s ms%n", System.currentTimeMillis()-start);
+
         File file = new File("./images/"+name+".png");
         try {
             ImageIO.write(image, "png", file);   
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }
-    }
-
-    public void makeImage(Shader shader){
-        makeImage(shader,shader.getName());
     }
 
     public void toJson(String name){
