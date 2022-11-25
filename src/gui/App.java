@@ -20,8 +20,8 @@ import shader.SpecularShader;
 public class App extends JFrame implements ActionListener {
     
     JTextField field = new JTextField("simple");
-    JButton render = new JButton("Render");
-    JButton open = new JButton("Open");
+    JButton render = new JButton("Render Scene");
+    JButton open = new JButton("Open Scene");
     JFileChooser chooser = new JFileChooser("./scenes/");
     Window window;
 
@@ -45,6 +45,7 @@ public class App extends JFrame implements ActionListener {
         add(field);
         
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setTitle("Raytracer");
         setSize(400,400);
         setLayout(null);
         setVisible(true);

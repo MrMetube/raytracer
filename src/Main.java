@@ -1,5 +1,7 @@
 import shader.*;
 
+import java.util.concurrent.Executors;
+
 import geometry.*;
 import gui.App;
 import math.*;
@@ -7,7 +9,7 @@ import scene.*;
 
 class Main {
     public static void main(String[] args){
-        // Scene s = new Scene("./scenes/example spheres.json");
+        Scene s = new Scene("./scenes/spheres.json");
         // // s.addMaterial("white",  new Material(new Color(1.0,1.0,1.0), 0.1, 0.6, 0.9, 100, false));
         // // s.addMaterial("yellow", new Material(new Color(0.9,0.9,0.5), 0.1, 0.9, 0.2, 5, true));
         // // s.addMaterial("lime",   new Material(new Color(0.7,0.8,0.2), 0.1, 1, 0, 1, false));
@@ -27,11 +29,10 @@ class Main {
         // s.makeImage(new DiffuseShader());
 
         // s.makeImage(new SpecularShader());
-
-        // s.makeImage(new LightShader());
-
+        for (int i = 0; i < 10; i++)
+            s.makeImage(new LightShader(),true);
         // s.toJson("example");
 
-        new App();
+        // new App();
     }
 }

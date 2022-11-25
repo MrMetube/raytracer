@@ -6,6 +6,8 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.imageio.ImageIO;
 
@@ -50,15 +52,6 @@ public class Scene {
         }
     }
 
-    public void addGeometry(Geometry g){ 
-        if(!materials.containsKey(g.material())){
-            g.setMaterial(Geometry.NO_MATERIAL);
-        }
-        geometries.add(g);
-    }
-    public void addLightSource(LightSource l){ lightSources.add(l); }
-    public void addMaterial(String key, Material m){ materials.put(key,m); } 
-
     public boolean traceRay(Ray ray){
         double t = Double.MAX_VALUE;
         Geometry target = null;
@@ -75,39 +68,59 @@ public class Scene {
         return t != Double.MAX_VALUE && target != null;
     }
 
-    public HashSet<Geometry>        getGeometries()   { return geometries; }
-    public HashMap<String,Material> getMaterials()    { return materials; }
-    public HashSet<LightSource>     getLightSources() { return lightSources; }
-    public Camera                   getCamera()       { return camera; }
+    public void makeImage(Shader shader, String name, boolean time){
+        File file = new File("./images/"+name+".png");
+
+        Camera camera = getCamera();
+        int width = camera.getWidth();
+        int height = camera.getHeight();
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+
+        long start = System.currentTimeMillis();
+
+        int threadCount = Runtime.getRuntime().availableProcessors();;
+        ExecutorService exe =  Executors.newFixedThreadPool(threadCount);
+        int dx = (width/threadCount)+1;
+        int dy = (height/threadCount)+1;
+        for (int i = 0; i < threadCount; i++) for (int j = 0; j < threadCount; j++) 
+            exe.submit(new Trace(this, image, i*dx, (i+1)*dx, j*dy, (j+1)*dy, shader));
+        exe.shutdown();
+        while(!exe.isTerminated());
+
+        if(time) System.out.printf(name + " took %s ms%n", System.currentTimeMillis()-start);
+
+        try { ImageIO.write(image, "png", file); } catch (Exception e) {}
+    }
 
     public void makeImage(Shader shader){ makeImage(shader,shader.getName(), false); }
     public void makeImage(Shader shader, boolean time){ makeImage(shader,shader.getName(), time); }
 
-    public void makeImage(Shader shader, String name, boolean time){
-        Camera camera = getCamera();
+    private class Trace implements Runnable{
+        final BufferedImage image;
+        final Color def = new Color(0.44, 0.85, 0.93);
+        final Camera camera;
+        final Shader shader;
+        final Scene scene;
+        final int xS,xE,yS,yE;
 
-        int width = camera.getWidth();
-        int height = camera.getHeight();
-
-        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        Color def = new Color(0.44, 0.85, 0.93); // default background color
-        
-        long start = System.currentTimeMillis();
-        
-        for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
-            Ray ray = camera.generateRay(x, y);
-            Color color = (traceRay(ray)) ? shader.getColor(ray, ray.target(), this) : def;
-            color = color != null ? color : def;
-            image.setRGB(x, height-y-1, color.rgb() );
+        Trace(Scene scene, BufferedImage image, int xStart, int xEnd, int yStart, int yEnd, Shader shader){
+            this.image = image;
+            this.scene = scene;
+            this.camera = scene.getCamera();
+            this.shader = shader;
+            xS = xStart;
+            yS = yStart;
+            xE = Math.min(xEnd, camera.getWidth());
+            yE = Math.min(yEnd, camera.getHeight());
         }
-
-        if(time) System.out.printf(name + "Shader took %s ms%n", System.currentTimeMillis()-start);
-
-        File file = new File("./images/"+name+".png");
-        try {
-            ImageIO.write(image, "png", file);   
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
+        @Override 
+        public void run(){
+            for (int x = xS; x < xE; x++) for (int y = yS; y < yE; y++) {
+                Ray ray = camera.generateRay(x, y);
+                Color color = (traceRay(ray)) ? shader.getColor(ray, ray.target(), scene) : def;
+                // color = color != null ? color : def; // shouldnt ever happen as the shader has been reworked
+                image.setRGB(x, camera.getHeight()-y-1, color.rgb() );
+            }
         }
     }
 
@@ -116,9 +129,21 @@ public class Scene {
             FileWriter fw = new FileWriter("./scenes/"+name+".json");
             fw.write(gson.toJson(this));
             fw.close();
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-        }
+        } catch (Exception e) {}
     }
     
+    public void addGeometry(Geometry g){ 
+        if(!materials.containsKey(g.material())){
+            g.setMaterial(Geometry.NO_MATERIAL);
+        }
+        geometries.add(g);
+    }
+    public void addLightSource(LightSource l){ lightSources.add(l); }
+    public void addMaterial(String key, Material m){ materials.put(key,m); } 
+
+    public HashSet<Geometry>        getGeometries()   { return geometries; }
+    public HashMap<String,Material> getMaterials()    { return materials; }
+    public HashSet<LightSource>     getLightSources() { return lightSources; }
+    public Camera                   getCamera()       { return camera; }
+
 }
