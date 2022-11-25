@@ -47,9 +47,7 @@ public class App extends JFrame implements ActionListener {
             s.makeImage(new LightShader());
 
             if(window == null) window = new Window();
-            else {
-                window.getNewImages();
-            }
+            else window.getNewImages();
             
         }
         
