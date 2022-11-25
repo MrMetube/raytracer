@@ -1,11 +1,15 @@
 package gui;
 
+import java.awt.Frame;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 
 import javax.swing.JButton;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JTextField;
+import javax.swing.filechooser.FileFilter;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 import scene.Scene;
 import shader.AmbientShader;
@@ -16,15 +20,25 @@ import shader.SpecularShader;
 public class App extends JFrame implements ActionListener {
     
     JTextField field = new JTextField("simple");
-    JButton button = new JButton("Render");
+    JButton render = new JButton("Render");
+    JButton open = new JButton("Open");
+    JFileChooser chooser = new JFileChooser("./scenes/");
     Window window;
 
     public App(){
-        button.setBounds(100,160,200,40);
-        button.setFocusable(false);
-        button.addActionListener(this);
+        render.setBounds(100,160,200,40);
+        render.setFocusable(false);
+        render.addActionListener(this);
+
+        add(render);
+
+        open.setBounds(100,40,200,40);
+        open.setFocusable(false);
+        open.addActionListener(this);
         
-        add(button);
+        add(open);
+
+        chooser.setDialogTitle("Scene auswählen");
 
         field.setBounds(100,100,200,40);
         field.addActionListener(this);
@@ -38,7 +52,7 @@ public class App extends JFrame implements ActionListener {
 
     @Override
     public void actionPerformed(ActionEvent e) {
-        if(e.getSource() == button || e.getSource() == field) {
+        if(e.getSource() == render || e.getSource() == field) {
             Scene s = new Scene("./scenes/"+field.getText()+".json");
 
             s.makeImage(new AmbientShader());
@@ -47,8 +61,23 @@ public class App extends JFrame implements ActionListener {
             s.makeImage(new LightShader());
 
             if(window == null) window = new Window();
-            else window.getNewImages();
+            else {
+                if(window.getState() == Frame.ICONIFIED) window.setState(Frame.NORMAL);
+                window.getNewImages();
+            }
+        }else if(e.getSource() == open){
+            chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
             
+            FileFilter filter = new FileNameExtensionFilter("JSON File","json");
+            chooser.addChoosableFileFilter(filter);
+            chooser.setAcceptAllFileFilterUsed(false);
+
+            int returnVal = chooser.showOpenDialog(this);
+
+            if (returnVal == JFileChooser.APPROVE_OPTION) {
+                String s = chooser.getSelectedFile().getName().replace(".json", "");
+                field.setText(s);
+            } else System.out.println("Open command cancelled by user.");
         }
         
     }
