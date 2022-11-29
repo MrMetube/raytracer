@@ -3,45 +3,16 @@ package gui;
 import javax.swing.*;
 
 import java.awt.*;
-import java.awt.event.*;
 
-public class Window extends JFrame{
+public class ImagePanel extends JPanel{
     ImageIcon[] images = new ImageIcon[4];
     JLabel[] labels = new JLabel[4];
 
-    public Window(){
-
+    public ImagePanel(){
         setLayout(new GridLayout(2,2));
-
         getNewImages();
-
-        this.addWindowListener(
-            new WindowListener(){
-                
-                @Override public void windowActivated(WindowEvent e) {}
-                @Override public void windowClosed(WindowEvent e) {}
-                @Override public void windowDeactivated(WindowEvent e) {}
-                @Override public void windowIconified(WindowEvent e) {}
-                @Override public void windowOpened(WindowEvent e) {} 
-
-                @Override
-                public void windowClosing(WindowEvent e) {
-                    setState(Frame.ICONIFIED);
-                }
-
-                @Override
-                public void windowDeiconified(WindowEvent e) {
-                    setState(Frame.NORMAL);
-                }
-           }
-        );
-        
-
-        setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         setVisible(true);
         setSize(800, 800);
-        setResizable(false);
-        setTitle("Output");
     }
 
     public void getNewImages(){
@@ -61,7 +32,6 @@ public class Window extends JFrame{
         labels[3] = new JLabel(images[3]);
 
         for (JLabel label : labels) add(label);
-        pack();
-        requestFocus();
+        updateUI();
     }
 }
