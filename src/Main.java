@@ -1,7 +1,5 @@
 import shader.*;
 
-import java.util.concurrent.Executors;
-
 import geometry.*;
 import gui.App;
 import math.*;
@@ -43,8 +41,8 @@ class Main {
         // new App();
 
         //#region testing speed
-        for (int i = 0; i < 10; i++)
-            s.makeImage(new LightShader(),true);
+        // for (int i = 0; i < 10; i++)
+        //     s.makeImage(new LightShader(),true);
         //#endregion
     }
 }
