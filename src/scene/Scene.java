@@ -62,13 +62,20 @@ public class Scene {
     public boolean traceRay(Ray ray){
         double t = Double.MAX_VALUE;
         Geometry target = null;
-        Ray clone;
+        // Ray clone;
+        // for(Geometry geometry : geometries){
+        //     clone = new Ray(ray);
+        //     geometry.intersect(clone);
+        //     if(clone.t()<t){
+        //         t = clone.t();
+        //         target = clone.target();
+        //     }
+        // }
         for(Geometry geometry : geometries){
-            clone = new Ray(ray);
-            geometry.intersect(clone);
-            if(clone.t()<t){
-                t = clone.t();
-                target = clone.target();
+            geometry.intersect(ray);
+            if(ray.t()<t){
+                t = ray.t();
+                target = ray.target();
             }
         }
         if(target != null) ray.hit(target,t);
