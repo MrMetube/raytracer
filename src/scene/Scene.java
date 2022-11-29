@@ -5,6 +5,7 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -15,11 +16,14 @@ import com.google.gson.GsonBuilder;
 
 import geometry.Geometry;
 import geometry.GeometryAdapter;
+import geometry.Sphere;
 import math.Color;
+import math.Point;
 import math.Ray;
 import shader.Shader;
 
 public class Scene {
+    //#region Attributes
     HashSet<Geometry> geometries;
     HashSet<LightSource> lightSources;
     HashMap<String,Material> materials;
@@ -29,6 +33,10 @@ public class Scene {
                             .registerTypeAdapter(Geometry.class, new GeometryAdapter())
                             .registerTypeAdapter(LightSource.class, new LightSourceAdapter())
                             .create();
+
+    //#endregion
+    
+    //#region Constructor
 
     public Scene(Camera camera) {
         this.geometries = new HashSet<>();
@@ -49,6 +57,8 @@ public class Scene {
         } catch (Exception e) {}
     }
 
+    //#endregion
+
     public boolean traceRay(Ray ray){
         double t = Double.MAX_VALUE;
         Geometry target = null;
@@ -65,7 +75,7 @@ public class Scene {
         return t != Double.MAX_VALUE && target != null;
     }
 
-    public void makeImage(Shader shader, String name, boolean time){
+    public void makeImage(Shader shader, String name, boolean timed){
         File file = new File("./images/"+name+".png");
 
         Camera camera = getCamera();
@@ -83,43 +93,19 @@ public class Scene {
             exe.submit(new Trace(this, image, i*dx, (i+1)*dx, j*dy, (j+1)*dy, shader));
         exe.shutdown();
         while(!exe.isTerminated());
-
-        if(time) System.out.printf("%s took %s ms%n",name, (System.nanoTime()-start)/1_000_000);
-
+        
+        if(timed) {
+            System.out.printf("%s Rendering took: %s ms%n",name, (System.nanoTime()-start)/1_000_000);
+            start = System.nanoTime();
+        }
+        
         try { ImageIO.write(image, "png", file); } catch (Exception e) {}
+        
+        if(timed) System.out.printf("%s Saving took:    %s ms%n",name, (System.nanoTime()-start)/1_000_000);
     }
 
     public void makeImage(Shader shader){ makeImage(shader,shader.getName(), false); }
     public void makeImage(Shader shader, boolean time){ makeImage(shader,shader.getName(), time); }
-
-    private class Trace implements Runnable{
-        final BufferedImage image;
-        final Color def = new Color(0.44, 0.85, 0.93);
-        final Camera camera;
-        final Shader shader;
-        final Scene scene;
-        final int xS,xE,yS,yE;
-
-        Trace(Scene scene, BufferedImage image, int xStart, int xEnd, int yStart, int yEnd, Shader shader){
-            this.image = image;
-            this.scene = scene;
-            this.camera = scene.getCamera();
-            this.shader = shader;
-            xS = xStart;
-            yS = yStart;
-            xE = Math.min(xEnd, camera.getWidth());
-            yE = Math.min(yEnd, camera.getHeight());
-        }
-        @Override 
-        public void run(){
-            for (int x = xS; x < xE; x++) for (int y = yS; y < yE; y++) {
-                Ray ray = camera.generateRay(x, y);
-                Color color = (traceRay(ray)) ? shader.getColor(ray, ray.target(), scene) : def;
-                // color = color != null ? color : def; // shouldnt ever happen as the shader has been reworked
-                image.setRGB(x, camera.getHeight()-y-1, color.rgb() );
-            }
-        }
-    }
 
     public void toJson(String name){
         try {
@@ -127,6 +113,27 @@ public class Scene {
             fw.write(gson.toJson(this));
             fw.close();
         } catch (Exception e) {}
+    }
+    
+    //#region Other
+
+    public static Scene randomSpheres(int count){
+        Scene s = new Scene(new Camera(new Point(0, 12, -12), Point.ZERO, 90, 800, 800));
+        s.addBasicMaterials();
+        s.addLightSource(new PointLightSource(new Point(0, 20, 10), Color.WHITE, 1));
+        s.addLightSource(new PointLightSource(new Point(0, 10, -10), Color.WHITE, 1));
+        Object[] materials = s.getMaterials().keySet().toArray();
+        Random rdm = new Random();
+        for (int i = 0; i < count; i++) {
+            double x = rdm.nextDouble(-10,10);
+            double y = rdm.nextDouble(-10,10);
+            double z = rdm.nextDouble(-10,10);
+            double r = rdm.nextDouble(0.1,1);
+            int m = rdm.nextInt(0,materials.length);
+            if(materials[m] instanceof String)
+                s.addGeometry(new Sphere(new Point(x,y,z), r, (String)materials[m]));
+        }
+        return s;
     }
     
     public void addGeometry(Geometry g){ 
@@ -137,6 +144,10 @@ public class Scene {
     }
     public void addLightSource(LightSource l){ lightSources.add(l); }
     public void addMaterial(String key, Material m){ materials.put(key,m); } 
+    public HashSet<Geometry>        getGeometries()   { return geometries; }
+    public HashMap<String,Material> getMaterials()    { return materials; }
+    public HashSet<LightSource>     getLightSources() { return lightSources; }
+    public Camera                   getCamera()       { return camera; }
 
     public void addBasicMaterials(){
         addMaterial("red", Material.RED);
@@ -148,11 +159,15 @@ public class Scene {
         addMaterial("white", Material.WHITE);
         addMaterial("gray", Material.GRAY);
         addMaterial("black", Material.BLACK);
+        
+        addMaterial("pink", Material.PINK   );
+        addMaterial("orange", Material.ORANGE );
+        addMaterial("lemon", Material.LEMON    );
+        addMaterial("lime", Material.LIME   );
+        addMaterial("azure", Material.AZURE  );
+        addMaterial("purple", Material.PURPLE );
+        addMaterial("dark", Material.DARK   );
+        addMaterial("light", Material.LIGHT  );
     }
-
-    public HashSet<Geometry>        getGeometries()   { return geometries; }
-    public HashMap<String,Material> getMaterials()    { return materials; }
-    public HashSet<LightSource>     getLightSources() { return lightSources; }
-    public Camera                   getCamera()       { return camera; }
-
+    //#endregion
 }
