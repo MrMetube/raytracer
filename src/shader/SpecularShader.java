@@ -25,14 +25,14 @@ public class SpecularShader extends Shader{
                 .mul(vrn);
             il = il.add(lc);
         }
-        Color out = m.isMetalic() ? m.color().mul(il) : il;
+        Color out = m.isMetallic() ? m.color().mul(il) : il;
 
         return out;
     }
 
     public Color getColor2(Ray ray, Geometry geometry, Scene scene) {
         Material m = scene.getMaterials().get(geometry.material());
-        Color out = m.isMetalic() ? m.color(): null;
+        Color out = m.isMetallic() ? m.color(): null;
         Vector v = ray.dir().neg();
         Vector n = geometry.normal(ray.hitPoint());
         Vector r = v.refl(n);

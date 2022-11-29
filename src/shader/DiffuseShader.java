@@ -12,6 +12,7 @@ public class DiffuseShader extends Shader{
         Color il = new Color(0, 0, 0);
         Vector n = geometry.normal(ray.hitPoint());
         for (LightSource ls : scene.getLightSources()) {
+            // if(vr < 0 ) continue; // keine farbe bei winkel >90°
             Vector l = ls.pos().sub(ray.hitPoint()).norm();
             Color lc = ls.color().mul(ls.intensity()).mul(n.dot(l));
             il = il.add(lc);
