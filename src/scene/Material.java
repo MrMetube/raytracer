@@ -15,12 +15,12 @@ public record Material(Color color, double ambient, double diffuse, double specu
     public static Material BLACK    = new Material(Color.BLACK,   .2, .9, .9, 10, false);
     public static Material GRAY     = new Material(Color.GRAY,    .2, .9, .9, 10, false);
 
-    public static Material PINK     = new Material(Color.PINK  ,  .2, .9, .2, 10, false);
-    public static Material ORANGE   = new Material(Color.ORANGE,  .2, .9, .2, 10, false);
-    public static Material LEMON    = new Material(Color.LEMON ,  .2, .9, .2, 10, false);
-    public static Material LIME     = new Material(Color.LIME  ,  .2, .9, .2, 10, false);
-    public static Material AZURE    = new Material(Color.AZURE ,  .2, .9, .2, 10, false);
-    public static Material PURPLE   = new Material(Color.PURPLE,  .2, .9, .2, 10, false);
-    public static Material DARK     = new Material(Color.DARK  ,  .2, .9, .2, 10, false);
-    public static Material LIGHT    = new Material(Color.LIGHT ,  .2, .9, .2, 10, false);
+    public static Material PINK     = new Material(Color.PINK  ,  .2, .9, .1, 1, false);
+    public static Material ORANGE   = new Material(Color.ORANGE,  .2, .9, .1, 1, false);
+    public static Material LEMON    = new Material(Color.LEMON ,  .2, .9, .1, 1, false);
+    public static Material LIME     = new Material(Color.LIME  ,  .2, .9, .1, 1, false);
+    public static Material AZURE    = new Material(Color.AZURE ,  .2, .9, .1, 1, false);
+    public static Material PURPLE   = new Material(Color.PURPLE,  .2, .9, .1, 1, false);
+    public static Material DARK     = new Material(Color.DARK  ,  .2, .9, .1, 1, false);
+    public static Material LIGHT    = new Material(Color.LIGHT ,  .2, .9, .1, 1, false);
 }

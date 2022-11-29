@@ -89,7 +89,7 @@ public class App extends JFrame implements ActionListener {
                 field.setText(s);
             } else System.out.println("Open command cancelled by user.");
         }else if(e.getSource() == random){
-            Scene s = Scene.randomSpheres(100);
+            Scene s = Scene.randomSpheres(500);
 
             s.makeImage(new AmbientShader());
             s.makeImage(new DiffuseShader());
