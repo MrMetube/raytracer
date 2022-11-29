@@ -1,6 +1,16 @@
 package math;
 
 public class Color extends Tuple {
+    public static Color RED     = new Color(1, 0, 0);
+    public static Color GREEN   = new Color(0, 1, 0);
+    public static Color BLUE    = new Color(0, 0, 1);
+    public static Color YELLOW  = new Color(1, 1, 0);
+    public static Color CYAN    = new Color(0, 1, 1);
+    public static Color MAGENTA = new Color(1, 0, 1);
+    public static Color WHITE   = new Color(1, 1, 1);
+    public static Color BLACK   = new Color(0, 0, 0);
+    public static Color GRAY    = new Color(.5, .5, .5);
+
     public Color(double r, double g, double b){ 
         super(r,g,b,-1);
     }

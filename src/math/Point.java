@@ -2,6 +2,8 @@ package math;
 
 public class Point extends Tuple{
 
+    public static Point ZERO = new Point(0, 0, 0);
+
     public Point(double x, double y, double z){ super(x,y,z,1); }
 
     public Point add(Vector... vecs){

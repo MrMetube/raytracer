@@ -2,27 +2,16 @@ package scene;
 
 import math.Color;
 
-public final class Material {
-    private final Color color;
-    private final double ambient;
-    private final double diffuse;
-    private final double specular;
-    private final int shininess;
-    private final boolean isMetalic;
+public record Material(Color color, double ambient, double diffuse, double specular, int shininess, boolean isMetallic){
+    public static Material DEFAULT = new Material(Color.MAGENTA, .2, 1, 0, 0, false);
 
-    public Material(Color color, double ambient, double diffuse, double specular, int shininess, boolean isMetalic) {
-        this.color = color;
-        this.ambient = ambient;
-        this.diffuse = diffuse;
-        this.specular = specular;
-        this.shininess = shininess;
-        this.isMetalic = isMetalic;
-    }
-
-    public Color color() { return color; }
-    public double ambient() { return ambient; }
-    public double diffuse() { return diffuse; }
-    public double specular() { return specular; }
-    public int shininess() { return shininess; }
-    public boolean isMetalic() { return isMetalic; }
+    public static Material RED      = new Material(Color.RED,     .2, .9, .9, 100, false);
+    public static Material GREEN    = new Material(Color.GREEN,   .2, .9, .9, 100, false);
+    public static Material BLUE     = new Material(Color.BLUE,    .2, .9, .9, 100, false);
+    public static Material CYAN     = new Material(Color.CYAN,    .2, .9, .9, 100, false);
+    public static Material MAGENTA  = new Material(Color.MAGENTA, .2, .9, .9, 100, false);
+    public static Material YELLOW   = new Material(Color.YELLOW,  .2, .9, .9, 100, false);
+    public static Material WHITE    = new Material(Color.WHITE,   .2, .9, .9, 100, false);
+    public static Material BLACK    = new Material(Color.BLACK,   .2, .9, .9, 100, false);
+    public static Material GRAY     = new Material(Color.GRAY,   .2, .9, .9, 100, false);
 }

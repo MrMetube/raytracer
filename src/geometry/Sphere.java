@@ -9,6 +9,8 @@ public class Sphere extends Geometry{
     final Point c;    //center
     final double r;   //radius
     
+    public static Sphere ZERO = new Sphere(Point.ZERO, 1);
+
     public Sphere(Point p, double r) {
         this.c = p;
         this.r = r;
