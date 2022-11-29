@@ -35,7 +35,7 @@ public class Scene {
         this.geometries = new HashSet<>();
         this.lightSources = new HashSet<>();
         this.materials = new HashMap<String,Material>();
-        this.materials.put(Geometry.NO_MATERIAL,new Material(new Color(1, 0, 1), 0.2, 1, 0, 0, false));
+        this.materials.put(Geometry.NO_MATERIAL,Material.DEFAULT);
         this.camera = camera;
     }
 
@@ -47,9 +47,7 @@ public class Scene {
             this.lightSources = s.getLightSources();
             this.materials = s.getMaterials();
             this.camera = s.getCamera();
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
+        } catch (Exception e) {}
     }
 
     public boolean traceRay(Ray ray){
@@ -76,7 +74,7 @@ public class Scene {
         int height = camera.getHeight();
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
 
-        long start = System.currentTimeMillis();
+        long start = System.nanoTime();
 
         int threadCount = Runtime.getRuntime().availableProcessors();;
         ExecutorService exe =  Executors.newFixedThreadPool(threadCount);
@@ -87,7 +85,7 @@ public class Scene {
         exe.shutdown();
         while(!exe.isTerminated());
 
-        if(time) System.out.printf(name + " took %s ms%n", System.currentTimeMillis()-start);
+        if(time) System.out.printf("%s took %s ms%n",name, (System.nanoTime()-start)/1_000_000);
 
         try { ImageIO.write(image, "png", file); } catch (Exception e) {}
     }
@@ -140,6 +138,18 @@ public class Scene {
     }
     public void addLightSource(LightSource l){ lightSources.add(l); }
     public void addMaterial(String key, Material m){ materials.put(key,m); } 
+
+    public void addBasicMaterials(){
+        addMaterial("red", Material.RED);
+        addMaterial("green", Material.GREEN);
+        addMaterial("blue", Material.BLUE);
+        addMaterial("cyan", Material.CYAN);
+        addMaterial("magenta", Material.MAGENTA);
+        addMaterial("yellow", Material.YELLOW);
+        addMaterial("white", Material.WHITE);
+        addMaterial("gray", Material.GRAY);
+        addMaterial("black", Material.BLACK);
+    }
 
     public HashSet<Geometry>        getGeometries()   { return geometries; }
     public HashMap<String,Material> getMaterials()    { return materials; }
