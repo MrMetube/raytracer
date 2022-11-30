@@ -1,7 +1,8 @@
-package scene;
+package raytracer;
 
 import math.Color;
 import math.Ray;
+
 import java.awt.image.BufferedImage;
 import shader.Shader;
 

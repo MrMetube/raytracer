@@ -1,9 +1,9 @@
 package shader;
 
-import geometry.Geometry;
 import math.Color;
 import math.Ray;
-import scene.Scene;
+import raytracer.Scene;
+import raytracer.geometry.Geometry;
 
 public abstract class Shader {
     public abstract Color getColor(Ray ray, Geometry geometry, Scene scene);

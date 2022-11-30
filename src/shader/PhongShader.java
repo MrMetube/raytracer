@@ -1,12 +1,12 @@
 package shader;
 
-import geometry.Geometry;
 import math.Color;
 import math.Ray;
 import math.Vector;
-import scene.LightSource;
-import scene.Material;
-import scene.Scene;
+import raytracer.LightSource;
+import raytracer.Material;
+import raytracer.Scene;
+import raytracer.geometry.Geometry;
 
 public class PhongShader extends Shader{
 
@@ -30,7 +30,7 @@ public class PhongShader extends Shader{
             Vector l = ls.pos().sub(ray.hitPoint()).norm();
             //diffuse
             double nl = n.dot(l);
-            //TODO If nl < 0 ?? can you ignore this 
+            //If nl < 0 ?? can you ignore this 
             if(nl>0)
                 il = il.add(ls.color().mul(ls.intensity()).mul(nl));
             //specular

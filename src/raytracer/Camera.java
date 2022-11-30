@@ -1,4 +1,4 @@
-package scene;
+package raytracer;
 import math.Point;
 import math.Ray;
 import math.Vector;

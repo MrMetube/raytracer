@@ -1,4 +1,4 @@
-package geometry;
+package raytracer;
 
 import java.lang.reflect.Type;
 
@@ -10,6 +10,8 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
+
+import raytracer.geometry.Geometry;
 
 public class GeometryAdapter implements JsonDeserializer<Geometry> ,JsonSerializer<Geometry>{
     

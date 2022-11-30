@@ -1,4 +1,4 @@
-package geometry;
+package raytracer.geometry;
 
 import math.Point;
 import math.Ray;

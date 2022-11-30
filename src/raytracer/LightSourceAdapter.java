@@ -1,4 +1,4 @@
-package scene;
+package raytracer;
 
 import java.lang.reflect.Type;
 

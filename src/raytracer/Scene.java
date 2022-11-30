@@ -1,4 +1,4 @@
-package scene;
+package raytracer;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileReader;
@@ -14,12 +14,11 @@ import javax.imageio.ImageIO;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
-import geometry.Geometry;
-import geometry.GeometryAdapter;
-import geometry.Sphere;
 import math.Color;
 import math.Point;
 import math.Ray;
+import raytracer.geometry.Geometry;
+import raytracer.geometry.Sphere;
 import shader.Shader;
 
 public class Scene {

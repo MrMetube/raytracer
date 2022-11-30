@@ -1,10 +1,10 @@
 package shader;
 
-import geometry.Geometry;
 import math.Color;
 import math.Ray;
 import math.Vector;
-import scene.Scene;
+import raytracer.Scene;
+import raytracer.geometry.Geometry;
 
 public class NormalShader extends Shader {
 

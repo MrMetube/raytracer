@@ -1,9 +1,7 @@
 import shader.*;
-
-import geometry.*;
+import raytracer.*;
 import gui.App;
 import math.*;
-import scene.*;
 
 class Main {
     public static void main(String[] args){

@@ -1,8 +1,8 @@
 package shader;
 
-import geometry.Geometry;
 import math.*;
-import scene.*;
+import raytracer.*;
+import raytracer.geometry.*;
 
 public class DiffuseShader extends Shader{
 

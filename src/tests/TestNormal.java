@@ -3,8 +3,8 @@ package tests;
 import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 
-import geometry.Sphere;
 import math.*;
+import raytracer.geometry.Sphere;
 
 public class TestNormal {
     @Test void normalVectorOnSphereX(){

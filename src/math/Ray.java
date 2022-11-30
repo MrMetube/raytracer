@@ -1,6 +1,6 @@
 package math;
 
-import geometry.Geometry;
+import raytracer.geometry.Geometry;
 
 public class Ray{
     Point origin;

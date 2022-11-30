@@ -1,9 +1,8 @@
 package shader;
 
-import geometry.Geometry;
 import math.*;
-import scene.*;
-import scene.Material;
+import raytracer.*;
+import raytracer.geometry.Geometry;
 
 public class SpecularShader extends Shader{
 

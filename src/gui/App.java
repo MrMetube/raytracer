@@ -14,7 +14,7 @@ import javax.swing.event.ChangeListener;
 import javax.swing.filechooser.FileFilter;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
-import scene.Scene;
+import raytracer.Scene;
 import shader.AmbientShader;
 import shader.DiffuseShader;
 import shader.PhongShader;

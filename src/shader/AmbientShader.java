@@ -1,10 +1,10 @@
 package shader;
 
-import geometry.Geometry;
 import math.Color;
 import math.Ray;
-import scene.Material;
-import scene.Scene;
+import raytracer.Material;
+import raytracer.Scene;
+import raytracer.geometry.Geometry;
 
 public class AmbientShader extends Shader {
 

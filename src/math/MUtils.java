@@ -1,6 +1,6 @@
 package math;
 
-import geometry.Geometry;
+import raytracer.geometry.Geometry;
 
 public class MUtils {
     public static boolean approxEqual(double a, double b){
