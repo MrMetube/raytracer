@@ -57,8 +57,8 @@ public class Scene {
 
     public void renderImage(Shader shader, BufferedImage image){
         Camera camera = getCamera();
-        int width = camera.getWidth();
-        int height = camera.getHeight();
+        int width = camera.width();
+        int height = camera.height();
 
 
         int threadCount = Runtime.getRuntime().availableProcessors();

@@ -1,12 +1,13 @@
 package math;
 public class Vector extends Tuple{
 
-    public static Vector up    = new Vector(0,1,0);
-    public static Vector down  = new Vector(0,-1,0);
-    public static Vector right = new Vector(1,0,0);
-    public static Vector left  = new Vector(-1,0,0);
-    public static Vector fore  = new Vector(0,0,1);
-    public static Vector hind  = new Vector(0,0,-1);
+    public static Vector Ypos    = new Vector(0,1,0);
+    public static Vector Yneg  = new Vector(0,-1,0);
+    public static Vector Xpos = new Vector(1,0,0);
+    public static Vector Xneg  = new Vector(-1,0,0);
+    public static Vector Zpos  = new Vector(0,0,1);
+    public static Vector Zneg  = new Vector(0,0,-1);
+    public static Vector ZERO  = new Vector(0,0,0);
 
     public Vector(double x, double y, double z){ super(x,y,z,0); }
 

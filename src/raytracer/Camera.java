@@ -46,7 +46,12 @@ public class Camera {
         return new Ray(pos, right.mul(xOffset).add(up.mul(yOffset)).add(vpn));
     }
 
-    public int getWidth() {return width;}
-    public int getHeight() {return height;}
+    public int width() {return width;}
+    public int height() {return height;}
+    public Point pos() {return pos;}
+    
+    public void move(Vector dir){
+        this.pos = pos.add(dir);
+    }
     
 }

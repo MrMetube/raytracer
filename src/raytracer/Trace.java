@@ -22,8 +22,8 @@ public class Trace implements Runnable{
         this.shader = shader;
         xS = xStart;
         yS = yStart;
-        xE = Math.min(xEnd, camera.getWidth());
-        yE = Math.min(yEnd, camera.getHeight());
+        xE = Math.min(xEnd, camera.width());
+        yE = Math.min(yEnd, camera.height());
     }
     @Override 
     public void run(){
@@ -31,7 +31,7 @@ public class Trace implements Runnable{
             Ray ray = camera.generateRay(x, y);
             Payload p = new Payload(ray);
             Color color = (traceRay(ray,p)) ? shader.getColor(p, scene) : def;
-            image.setRGB(x, camera.getHeight()-y-1, color.rgb() );
+            image.setRGB(x, camera.height()-y-1, color.rgb() );
         }
     }
     
