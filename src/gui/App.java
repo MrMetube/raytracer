@@ -51,10 +51,13 @@ public class App extends JFrame implements ActionListener, ChangeListener {
         render.setBounds(400,20,btnWidth,btnHeight);
         render.setFocusable(false);
         render.addActionListener(this);
-
         add(render);
 
-        slider.setBounds(580, 70, btnWidth, 60);
+        random.setBounds(580,20,btnWidth,btnHeight);
+        random.addActionListener(this);
+        add(random);
+
+        slider.setBounds(760, 20, btnWidth, 60);
         slider.addChangeListener(this);
         slider.setPaintTicks(true);
         slider.setSnapToTicks(true);
@@ -63,17 +66,13 @@ public class App extends JFrame implements ActionListener, ChangeListener {
         slider.setPaintLabels(true);
         add(slider);
 
-        random.setBounds(580,20,btnWidth,btnHeight);
-        random.addActionListener(this);
-        add(random);
-
-        panel.setBounds(0, 100, 800, 800);
+        panel.setBounds(100, 100, 800, 800);
         panel.add(images);
         add(panel);
         
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setTitle("Raytracer");
-        setSize(800,900);
+        setSize(1000,1000);
         setLayout(null);
         setVisible(true);
         setLocationRelativeTo(null);

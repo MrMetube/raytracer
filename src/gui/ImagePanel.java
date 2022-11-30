@@ -9,10 +9,10 @@ public class ImagePanel extends JPanel{
     JLabel[] labels = new JLabel[4];
 
     public ImagePanel(){
-        setLayout(new GridLayout(2,2));
+        setLayout(new GridLayout(2,2,25,25));
         getNewImages();
         setVisible(true);
-        setSize(800, 800);
+        setSize(900, 900);
     }
 
     public void getNewImages(){

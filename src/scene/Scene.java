@@ -60,20 +60,6 @@ public class Scene {
     //#endregion
 
     public boolean traceRay(Ray ray){
-        // double t = Double.MAX_VALUE;
-        // Geometry target = null;
-        // Ray clone;
-        // for(Geometry geometry : geometries){
-        //     clone = new Ray(ray);
-        //     geometry.intersect(clone);
-        //     if(clone.t()<t){
-        //         t = clone.t();
-        //         target = clone.target();
-        //     }
-        // }
-        // if(target != null) ray.hit(target,t);
-        // return t != Double.MAX_VALUE && target != null;
-
         double t = Double.MAX_VALUE;
         Geometry target = null;
         for(Geometry geometry : geometries){
@@ -97,7 +83,7 @@ public class Scene {
 
         long start = System.nanoTime();
 
-        int threadCount = Runtime.getRuntime().availableProcessors();;
+        int threadCount = Runtime.getRuntime().availableProcessors();
         ExecutorService exe =  Executors.newFixedThreadPool(threadCount);
         int dx = (width/threadCount)+1;
         int dy = (height/threadCount)+1;
@@ -113,7 +99,7 @@ public class Scene {
         
         try { ImageIO.write(image, "png", file); } catch (Exception e) {}
         
-        if(timed) System.out.printf("%s Saving took:    %s ms%n",name, (System.nanoTime()-start)/1_000_000);
+        // if(timed) System.out.printf("%s Saving took:    %s ms%n",name, (System.nanoTime()-start)/1_000_000);
     }
 
     public void makeImage(Shader shader){ makeImage(shader,shader.getName(), false); }
