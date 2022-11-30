@@ -1,6 +1,8 @@
 import shader.*;
-import gui.App;
-import gui.MyApp;
+
+import javax.swing.Timer;
+
+import gui.Viewport;
 import gui.World;
 import math.*;
 import raytracer.*;
@@ -47,18 +49,11 @@ class Main {
         // s.renderImage(new PhongShader());
         //#endregion
         
-        // new App();
         Scene scene = Scene.randomSpheres(20);
         int height = 800, width = height;
         World world = new World(width,height);
-        MyApp app = new MyApp(width,height);
-
-        while(true){
-            world.setCamMovement(app.getCamMovement());
-            world.tick(scene);
-            world.renderScene(scene, new PhongShader());
-            app.setImage(world.getFrameBuffer());
-        }
+        Viewport view = new Viewport(width,height,world);
+        world.setScene(scene);
         
         //#region testing speed
         // Scene s = Scene.randomSpheres(100);

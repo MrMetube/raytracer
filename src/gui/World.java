@@ -12,7 +12,8 @@ import shader.Shader;
 public class World{
     BufferedImage frameBuffer;
     int width,height;
-    Vector camMovement = Vector.ZERO;
+    Scene scene;
+    Viewport viewport;
  
     public World(int width, int height){
         this.width = width;
@@ -20,23 +21,24 @@ public class World{
         frameBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
     }
 
-    public void setCamMovement(Vector dir){
-        this.camMovement = dir;
+    public void setScene(Scene scene){ this.scene = scene; }
+    public void setViewport(Viewport viewport){this.viewport = viewport;}
+
+    public void tick(){
+        if(scene == null) return;
+        Vector dir = viewport.getCamDir();
+        scene.getCamera().move(dir);
     }
 
-    public void tick(Scene scene){
-        if (camMovement != Vector.ZERO){
-            scene.getCamera().move(camMovement);
-        }
-    }
-
-    public void renderScene(Scene scene, Shader shader){
+    public void renderScene(Shader shader){
+        if(scene == null) return;
         BufferedImage tempBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
         scene.renderImage(shader, tempBuffer);
         frameBuffer = tempBuffer;
     }
 
-    public void renderToFile(Scene scene, Shader shader, boolean timed){
+    public void renderToFile(Shader shader, boolean timed){
+        if(scene == null) return;
         String name = shader.getName();
 
         long start = System.nanoTime();
