@@ -30,8 +30,9 @@ public class App extends JFrame implements ActionListener, ChangeListener {
     JFileChooser chooser = new JFileChooser("./scenes/");
     JPanel panel = new JPanel();
     ImagePanel images = new ImagePanel();
+    Viewport viewport = new Viewport(800,800);
 
-    int RND_COUNT = 250;
+    int randomCount = 250;
 
     public App(){
         int btnWidth = 160;
@@ -68,6 +69,7 @@ public class App extends JFrame implements ActionListener, ChangeListener {
 
         panel.setBounds(100, 100, 800, 800);
         panel.add(images);
+        panel.add(viewport);
         add(panel);
         
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -83,12 +85,14 @@ public class App extends JFrame implements ActionListener, ChangeListener {
         if(e.getSource() == render || e.getSource() == field) {
             Scene s = new Scene("./scenes/"+field.getText()+".json");
 
-            s.makeImage(new AmbientShader());
-            s.makeImage(new DiffuseShader());
-            s.makeImage(new SpecularShader());
-            s.makeImage(new PhongShader());
+            viewport.render(s, new PhongShader());
 
-            images.getNewImages();
+            // viewport.renderToFile(s, new AmbientShader(), false);
+            // viewport.renderToFile(s, new DiffuseShader(), false);
+            // viewport.renderToFile(s, new SpecularShader(),false);
+            // viewport.renderToFile(s, new PhongShader(),   false);
+
+            // images.getNewImages();
         }else if(e.getSource() == open){
             chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
             
@@ -103,14 +107,16 @@ public class App extends JFrame implements ActionListener, ChangeListener {
                 field.setText(s);
             } else System.out.println("Open command cancelled by user.");
         }else if(e.getSource() == random){
-            Scene s = Scene.randomSpheres(RND_COUNT);
+            Scene s = Scene.randomSpheres(randomCount);
 
-            s.makeImage(new AmbientShader());
-            s.makeImage(new DiffuseShader());
-            s.makeImage(new SpecularShader());
-            s.makeImage(new PhongShader());
+            viewport.render(s, new PhongShader());
 
-            images.getNewImages();
+            // viewport.renderToFile(s, new AmbientShader(), false);
+            // viewport.renderToFile(s, new DiffuseShader(), false);
+            // viewport.renderToFile(s, new SpecularShader(),false);
+            // viewport.renderToFile(s, new PhongShader(),   false);
+
+            // images.getNewImages();
         }
         
     }
@@ -118,7 +124,7 @@ public class App extends JFrame implements ActionListener, ChangeListener {
     @Override
     public void stateChanged(ChangeEvent e) {
         if(e.getSource() == slider){
-            RND_COUNT = slider.getValue();
+            randomCount = slider.getValue();
         }
     }
 }

@@ -1,6 +1,7 @@
 package math;
 
 public class Color extends Tuple {
+    //#region Constants
     public static Color RED     = new Color(1, 0, 0);
     public static Color GREEN   = new Color(0, 1, 0);
     public static Color BLUE    = new Color(0, 0, 1);
@@ -19,7 +20,8 @@ public class Color extends Tuple {
     public static Color PURPLE = new Color(0.69, 0.6, 0.94);
     public static Color DARK   = new Color(0.17, 0.16, 0.18);
     public static Color LIGHT  = new Color(0.99, 0.98, 0.95);
-
+    //#endregion
+    
     public Color(double r, double g, double b){ 
         super(r,g,b,-1);
     }

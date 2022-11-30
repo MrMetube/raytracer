@@ -36,13 +36,13 @@ class Main {
         
         // #region make Image
 
-        // s.makeImage(new AmbientShader());
+        // s.renderImage(new AmbientShader());
 
-        // s.makeImage(new DiffuseShader());
+        // s.renderImage(new DiffuseShader());
 
-        // s.makeImage(new SpecularShader());
+        // s.renderImage(new SpecularShader());
 
-        // s.makeImage(new PhongShader());
+        // s.renderImage(new PhongShader());
         //#endregion
         
         new App();
@@ -50,7 +50,7 @@ class Main {
         //#region testing speed
         // Scene s = Scene.randomSpheres(100);
         // for (int i = 0; i < 10; i++)
-        //     s.makeImage(new PhongShader(),true);
+        //     s.renderImage(new PhongShader(),true);
         //#endregion
     }
 }

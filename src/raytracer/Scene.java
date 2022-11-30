@@ -9,8 +9,6 @@ import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import javax.imageio.ImageIO;
-
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -57,15 +55,11 @@ public class Scene {
 
     //#endregion
 
-    public void makeImage(Shader shader, boolean timed){
-        String name = shader.getName();
-        File file = new File("./images/"+name+".png");
+    public void renderImage(Shader shader, BufferedImage image){
         Camera camera = getCamera();
         int width = camera.getWidth();
         int height = camera.getHeight();
-        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
 
-        long start = System.nanoTime();
 
         int threadCount = Runtime.getRuntime().availableProcessors();
         ExecutorService exe =  Executors.newFixedThreadPool(threadCount);
@@ -76,16 +70,7 @@ public class Scene {
         exe.shutdown();
         while(!exe.isTerminated());
         
-        if(timed) {
-            System.out.printf("%s Rendering took: %s ms%n",name, (System.nanoTime()-start)/1_000_000);
-            start = System.nanoTime();
-        }
-        
-        try { ImageIO.write(image, "png", file); } catch (Exception e) {}
-        
-        // if(timed) System.out.printf("%s Saving took:    %s ms%n",name, (System.nanoTime()-start)/1_000_000);
     }
-    public void makeImage(Shader shader){ makeImage(shader, false);}
 
     public void toJson(String name){
         try {
