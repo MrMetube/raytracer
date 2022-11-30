@@ -22,26 +22,27 @@ public class PhongShader extends Shader{
 
         Color il = new Color(0, 0, 0);
         
+        Vector n = geometry.normal(ray.hitPoint());
         //Colors
         Color ambient =  m.color().mul(ka);
-        
-        Vector n = geometry.normal(ray.hitPoint());
 
         for (LightSource ls : scene.getLightSources()) {
             Vector l = ls.pos().sub(ray.hitPoint()).norm();
             //diffuse
             double nl = n.dot(l);
             //TODO If nl < 0 ?? can you ignore this 
-            il = il.add(ls.color().mul(ls.intensity()).mul(nl));
+            if(nl>0)
+                il = il.add(ls.color().mul(ls.intensity()).mul(nl));
             //specular
             Vector r = l.refl(n).norm();
             double vr = r.dot(v);
-            if(vr < 0 ) continue;
-            double vrs = Math.pow(vr,s);
-            Color lc = ls.color()
-                .mul(ks)
-                .mul(vrs);
-            il = il.add(lc);
+            if(vr > 0){
+                double vrs = Math.pow(vr,s);
+                Color lc = ls.color()
+                    .mul(ks)
+                    .mul(vrs);
+                il = il.add(lc);
+            }
         }
 
         if(m.isMetallic()) il.mul(m.color());
