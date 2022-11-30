@@ -32,8 +32,10 @@ class Main {
         // s.toJson("planes");
         //#endregion
         // Scene s = new Scene("./scenes/color.json");
+        Scene s = Scene.randomSpheres(200);
         
         // #region make Image
+        
         // s.makeImage(new AmbientShader());
 
         // s.makeImage(new DiffuseShader());

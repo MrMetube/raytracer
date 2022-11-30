@@ -31,18 +31,21 @@ public class PhongShader extends Shader{
             //diffuse
             double nl = n.dot(l);
             //If nl < 0 ?? can you ignore this 
-            if(nl>0)
-                il = il.add(ls.color().mul(ls.intensity()).mul(nl));
+            nl = Math.max(nl,0);
+            il = il.add(ls.color()
+                .mul(nl)
+                .mul(ls.intensity())
+                );
             //specular
             Vector r = l.refl(n).norm();
             double vr = r.dot(v);
-            if(vr > 0){
-                double vrs = Math.pow(vr,s);
-                Color lc = ls.color()
-                    .mul(ks)
-                    .mul(vrs);
-                il = il.add(lc);
-            }
+            //ignore reflected/opposite results
+            vr = Math.max(vr,0);
+            double vrs = Math.pow(vr,s);
+            Color lc = ls.color()
+                .mul(ks)
+                .mul(vrs);
+            il = il.add(lc);
         }
 
         if(m.isMetallic()) il.mul(m.color());
