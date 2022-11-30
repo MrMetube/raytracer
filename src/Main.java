@@ -1,7 +1,9 @@
 import shader.*;
-import raytracer.*;
 import gui.App;
+import gui.World;
+import gui.MyApp;
 import math.*;
+import raytracer.*;
 
 class Main {
     public static void main(String[] args){
@@ -45,8 +47,18 @@ class Main {
         // s.renderImage(new PhongShader());
         //#endregion
         
-        new App();
+        // new App();
+        Scene scene = Scene.randomSpheres(150);
+        int height = 800, width = height;
+        World world = new World(width,height);
+        MyApp app = new MyApp(width,height);
 
+        while(true){
+            world.tick(scene);
+            world.renderScene(scene, new PhongShader());
+            app.setImage(world.getFrameBuffer());
+        }
+        
         //#region testing speed
         // Scene s = Scene.randomSpheres(100);
         // for (int i = 0; i < 10; i++)

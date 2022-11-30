@@ -2,41 +2,59 @@ package gui;
 
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
+import java.util.HashMap;
 
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
-import javax.swing.JTextField;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import javax.swing.filechooser.FileFilter;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
+import math.Vector;
+import raytracer.Camera;
 import raytracer.Scene;
-import shader.AmbientShader;
-import shader.DiffuseShader;
-import shader.PhongShader;
-import shader.SpecularShader;
+import shader.*;
 
-public class App extends JFrame implements ActionListener, ChangeListener {
+public class App extends JFrame implements ActionListener, ChangeListener, KeyListener {
     
-    JTextField field = new JTextField("simple");
     JButton render = new JButton("Render Scene");
     JButton open = new JButton("Open Scene");
     JButton random = new JButton("Random Scene");
     JSlider slider = new JSlider(0, 500, 250);
     JFileChooser chooser = new JFileChooser("./scenes/");
+    JComboBox<Shader> shaderList = new JComboBox<>();
     JPanel panel = new JPanel();
     ImagePanel images = new ImagePanel();
     Viewport viewport = new Viewport(800,800);
 
+    HashMap<Integer,Vector> keyMap = new HashMap<>();
+    Vector camMovement = Vector.ZERO;
+
     int randomCount = 250;
+    String fileName = "simple";
+    Shader activeShader = new PhongShader();
 
     public App(){
         int btnWidth = 160;
         int btnHeight = 40;
+
+        shaderList.addItem(new AmbientShader());
+        shaderList.addItem(new DiffuseShader());
+        shaderList.addItem(new SpecularShader());
+        shaderList.addItem(new PhongShader());
+        shaderList.setSelectedIndex(3);
+        shaderList.setBounds(220,20,btnWidth,btnHeight);
+        shaderList.addActionListener(this);
+        add(shaderList);
 
         open.setBounds(40,20,btnWidth,btnHeight);
         open.setFocusable(false);
@@ -44,10 +62,6 @@ public class App extends JFrame implements ActionListener, ChangeListener {
         add(open);
 
         chooser.setDialogTitle("Scene auswählen");
-
-        field.setBounds(220,20,btnWidth,btnHeight);
-        field.addActionListener(this);
-        add(field);
 
         render.setBounds(400,20,btnWidth,btnHeight);
         render.setFocusable(false);
@@ -67,33 +81,32 @@ public class App extends JFrame implements ActionListener, ChangeListener {
         slider.setPaintLabels(true);
         add(slider);
 
-        // panel.setBounds(100, 100, 800, 800);
-        // panel.add(images);
-        // add(panel);
-        
-        viewport.setBounds(100, 100, 800, 800);
+        viewport.setBounds(100,100,800,800);
         add(viewport);
-        
+
+
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setTitle("Raytracer");
         setSize(1000,1000);
         setLayout(null);
         setVisible(true);
         setLocationRelativeTo(null);
+
+        setupKeyMap();
+        setFocusTraversalKeysEnabled(false);
+        addKeyListener(this);
     }
 
     @Override
     public void actionPerformed(ActionEvent e) {
-        if(e.getSource() == render || e.getSource() == field) {
-            Scene s = new Scene("./scenes/"+field.getText()+".json");
+        if(e.getSource() == render) {
+            Scene s = new Scene("./scenes/"+fileName+".json");
 
-            viewport.renderScene(s, new PhongShader());
+            Camera camera = s.getCamera();
+            camera.move(camMovement);
+            
+            viewport.renderScene(s, activeShader);
 
-            // viewport.renderToFile(s, new AmbientShader(), false);
-            // viewport.renderToFile(s, new DiffuseShader(), false);
-            // viewport.renderToFile(s, new SpecularShader(),false);
-            // viewport.renderToFile(s, new PhongShader(),   false);
-            // images.getNewImages();
         }else if(e.getSource() == open){
             chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
             
@@ -104,19 +117,18 @@ public class App extends JFrame implements ActionListener, ChangeListener {
             int returnVal = chooser.showOpenDialog(this);
 
             if (returnVal == JFileChooser.APPROVE_OPTION) {
-                String s = chooser.getSelectedFile().getName().replace(".json", "");
-                field.setText(s);
+                fileName = chooser.getSelectedFile().getName().replace(".json", "");
             } else System.out.println("Open command cancelled by user.");
         }else if(e.getSource() == random){
             Scene s = Scene.randomSpheres(randomCount);
 
-            viewport.renderScene(s, new PhongShader());
+            Camera camera = s.getCamera();
+            camera.move(camMovement);
 
-            // viewport.renderToFile(s, new AmbientShader(), false);
-            // viewport.renderToFile(s, new DiffuseShader(), false);
-            // viewport.renderToFile(s, new SpecularShader(),false);
-            // viewport.renderToFile(s, new PhongShader(),   false);
-            // images.getNewImages();
+            viewport.renderScene(s, activeShader);
+
+        }else if(e.getSource() == shaderList){
+            activeShader = (Shader) shaderList.getSelectedItem();
         }
         
     }
@@ -126,5 +138,35 @@ public class App extends JFrame implements ActionListener, ChangeListener {
         if(e.getSource() == slider){
             randomCount = slider.getValue();
         }
+    }
+
+    public void setupKeyMap(){
+        keyMap.put(KeyEvent.VK_A, Vector.Xpos);
+        keyMap.put(KeyEvent.VK_D, Vector.Xneg);
+        keyMap.put(KeyEvent.VK_S, Vector.Zpos);
+        keyMap.put(KeyEvent.VK_W, Vector.Zneg);
+        keyMap.put(KeyEvent.VK_SPACE, Vector.Ypos);
+        keyMap.put(KeyEvent.VK_SHIFT, Vector.Yneg);
+    }
+
+    @Override
+    public void keyTyped(KeyEvent e) {
+        System.out.println(e.getKeyCode());
+    }
+
+    @Override
+    public void keyPressed(KeyEvent e) {
+        Vector v = keyMap.get(e);
+        if(v==null) return;
+        camMovement = camMovement.add(v);
+        System.out.println(camMovement);
+    }
+
+    @Override
+    public void keyReleased(KeyEvent e) {
+        Vector v = keyMap.get(e);
+        if(v==null) return;
+        camMovement = camMovement.sub(v);
+        System.out.println(camMovement);
     }
 }
