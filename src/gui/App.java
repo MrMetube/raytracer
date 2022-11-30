@@ -37,10 +37,10 @@ public class App extends JFrame implements ActionListener, ChangeListener {
     public App(){
         int btnWidth = 160;
         int btnHeight = 40;
+
         open.setBounds(40,20,btnWidth,btnHeight);
         open.setFocusable(false);
         open.addActionListener(this);
-        
         add(open);
 
         chooser.setDialogTitle("Scene auswählen");
@@ -67,10 +67,12 @@ public class App extends JFrame implements ActionListener, ChangeListener {
         slider.setPaintLabels(true);
         add(slider);
 
-        panel.setBounds(100, 100, 800, 800);
-        panel.add(images);
-        panel.add(viewport);
-        add(panel);
+        // panel.setBounds(100, 100, 800, 800);
+        // panel.add(images);
+        // add(panel);
+        
+        viewport.setBounds(100, 100, 800, 800);
+        add(viewport);
         
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setTitle("Raytracer");
@@ -85,13 +87,12 @@ public class App extends JFrame implements ActionListener, ChangeListener {
         if(e.getSource() == render || e.getSource() == field) {
             Scene s = new Scene("./scenes/"+field.getText()+".json");
 
-            viewport.render(s, new PhongShader());
+            viewport.renderScene(s, new PhongShader());
 
             // viewport.renderToFile(s, new AmbientShader(), false);
             // viewport.renderToFile(s, new DiffuseShader(), false);
             // viewport.renderToFile(s, new SpecularShader(),false);
             // viewport.renderToFile(s, new PhongShader(),   false);
-
             // images.getNewImages();
         }else if(e.getSource() == open){
             chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
@@ -109,13 +110,12 @@ public class App extends JFrame implements ActionListener, ChangeListener {
         }else if(e.getSource() == random){
             Scene s = Scene.randomSpheres(randomCount);
 
-            viewport.render(s, new PhongShader());
+            viewport.renderScene(s, new PhongShader());
 
             // viewport.renderToFile(s, new AmbientShader(), false);
             // viewport.renderToFile(s, new DiffuseShader(), false);
             // viewport.renderToFile(s, new SpecularShader(),false);
             // viewport.renderToFile(s, new PhongShader(),   false);
-
             // images.getNewImages();
         }
         
