@@ -4,6 +4,7 @@ import math.MUtils;
 import math.Point;
 import math.Ray;
 import math.Vector;
+import raytracer.Payload;
 
 public class Sphere extends Geometry{
     final Point c;    //center
@@ -23,13 +24,13 @@ public class Sphere extends Geometry{
         this.m = m;
     }
 
-    @Override public boolean intersect(Ray ray){
+    @Override public boolean intersect(Ray ray,Payload payload){
         Vector dir = ray.dir();
         Vector L = ray.origin().sub(c);
         double a = dir.dot(dir);
         double b = 2 * dir.dot(L);
         double c = L.dot(L) - r*r;
-        return MUtils.solveQuadratic(a,b,c,ray,this);
+        return MUtils.solveQuadratic(a,b,c,payload,this);
     }
     
     @Override public Vector normal(Point hit){

@@ -1,5 +1,6 @@
 package math;
 
+import raytracer.Payload;
 import raytracer.geometry.Geometry;
 
 public class MUtils {
@@ -8,28 +9,7 @@ public class MUtils {
         return x < 0.00001;
     }
 
-    public static boolean solveQuadratic(double a, double b, double c, Ray ray){
-        double t1,t2;
-        double discr = b * b - 4 * a * c; 
-        if (discr < 0) return false; 
-        else if (discr == 0) t1 = t2 = - 0.5 * b / a; 
-        else { 
-            double q = (b > 0) ? 
-                -0.5 * (b + Math.sqrt(discr)) : 
-                -0.5 * (b - Math.sqrt(discr)); 
-            t1 = q / a; 
-            t2 = c / q; 
-        } 
-        if (t1 > t2){
-            double temp = t1;
-            t1 = t2;
-            t2 = temp;
-        }
-        if(t1<=0) return false;
-        // ray.hit(t1);
-        return true; 
-    }
-    public static boolean solveQuadratic(double a, double b, double c, Ray ray, Geometry target){
+    public static boolean solveQuadratic(double a, double b, double c, Payload payload, Geometry target){
         double t1,t2;
         double discr = b * b - 4 * a * c; 
         if (discr < 0) return false; 
@@ -45,7 +25,7 @@ public class MUtils {
             t2 = temp;
         }
         if(t1<=0) return false;
-        ray.hit(target,t1);
+        payload.hit(target,t1);
         return true; 
     } 
 }

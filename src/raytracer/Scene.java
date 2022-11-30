@@ -16,7 +16,6 @@ import com.google.gson.GsonBuilder;
 
 import math.Color;
 import math.Point;
-import math.Ray;
 import raytracer.geometry.Geometry;
 import raytracer.geometry.Sphere;
 import shader.Shader;
@@ -58,23 +57,9 @@ public class Scene {
 
     //#endregion
 
-    public boolean traceRay(Ray ray){
-        double t = Double.MAX_VALUE;
-        Geometry target = null;
-        for(Geometry geometry : geometries){
-            geometry.intersect(ray);
-            if(ray.t()<t){
-                t = ray.t();
-                target = ray.target();
-            }
-        }
-        if(target != null) ray.hit(target,t);
-        return t != Double.MAX_VALUE && target != null;
-    }
-
-    public void makeImage(Shader shader, String name, boolean timed){
+    public void makeImage(Shader shader, boolean timed){
+        String name = shader.getName();
         File file = new File("./images/"+name+".png");
-
         Camera camera = getCamera();
         int width = camera.getWidth();
         int height = camera.getHeight();
@@ -100,9 +85,7 @@ public class Scene {
         
         // if(timed) System.out.printf("%s Saving took:    %s ms%n",name, (System.nanoTime()-start)/1_000_000);
     }
-
-    public void makeImage(Shader shader){ makeImage(shader,shader.getName(), false); }
-    public void makeImage(Shader shader, boolean time){ makeImage(shader,shader.getName(), time); }
+    public void makeImage(Shader shader){ makeImage(shader, false);}
 
     public void toJson(String name){
         try {

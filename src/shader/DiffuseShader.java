@@ -2,17 +2,16 @@ package shader;
 
 import math.*;
 import raytracer.*;
-import raytracer.geometry.*;
 
 public class DiffuseShader extends Shader{
 
     @Override
-    public Color getColor(Ray ray, Geometry geometry, Scene scene) {
-        Material m = scene.getMaterials().get(geometry.material());
+    public Color getColor(Payload p, Scene scene) {
+        Material m = scene.getMaterials().get(p.target().material());
         Color il = new Color(0, 0, 0);
-        Vector n = geometry.normal(ray.hitPoint());
+        Vector n = p.target().normal(p.hitPoint());
         for (LightSource ls : scene.getLightSources()) {
-            Vector l = ls.pos().sub(ray.hitPoint()).norm();
+            Vector l = ls.pos().sub(p.hitPoint()).norm();
             double nl = n.dot(l);
             //If nl < 0 ?? can you ignore this 
             if(nl<0) nl = 0;

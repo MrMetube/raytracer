@@ -3,6 +3,7 @@ package raytracer.geometry;
 import math.Point;
 import math.Ray;
 import math.Vector;
+import raytracer.Payload;
 
 public class Plane extends Geometry{
     Vector n;
@@ -30,14 +31,14 @@ public class Plane extends Geometry{
         this.m = m;
     }
 
-    @Override public boolean intersect(Ray ray) {
+    @Override public boolean intersect(Ray ray, Payload payload) {
         Point  o = ray.origin();
         Vector d = ray.dir();
         double t = n.dot(p.sub(o)) / n.dot(d);
         if( t>0 && (
             r != 0 && p.sub(o.add(d.mul(t))).mag() < r ||
             r == 0 && p.sub(o.add(d.mul(t))).mag() < DRAW_DISTANCE )){
-            ray.hit(this,t);
+            payload.hit(this,t);
             return true;
         }
         return false;

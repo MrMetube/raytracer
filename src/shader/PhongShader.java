@@ -1,33 +1,34 @@
 package shader;
 
 import math.Color;
-import math.Ray;
 import math.Vector;
 import raytracer.LightSource;
 import raytracer.Material;
+import raytracer.Payload;
 import raytracer.Scene;
 import raytracer.geometry.Geometry;
 
 public class PhongShader extends Shader{
 
-    @Override public Color getColor(Ray ray, Geometry geometry, Scene scene) {
+    @Override public Color getColor(Payload p, Scene scene) {
         // Constants
+        Geometry geometry = p.target();
         Material m = scene.getMaterials().get(geometry.material());
         
         double ks = m.specular();
         double kd = m.diffuse();
         double ka = m.ambient();
-        Vector v = ray.hitPoint().sub(ray.origin()).norm();
+        Vector v = p.hitPoint().sub(p.ray().origin()).norm();
         double s = m.shininess();
 
         Color il = new Color(0, 0, 0);
         
-        Vector n = geometry.normal(ray.hitPoint());
+        Vector n = geometry.normal(p.hitPoint());
         //Colors
         Color ambient =  m.color().mul(ka);
 
         for (LightSource ls : scene.getLightSources()) {
-            Vector l = ls.pos().sub(ray.hitPoint()).norm();
+            Vector l = ls.pos().sub(p.hitPoint()).norm();
             //diffuse
             double nl = n.dot(l);
             //If nl < 0 ?? can you ignore this 
