@@ -1,7 +1,7 @@
 import shader.*;
 import gui.App;
-import gui.World;
 import gui.MyApp;
+import gui.World;
 import math.*;
 import raytracer.*;
 
@@ -48,12 +48,13 @@ class Main {
         //#endregion
         
         // new App();
-        Scene scene = Scene.randomSpheres(150);
+        Scene scene = Scene.randomSpheres(20);
         int height = 800, width = height;
         World world = new World(width,height);
         MyApp app = new MyApp(width,height);
 
         while(true){
+            world.setCamMovement(app.getCamMovement());
             world.tick(scene);
             world.renderScene(scene, new PhongShader());
             app.setImage(world.getFrameBuffer());

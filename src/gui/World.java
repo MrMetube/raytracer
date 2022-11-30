@@ -1,11 +1,12 @@
 package gui;
-import java.awt.Graphics;
 import java.awt.image.BufferedImage;
 import java.io.File;
 
 import javax.imageio.ImageIO;
 
 import math.Vector;
+import raytracer.Scene;
+import shader.Shader;
 
 
 public class World{

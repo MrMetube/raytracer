@@ -18,6 +18,7 @@ public class MyApp extends JFrame implements KeyListener{
     JLabel label;
     JPanel panel;
     BufferedImage image;
+    Vector camMovement = Vector.ZERO;
     HashMap<Integer,Vector> keyMap = new HashMap<>();
 
     public MyApp(int width, int height){
@@ -40,34 +41,35 @@ public class MyApp extends JFrame implements KeyListener{
     public void paint(Graphics g) {
         if(image != null) g.drawImage(image, 0, 0, this);
     }
-    
+
+    public Vector getCamMovement(){ return camMovement; }
+
     public void setupKeyMap(){
-        keyMap.put(KeyEvent.VK_A, Vector.Xpos);
-        keyMap.put(KeyEvent.VK_D, Vector.Xneg);
-        keyMap.put(KeyEvent.VK_S, Vector.Zpos);
-        keyMap.put(KeyEvent.VK_W, Vector.Zneg);
+        keyMap.put(KeyEvent.VK_D, Vector.Xpos);
+        keyMap.put(KeyEvent.VK_A, Vector.Xneg);
+        keyMap.put(KeyEvent.VK_W, Vector.Zpos);
+        keyMap.put(KeyEvent.VK_S, Vector.Zneg);
         keyMap.put(KeyEvent.VK_SPACE, Vector.Ypos);
         keyMap.put(KeyEvent.VK_SHIFT, Vector.Yneg);
     }
 
     @Override
     public void keyTyped(KeyEvent e) {
-        System.out.println(e.getKeyCode());
+        System.out.println(e.getKeyChar());
     }
 
     @Override
     public void keyPressed(KeyEvent e) {
-        Vector v = keyMap.get(e);
+        Vector v = keyMap.get(e.getKeyCode());
+        System.out.println(e.getKeyChar());
         if(v==null) return;
         camMovement = camMovement.add(v);
-        System.out.println(camMovement);
     }
 
     @Override
     public void keyReleased(KeyEvent e) {
-        Vector v = keyMap.get(e);
+        Vector v = keyMap.get(e.getKeyCode());
         if(v==null) return;
         camMovement = camMovement.sub(v);
-        System.out.println(camMovement);
     }
 }
