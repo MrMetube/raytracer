@@ -27,15 +27,10 @@ public class Ray{
         return origin.add(dir.mul(t));
     }
 
-    public void hit(Geometry target){
-        this.target = target;
-    }
-    public void hit(double t){
-        this.t = t;
-    }
     public void hit(Geometry target, double t){
-        this.target = target;
-        this.t = t;
+        if( this.t>t && t > 0)
+            this.target = target;
+            this.t = t;
     }
 
     public double len(){ return dir.mag(); }
