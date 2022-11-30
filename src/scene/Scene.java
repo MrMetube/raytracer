@@ -85,10 +85,6 @@ public class Scene {
         }
         if(target != null) ray.hit(target,t);
         return t != Double.MAX_VALUE && target != null;
-
-        // for(Geometry geometry : geometries) geometry.intersect(ray);
-
-        // return ray.target() != null;
     }
 
     public void makeImage(Shader shader, String name, boolean timed){

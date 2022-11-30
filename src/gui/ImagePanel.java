@@ -19,7 +19,7 @@ public class ImagePanel extends JPanel{
         images[0] = new ImageIcon("./images/AmbientShader.png",  "Ambient Color");
         images[1] = new ImageIcon("./images/DiffuseShader.png",  "Diffuse Color");
         images[2] = new ImageIcon("./images/SpecularShader.png", "Specular Color");
-        images[3] = new ImageIcon("./images/LightShader.png",    "Light Color");
+        images[3] = new ImageIcon("./images/PhongShader.png",    "Light Color");
 
         for (ImageIcon image : images)
             image.setImage(image.getImage().getScaledInstance(400, 400, Image.SCALE_DEFAULT));

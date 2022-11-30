@@ -34,7 +34,7 @@ class Main {
         // s.toJson("planes");
         //#endregion
         // Scene s = new Scene("./scenes/color.json");
-        // Scene s = Scene.randomSpheres(100);
+        Scene s = Scene.randomSpheres(100);
         
         // #region make Image
         // s.makeImage(new AmbientShader());
@@ -43,14 +43,14 @@ class Main {
 
         // s.makeImage(new SpecularShader());
 
-        // s.makeImage(new LightShader());
+        // s.makeImage(new PhongShader());
         //#endregion
         
-        new App();
+        // new App();
 
         //#region testing speed
-        // for (int i = 0; i < 10; i++)
-        //     s.makeImage(new LightShader(),true);
+        for (int i = 0; i < 10; i++)
+            s.makeImage(new PhongShader(),true);
         //#endregion
     }
 }
