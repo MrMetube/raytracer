@@ -30,7 +30,7 @@ public class GeometryAdapter implements JsonDeserializer<Geometry> ,JsonSerializ
         String type = jsonObject.get("type").getAsString();
         JsonElement element = jsonObject.get("properties");
         try {
-            return context.deserialize(element, Class.forName("geometry." + type));
+            return context.deserialize(element, Class.forName("raytracer.geometry." + type));
         } catch (ClassNotFoundException cnfe) {
             throw new JsonParseException("Unknown element type: " + type, cnfe);
         }
