@@ -14,41 +14,47 @@ import shader.*;
 
 public class Input implements KeyListener, MouseInputListener {
 
-    HashMap<Integer,Vector> keyMap = new HashMap<>();
+    HashMap<Integer,Object> keyMap = new HashMap<>();
     HashSet<Vector> activeKeys = new HashSet<>();
-    float cameraYaw = 0;
-    float cameraPitch = 0;
+    float xOffset = 0;
+    float yOffset = 0;
     Robot robot;
+    boolean captureMouse = false;
     
     public Input(){
-        
         setupKeyMap();
         try{ robot = new Robot(); }catch(Exception e){}
-
     }
 
-    public Vector getCamDir(){ 
+    public Vector getCamMove(){ 
         Vector dir = Vector.ZERO;
         for (Vector v : activeKeys) dir = dir.add(v);
         return dir;
     }
 
     public void setupKeyMap(){
-        keyMap.put(KeyEvent.VK_D, Vector.Xpos);
-        keyMap.put(KeyEvent.VK_A, Vector.Xneg);
-        keyMap.put(KeyEvent.VK_W, Vector.Zpos);
-        keyMap.put(KeyEvent.VK_S, Vector.Zneg);
+        keyMap.put(KeyEvent.VK_D,     Vector.Xpos);
+        keyMap.put(KeyEvent.VK_A,     Vector.Xneg);
+        keyMap.put(KeyEvent.VK_W,     Vector.Zpos);
+        keyMap.put(KeyEvent.VK_S,     Vector.Zneg);
+        keyMap.put(KeyEvent.VK_RIGHT, Vector.Xpos);
+        keyMap.put(KeyEvent.VK_LEFT,  Vector.Xneg);
+        keyMap.put(KeyEvent.VK_UP,    Vector.Zpos);
+        keyMap.put(KeyEvent.VK_DOWN,  Vector.Zneg);
         keyMap.put(KeyEvent.VK_SPACE, Vector.Ypos);
         keyMap.put(KeyEvent.VK_SHIFT, Vector.Yneg);
+
+        keyMap.put(KeyEvent.VK_1, new AmbientShader());
+        keyMap.put(KeyEvent.VK_2, new DiffuseShader());
+        keyMap.put(KeyEvent.VK_3, new SpecularShader());
+        keyMap.put(KeyEvent.VK_4, new PhongShader());
     }
 
     @Override
-    public void keyTyped(KeyEvent e) { /* System.out.println(e.getKeyChar()); */ }
-
-    @Override
     public void keyPressed(KeyEvent e) {
-        Vector v = keyMap.get(e.getKeyCode());
-        if(v!=null) activeKeys.add(v);
+        Object o = keyMap.get(e.getKeyCode());
+        if( o instanceof Vector) activeKeys.add((Vector)o);
+        else if( o instanceof Shader) Menu.setActiveShader((Shader) o);
         else if(e.getKeyCode()==KeyEvent.VK_F12){
             System.out.println("Screenshot saved");
             Menu.world.renderToFile(new AmbientShader(), false);
@@ -60,41 +66,36 @@ public class Input implements KeyListener, MouseInputListener {
 
     @Override
     public void keyReleased(KeyEvent e) {
-        Vector v = keyMap.get(e.getKeyCode());
-        if(v!=null) activeKeys.remove(v);
+        Object o = keyMap.get(e.getKeyCode());
+        if(o instanceof Vector) activeKeys.remove((Vector)o);
     }
     
     @Override
-    public void mouseClicked(MouseEvent e) {}
-
-    @Override
-    public void mousePressed(MouseEvent e) {}
-
-    @Override
-    public void mouseReleased(MouseEvent e) { System.out.println(e); }
-
-    @Override
-    public void mouseEntered(MouseEvent e) {}
-
-    @Override
-    public void mouseExited(MouseEvent e) {}
-
-    @Override
-    public void mouseDragged(MouseEvent e) { System.out.println(e); }
-
-    @Override
     public void mouseMoved(MouseEvent e) {
-        System.out.println(e);
-        float mouseSensitivity = 1;
+        if(captureMouse) {
+            float mouseSensitivity = 1;
 
-        int centerX = Menu.viewport.getX() + Menu.viewport.getWidth() / 2;
-        int centerY = Menu.viewport.getY() + Menu.viewport.getHeight() / 2;
+            int centerX = Menu.viewport.getX() + Menu.viewport.getWidth() / 2;
+            int centerY = Menu.viewport.getY() + Menu.viewport.getHeight() / 2;
 
-        int mouseXOffset = e.getXOnScreen() - centerX;
-        int mouseYOffset = e.getYOnScreen() - centerY;
-        cameraYaw = (cameraYaw + mouseXOffset * mouseSensitivity);
-        cameraPitch = (Math.min(90, Math.max(-90, cameraPitch + mouseYOffset * mouseSensitivity)));
-        robot.mouseMove(centerX, centerY);
-        System.out.printf("xOffset: %s, yOffset: %s %n", mouseXOffset,mouseYOffset);
+            xOffset = ((float) e.getXOnScreen() - centerX) / Menu.viewport.getWidth();
+            yOffset = ((float) e.getYOnScreen() - centerY) / Menu.viewport.getHeight();
+            
+            // TODO Rotation isnt correct yet
+            // robot.mouseMove(centerX, centerY);
+        }
+        // System.out.printf("xOffset: %s, yOffset: %s %n", mouseXOffset,mouseYOffset);
     }
+
+    public double getYOffset(){ return yOffset; }
+    public double getXOffset(){ return xOffset; }
+
+    @Override public void mouseClicked(MouseEvent e)  { captureMouse = !captureMouse;}
+    @Override public void mouseEntered(MouseEvent e)  {}
+    @Override public void mouseExited(MouseEvent e)   {}
+    @Override public void mousePressed(MouseEvent e)  {}
+    @Override public void mouseReleased(MouseEvent e) {}
+    @Override public void mouseDragged(MouseEvent e)  {}
+    @Override public void keyTyped(KeyEvent e)        {}
+
 }

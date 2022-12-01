@@ -1,7 +1,10 @@
 package gui;
 
+import java.awt.Cursor;
 import java.awt.Graphics;
+import java.awt.Point;
 import java.awt.image.BufferedImage;
+import java.awt.Toolkit;
 
 import javax.swing.JFrame;
 import javax.swing.Timer;
@@ -19,16 +22,25 @@ public class Viewport extends JFrame implements ActionListener{
     Input input = Menu.input;
     
     public Viewport(int width, int height){
-        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
         setTitle("Raytracer");
         setSize(width,height);
         setLayout(null);
         setVisible(true);
+        setFocusable(true);
         setLocationRelativeTo(null);
+
+        BufferedImage cursorImg = new BufferedImage(16,16, BufferedImage.TYPE_INT_ARGB);
+        Cursor blank = Toolkit.getDefaultToolkit().createCustomCursor(cursorImg, new Point(0,0), "blank");
+        // getContentPane().setCursor(blank);
+
         addMouseListener(input);
+        addMouseMotionListener(input);
         addKeyListener(input);
-        
+
+        setFocusTraversalKeysEnabled(false);
         clock.start();
+        setResizable(false);
     }
 
     public void setImage(BufferedImage image){
@@ -43,7 +55,7 @@ public class Viewport extends JFrame implements ActionListener{
 
     @Override
     public void actionPerformed(ActionEvent e) {
-        if(e.getSource()==clock){
+        if(e.getSource()==clock && hasFocus()){
             world.tick();
             world.renderFrame(Menu.getActiveShader());
             setImage(world.getFrameBuffer());

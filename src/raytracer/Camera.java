@@ -27,6 +27,17 @@ public class Camera {
         double halfHeight = Math.tan(fov/2);
         this.pixelSize = (aspectRatio < 1 ? halfHeight : halfHeight/aspectRatio) * 2/height ;
 
+        calcVPN();
+    }
+
+    public Ray generateRay(int x, int y){
+        double xOffset = (x + 0.5 - width  / 2) * pixelSize;
+        double yOffset = (y + 0.5 - height / 2) * pixelSize;
+
+        return new Ray(pos, right.mul(xOffset).add(up.mul(yOffset)).add(vpn));
+    }
+
+    private void calcVPN(){
         this.vpn = lookAt.sub(pos).norm();
         // Dieser Trick funtioniert nicht, wenn vpn = (0,1,0) ist, weil dann ein Null-Vektor entsteht.
         // Wenn dies der Fall ist, drehen wir die Reihenfolge um und berechnen zuerst up.
@@ -39,13 +50,6 @@ public class Camera {
         }
     }
 
-    public Ray generateRay(int x, int y){
-        double xOffset = (x + 0.5 - width  / 2) * pixelSize;
-        double yOffset = (y + 0.5 - height / 2) * pixelSize;
-
-        return new Ray(pos, right.mul(xOffset).add(up.mul(yOffset)).add(vpn));
-    }
-
     public int width() {return width;}
     public int height() {return height;}
     public Point pos() {return pos;}
@@ -54,4 +58,8 @@ public class Camera {
         this.pos = pos.add(dir);
     }
     
+    public void rotate(double x, double y){
+        lookAt.add(new Vector(x, y, 0));
+        calcVPN();
+    }
 }

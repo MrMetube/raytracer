@@ -27,5 +27,5 @@ public class MUtils {
         if(t1<=0) return false;
         payload.hit(target,t1);
         return true; 
-    } 
+    }
 }

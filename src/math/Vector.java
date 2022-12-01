@@ -11,6 +11,10 @@ public class Vector extends Tuple{
 
     public Vector(double x, double y, double z){ super(x,y,z,0); }
 
+    public Vector add(double a){
+        return new Vector(x+a, y+a, z+a);
+    }
+
     public Vector add(Vector... vecs){
         Vector sum = new Vector(x,y,z);
         for (Vector v : vecs) sum = new Vector(
@@ -44,6 +48,15 @@ public class Vector extends Tuple{
         Vector n = normal.norm();
         return this.sub(n.mul(2*this.dot(n)));
     }
+
+    public Vector rot(Vector axis, double theta){
+        Vector k = axis.norm();
+        double cosT = Math.cos(theta);
+        double sinT = Math.sin(theta);
+        double kv = k.dot(this);
+        return this.mul(cosT).add(kv*sinT).add(k.mul(kv).mul(1-cosT));
+    }
+
     @Override
     public String toString(){ return String.format("(%.02f | %.02f | %.02f)",x,y,z); }
 }

@@ -19,24 +19,33 @@ import shader.*;
 
 public class Menu extends JFrame implements ActionListener, ChangeListener {
     
-    JButton render = new JButton("Render Scene");
     JButton open = new JButton("Open Scene");
     JButton random = new JButton("Random Scene");
     JSlider slider = new JSlider(0, 500, 250);
     JFileChooser chooser = new JFileChooser("./scenes/");
     JComboBox<Shader> shaderList = new JComboBox<>();
 
-    int randomCount = 250;
+    int randomCount = 50;
     String fileName = "simple.json";
-    static Shader activeShader = new PhongShader();
 
-    public static World world;
+    static Shader activeShader = new PhongShader();
+    static Scene activeScene = Scene.EMPTY;
+
+    private static int height = 800, width = height;
+
+    public static World world = new World(width, height);
     public static Viewport viewport;
+    // public static Viewport viewport = new Viewport(width, height); // this doesnt work because focus is weird
     public static Input input = new Input();
 
     public Menu(){
         int btnWidth = 160;
         int btnHeight = 40;
+
+        open.setBounds(40,20,btnWidth,btnHeight);
+        open.setFocusable(false);
+        open.addActionListener(this);
+        add(open);
 
         shaderList.addItem(new AmbientShader());
         shaderList.addItem(new DiffuseShader());
@@ -47,59 +56,46 @@ public class Menu extends JFrame implements ActionListener, ChangeListener {
         shaderList.addActionListener(this);
         add(shaderList);
 
-        open.setBounds(40,20,btnWidth,btnHeight);
-        open.setFocusable(false);
-        open.addActionListener(this);
-        add(open);
-
         chooser.setDialogTitle("Scene auswählen");
 
-        render.setBounds(400,20,btnWidth,btnHeight);
-        render.setFocusable(false);
-        render.addActionListener(this);
-        add(render);
-
-        random.setBounds(580,20,btnWidth,btnHeight);
+        random.setBounds(400,20,btnWidth,btnHeight);
         random.addActionListener(this);
         add(random);
 
-        slider.setBounds(760, 20, btnWidth, 60);
+        slider.setBounds(580, 20, btnWidth, 60);
         slider.addChangeListener(this);
         slider.setPaintTicks(true);
         slider.setSnapToTicks(true);
         slider.setMinorTickSpacing(50);
         slider.setMajorTickSpacing(250);
         slider.setPaintLabels(true);
+        slider.setValue(randomCount);
         add(slider);
 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setTitle("Raytracer");
-        setSize(1000,1000);
+        setSize(800,150);
         setLayout(null);
         setVisible(true);
-        setLocationRelativeTo(null);
-
+        // setLocationRelativeTo(null);
         setFocusTraversalKeysEnabled(false);
     }
 
-    public void start(Scene scene, Shader shader){
-        int height = 800, width = height;
-        if(world==null&&viewport==null){
-            world = new World(width,height,scene);
-            viewport = new Viewport(width,height);
-        }else{
-            world.setScene(scene);
-        }
+    public void changeScene(Scene scene){
+        activeScene = scene;
+        if(viewport==null) viewport = new Viewport(width, height);
+        viewport.setVisible(true);
+        viewport.requestFocus();
     }
 
+    public static void setActiveShader(Shader shader){ activeShader = shader; }
     public static Shader getActiveShader(){ return activeShader; }
+    public static Scene getActiveScene(){ return activeScene; }
 
     @Override
     public void actionPerformed(ActionEvent e) {
-        if(e.getSource() == render) {
-            start(new Scene("./scenes/"+fileName),activeShader);
-        }else if(e.getSource() == random){
-            start(Scene.randomSpheres(randomCount),activeShader);
+        if(e.getSource() == random){
+            changeScene(Scene.randomSpheres(randomCount));
         }else if(e.getSource() == shaderList){
             activeShader = (Shader) shaderList.getSelectedItem();
         }else if(e.getSource() == open){
@@ -113,6 +109,7 @@ public class Menu extends JFrame implements ActionListener, ChangeListener {
 
             if (returnVal == JFileChooser.APPROVE_OPTION) {
                 fileName = chooser.getSelectedFile().getName();
+                changeScene(new Scene("./scenes/"+fileName));
             } else System.out.println("Open command cancelled by user.");
         }
         

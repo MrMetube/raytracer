@@ -82,6 +82,8 @@ public class Scene {
     
     //#region Other
 
+    public static Scene EMPTY = new Scene(new Camera(new Point(0, 0, -10), Point.ZERO, 90, 800, 800));
+
     public static Scene randomSpheres(int count){
         Scene s = new Scene(new Camera(new Point(0, 12, -12), Point.ZERO, 90, 800, 800));
         s.addBasicMaterials();
@@ -115,24 +117,30 @@ public class Scene {
     public Camera                   getCamera()       { return camera; }
 
     public void addBasicMaterials(){
-        addMaterial("red", Material.RED);
-        addMaterial("green", Material.GREEN);
-        addMaterial("blue", Material.BLUE);
-        addMaterial("cyan", Material.CYAN);
+        addMaterial("red",     Material.RED);
+        addMaterial("green",   Material.GREEN);
+        addMaterial("blue",    Material.BLUE);
+        addMaterial("cyan",    Material.CYAN);
         addMaterial("magenta", Material.MAGENTA);
-        addMaterial("yellow", Material.YELLOW);
-        addMaterial("white", Material.WHITE);
-        addMaterial("gray", Material.GRAY);
-        addMaterial("black", Material.BLACK);
+        addMaterial("yellow",  Material.YELLOW);
+        addMaterial("white",   Material.WHITE);
+        addMaterial("gray",    Material.GRAY);
+        addMaterial("black",   Material.BLACK);
         
-        addMaterial("pink", Material.PINK   );
-        addMaterial("orange", Material.ORANGE );
-        addMaterial("lemon", Material.LEMON    );
-        addMaterial("lime", Material.LIME   );
-        addMaterial("azure", Material.AZURE  );
-        addMaterial("purple", Material.PURPLE );
-        addMaterial("dark", Material.DARK   );
-        addMaterial("light", Material.LIGHT  );
+        addMaterial("pink",    Material.PINK   );
+        addMaterial("orange",  Material.ORANGE );
+        addMaterial("lemon",   Material.LEMON    );
+        addMaterial("lime",    Material.LIME   );
+        addMaterial("azure",   Material.AZURE  );
+        addMaterial("purple",  Material.PURPLE );
+        addMaterial("dark",    Material.DARK   );
+        addMaterial("light",   Material.LIGHT  );
+        
+        addMaterial("gold",    Material.GOLD  );
+        addMaterial("silver",  Material.SILVER  );
+        addMaterial("bronze",  Material.BRONZE  );
+        addMaterial("copper",  Material.COPPER  );
+
     }
     //#endregion
 }

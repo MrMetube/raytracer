@@ -1,6 +1,6 @@
-import shader.*;
 import gui.Menu;
-import raytracer.*;
+// import shader.*;
+// import raytracer.*;
 
 class Main {
     public static void main(String[] args){
