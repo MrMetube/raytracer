@@ -25,27 +25,17 @@ public class Trace implements Runnable{
         xE = Math.min(xEnd, camera.width());
         yE = Math.min(yEnd, camera.height());
     }
+    
     @Override 
     public void run(){
         for (int x = xS; x < xE; x++) for (int y = yS; y < yE; y++) {
             Ray ray = camera.generateRay(x, y);
             Payload p = new Payload(ray);
-            Color color = (traceRay(ray,p)) ? shader.getColor(p, scene) : def;
+
+            for(Geometry geometry : scene.getGeometries()) geometry.intersect(ray,p);
+            Color color = ( p.target() != null ) ? shader.getColor(p, scene) : def;
+            
             image.setRGB(x, camera.height()-y-1, color.rgb() );
         }
-    }
-    
-    public boolean traceRay(Ray ray, Payload p){
-        for(Geometry geometry : scene.getGeometries()){
-            geometry.intersect(ray,p);
-            // if(ray.t()<t){
-            //     t = ray.t();
-            //     target = ray.target();
-            // }
-        }
-        // if(target != null) ray.hit(target,t);
-        return p.target() != null;
-
-        // return ray.target() != null;
     }
 }

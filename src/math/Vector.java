@@ -49,14 +49,6 @@ public class Vector extends Tuple{
         return this.sub(n.mul(2*this.dot(n)));
     }
 
-    public Vector rot(Vector axis, double theta){
-        Vector k = axis.norm();
-        double cosT = Math.cos(theta);
-        double sinT = Math.sin(theta);
-        double kv = k.dot(this);
-        return this.mul(cosT).add(kv*sinT).add(k.mul(kv).mul(1-cosT));
-    }
-
     @Override
     public String toString(){ return String.format("(%.02f | %.02f | %.02f)",x,y,z); }
 }
