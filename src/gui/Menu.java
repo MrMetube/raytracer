@@ -28,9 +28,11 @@ public class Menu extends JFrame implements ActionListener, ChangeListener {
 
     int randomCount = 250;
     String fileName = "simple.json";
-    Shader activeShader = new PhongShader();
-    World world;
-    Viewport viewport;
+    static Shader activeShader = new PhongShader();
+
+    public static World world;
+    public static Viewport viewport;
+    public static Input input = new Input();
 
     public Menu(){
         int btnWidth = 160;
@@ -84,12 +86,13 @@ public class Menu extends JFrame implements ActionListener, ChangeListener {
         int height = 800, width = height;
         if(world==null&&viewport==null){
             world = new World(width,height,scene);
-            viewport = new Viewport(width,height,world,shader);
+            viewport = new Viewport(width,height);
         }else{
             world.setScene(scene);
-            viewport.setShader(shader);
         }
     }
+
+    public static Shader getActiveShader(){ return activeShader; }
 
     @Override
     public void actionPerformed(ActionEvent e) {

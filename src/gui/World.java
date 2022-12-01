@@ -13,7 +13,6 @@ public class World{
     BufferedImage frameBuffer;
     int width,height;
     Scene scene;
-    Viewport viewport;
  
     public World(int width, int height, Scene scene){
         this.width = width;
@@ -23,11 +22,10 @@ public class World{
     }
 
     public void setScene(Scene scene){ this.scene = scene; }
-    public void setViewport(Viewport viewport){this.viewport = viewport;}
 
     public void tick(){
         if(scene == null) return;
-        Vector dir = viewport.getCamDir();
+        Vector dir = Menu.input.getCamDir();
         scene.getCamera().move(dir);
     }
 
@@ -36,7 +34,6 @@ public class World{
         BufferedImage tempBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
         scene.renderImage(shader, tempBuffer);
         frameBuffer = tempBuffer;
-        // scene.renderImage(shader, frameBuffer);
     }
 
     public void renderToFile(Shader shader, boolean timed){
