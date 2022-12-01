@@ -10,7 +10,6 @@ import javax.swing.Timer;
 import javax.swing.event.MouseInputListener;
 
 import math.Vector;
-import raytracer.Scene;
 import shader.*;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;

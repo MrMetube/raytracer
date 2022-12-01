@@ -1,10 +1,5 @@
 import shader.*;
-
-import javax.swing.Timer;
-
-import gui.Viewport;
-import gui.World;
-import math.*;
+import gui.Menu;
 import raytracer.*;
 
 class Main {
@@ -33,12 +28,7 @@ class Main {
         // s.addLightSource(new PointLightSource(new Point(0, 5, 0), Color.WHITE, 0.9));
         // s.addLightSource(new PointLightSource(new Point(5, 5, 10), Color.WHITE, 0.9));
         
-        // s.toJson("planes");
-        //#endregion
-        // Scene s = new Scene("./scenes/color.json");
-        // Scene s = Scene.randomSpheres(200);
-        
-        // #region make Image
+        // s.toJson("new");
         //#endregion
         
         new Menu();
@@ -48,11 +38,5 @@ class Main {
         // for (int i = 0; i < 10; i++)
         //     s.renderImage(new PhongShader(),true);
         //#endregion
-    }
-
-    public static void start(Scene scene, Shader shader){
-        int height = 800, width = height;
-        World world = new World(width,height,scene);
-        new Viewport(width,height,world,shader);
     }
 }

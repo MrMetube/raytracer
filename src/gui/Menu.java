@@ -1,30 +1,23 @@
+package gui;
 
 
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
-import java.util.HashMap;
 
-import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import javax.swing.filechooser.FileFilter;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
-import math.Vector;
-import raytracer.Camera;
 import raytracer.Scene;
 import shader.*;
 
-public class Menu extends JFrame implements ActionListener, ChangeListener, KeyListener {
+public class Menu extends JFrame implements ActionListener, ChangeListener {
     
     JButton render = new JButton("Render Scene");
     JButton open = new JButton("Open Scene");
@@ -32,14 +25,12 @@ public class Menu extends JFrame implements ActionListener, ChangeListener, KeyL
     JSlider slider = new JSlider(0, 500, 250);
     JFileChooser chooser = new JFileChooser("./scenes/");
     JComboBox<Shader> shaderList = new JComboBox<>();
-    JPanel panel = new JPanel();
-
-    HashMap<Integer,Vector> keyMap = new HashMap<>();
-    Vector camMovement = Vector.ZERO;
 
     int randomCount = 250;
-    String fileName = "simple";
+    String fileName = "simple.json";
     Shader activeShader = new PhongShader();
+    World world;
+    Viewport viewport;
 
     public Menu(){
         int btnWidth = 160;
@@ -86,15 +77,19 @@ public class Menu extends JFrame implements ActionListener, ChangeListener, KeyL
         setVisible(true);
         setLocationRelativeTo(null);
 
-        setupKeyMap();
         setFocusTraversalKeysEnabled(false);
-        addKeyListener(this);
+    }
+
+    public void start(Scene scene, Shader shader){
+        int height = 800, width = height;
+        World world = new World(width,height,scene);
+        new Viewport(width,height,world,shader);
     }
 
     @Override
     public void actionPerformed(ActionEvent e) {
         if(e.getSource() == render) {
-            Main.start(new Scene("./scenes/"+fileName+".json"),activeShader);
+            start(new Scene("./scenes/"+fileName),activeShader);
         }else if(e.getSource() == open){
             chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
             
@@ -105,10 +100,10 @@ public class Menu extends JFrame implements ActionListener, ChangeListener, KeyL
             int returnVal = chooser.showOpenDialog(this);
 
             if (returnVal == JFileChooser.APPROVE_OPTION) {
-                fileName = chooser.getSelectedFile().getName().replace(".json", "");
+                fileName = chooser.getSelectedFile().getName();
             } else System.out.println("Open command cancelled by user.");
         }else if(e.getSource() == random){
-            Main.start(Scene.randomSpheres(randomCount),activeShader);
+            start(Scene.randomSpheres(randomCount),activeShader);
         }else if(e.getSource() == shaderList){
             activeShader = (Shader) shaderList.getSelectedItem();
         }
@@ -120,35 +115,5 @@ public class Menu extends JFrame implements ActionListener, ChangeListener, KeyL
         if(e.getSource() == slider){
             randomCount = slider.getValue();
         }
-    }
-
-    public void setupKeyMap(){
-        keyMap.put(KeyEvent.VK_A, Vector.Xpos);
-        keyMap.put(KeyEvent.VK_D, Vector.Xneg);
-        keyMap.put(KeyEvent.VK_S, Vector.Zpos);
-        keyMap.put(KeyEvent.VK_W, Vector.Zneg);
-        keyMap.put(KeyEvent.VK_SPACE, Vector.Ypos);
-        keyMap.put(KeyEvent.VK_SHIFT, Vector.Yneg);
-    }
-
-    @Override
-    public void keyTyped(KeyEvent e) {
-        System.out.println(e.getKeyCode());
-    }
-
-    @Override
-    public void keyPressed(KeyEvent e) {
-        Vector v = keyMap.get(e);
-        if(v==null) return;
-        camMovement = camMovement.add(v);
-        System.out.println(camMovement);
-    }
-
-    @Override
-    public void keyReleased(KeyEvent e) {
-        Vector v = keyMap.get(e);
-        if(v==null) return;
-        camMovement = camMovement.sub(v);
-        System.out.println(camMovement);
     }
 }
