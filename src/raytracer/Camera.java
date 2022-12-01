@@ -7,6 +7,7 @@ public class Camera {
     Point pos;
     Point lookAt;
     double fov;
+    //TODO camera  shouldn't set width/height
     int width;
     int height;
 
@@ -32,8 +33,8 @@ public class Camera {
 
     private void calcVectors(){
         this.vpn = lookAt.sub(pos).norm();
-        // Dieser Trick funtioniert nicht, wenn vpn = (0,1,0) ist, weil dann ein Null-Vektor entsteht.
-        // man sollte einfach einen leicht anderen nehmen. 
+        // Dies funtioniert nicht, wenn vpn = (0,1,0) ist, weil dann ein Null-Vektor entsteht.
+        // Man sollte einfach einen leicht anderen Vektor nehmen. 
         if(vpn.cross(new Vector(0, 1, 0)) != new Vector(0, 0, 0)){
             this.right = new Vector(0, 1, 0).cross(vpn).norm();
             this.up = vpn.cross(right).norm();

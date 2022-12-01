@@ -20,10 +20,10 @@ public class Input implements KeyListener, MouseInputListener {
     float yOffset = 0;
     Robot robot;
     boolean captureMouse = false;
-    Window viewport;
+    Window window;
     
     public Input(Window viewport){
-        this.viewport = viewport;
+        this.window = viewport;
         setupKeyMap();
         try{ robot = new Robot(); }catch(Exception e){}
     }
@@ -56,13 +56,13 @@ public class Input implements KeyListener, MouseInputListener {
     public void keyPressed(KeyEvent e) {
         Object o = keyMap.get(e.getKeyCode());
         if( o instanceof Vector) activeKeys.add((Vector)o);
-        else if( o instanceof Shader) viewport.setActiveShader((Shader) o);
+        else if( o instanceof Shader) window.setActiveShader((Shader) o);
         else if(e.getKeyCode()==KeyEvent.VK_F12){
             System.out.println("Screenshot saved");
-            viewport.world.renderToFile(new AmbientShader(), false);
-            viewport.world.renderToFile(new DiffuseShader(), false);
-            viewport.world.renderToFile(new SpecularShader(), false);
-            viewport.world.renderToFile(new PhongShader(), false);
+            window.world.renderToFile(new AmbientShader(), false);
+            window.world.renderToFile(new DiffuseShader(), false);
+            window.world.renderToFile(new SpecularShader(), false);
+            window.world.renderToFile(new PhongShader(), false);
         }
     }
 
@@ -77,13 +77,13 @@ public class Input implements KeyListener, MouseInputListener {
         if(captureMouse) {
             float mouseSensitivity = 1;
 
-            int centerX = viewport.getX() + viewport.getWidth() / 2;
-            int centerY = viewport.getY() + viewport.getHeight() / 2;
+            int centerX = window.getX() + window.getWidth() / 2;
+            int centerY = window.getY() + window.getHeight() / 2;
 
-            xOffset = ((float) e.getXOnScreen() - centerX) / viewport.getWidth();
-            yOffset = ((float) e.getYOnScreen() - centerY) / viewport.getHeight();
+            xOffset = ((float) e.getXOnScreen() - centerX) / window.getWidth();
+            yOffset = ((float) e.getYOnScreen() - centerY) / window.getHeight();
             
-            // TODO Rotation isnt correct yet
+            // TODO Rotation isnt working yet
             // robot.mouseMove(centerX, centerY);
         }
         // System.out.printf("xOffset: %s, yOffset: %s %n", mouseXOffset,mouseYOffset);

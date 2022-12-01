@@ -42,7 +42,7 @@ public class Window extends JFrame implements ActionListener{
 
     public Window(){
         JMenuBar menubar = new JMenuBar();
-        JMenu fileMenu = new JMenu("Scene");
+        JMenu sceneMenu = new JMenu("Scene");
 
         openItem = new JMenuItem("Open Scene");
         randomItem = new JMenuItem("Random Scene");
@@ -52,11 +52,16 @@ public class Window extends JFrame implements ActionListener{
         randomItem.addActionListener(this);
         exitItem.addActionListener(this);
 
-        fileMenu.add(openItem); 
-        fileMenu.add(randomItem); 
-        fileMenu.add(exitItem); 
+        openItem.setMnemonic(KeyEvent.VK_O);
+        randomItem.setMnemonic(KeyEvent.VK_R);
+        exitItem.setMnemonic(KeyEvent.VK_Q);
+        sceneMenu.setMnemonic(KeyEvent.VK_C);
 
-        menubar.add(fileMenu);
+        sceneMenu.add(openItem); 
+        sceneMenu.add(randomItem); 
+        sceneMenu.add(exitItem); 
+
+        menubar.add(sceneMenu);
 
         setJMenuBar(menubar);
 
@@ -76,13 +81,14 @@ public class Window extends JFrame implements ActionListener{
 
         //--------------
 
-        view = new View(800,800);
-        view.setBounds(0, 0, 800, 800);
+        view = new View(width,height);
+        view.setBounds(0, 0, width, height);
         add(view);
 
         BufferedImage cursorImg = new BufferedImage(16,16, BufferedImage.TYPE_INT_ARGB);
         Cursor blank = Toolkit.getDefaultToolkit().createCustomCursor(cursorImg, new Point(0,0), "blank");
-        // getContentPane().setCursor(blank);
+        getContentPane().setCursor(blank);
+
         addMouseListener(input);
         addMouseMotionListener(input);
         addKeyListener(input);
@@ -90,24 +96,21 @@ public class Window extends JFrame implements ActionListener{
         clock.start();
     }
 
-    public void changeScene(Scene scene){
-        activeScene = scene;
-    }
     
+    public void setActiveScene(Scene scene){ activeScene = scene; }
     public void setActiveShader(Shader shader){ activeShader = shader; }
+
     public Shader getActiveShader(){ return activeShader; }
     public Scene getActiveScene(){ return activeScene; }
 
     @Override
     public void actionPerformed(ActionEvent e) {
-             if(e.getSource() == randomItem) changeScene(Scene.randomSpheres(randomCount));
-        else if(e.getSource() == openItem){
-            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION)
-                changeScene(new Scene("./scenes/" + chooser.getSelectedFile().getName()) );
-        }
-        else if(e.getSource() == clock && hasFocus()){
+             if(e.getSource() == randomItem) activeScene = Scene.randomSpheres(randomCount);
+        else if(e.getSource() == openItem && chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION){
+            activeScene = new Scene("./scenes/" + chooser.getSelectedFile().getName());
+        }else if(e.getSource() == clock && hasFocus()){
             world.tick();
-            world.renderFrame(activeShader);
+            world.renderFrame();
             view.setImage(world.getFrameBuffer());
         }else if(e.getSource() == exitItem) System.exit(0);
     }

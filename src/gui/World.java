@@ -37,10 +37,10 @@ public class World{
         
     }
 
-    public void renderFrame(Shader shader){
+    public void renderFrame(){
         if(scene == null) return;
         BufferedImage tempBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
-        scene.renderImage(shader, tempBuffer);
+        scene.renderImage(viewport.getActiveShader(), tempBuffer);
         frameBuffer = tempBuffer;
     }
 
