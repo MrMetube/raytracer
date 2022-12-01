@@ -39,26 +39,20 @@ class Main {
         // Scene s = Scene.randomSpheres(200);
         
         // #region make Image
-
-        // s.renderImage(new AmbientShader());
-
-        // s.renderImage(new DiffuseShader());
-
-        // s.renderImage(new SpecularShader());
-
-        // s.renderImage(new PhongShader());
         //#endregion
         
-        Scene scene = Scene.randomSpheres(20);
-        int height = 800, width = height;
-        World world = new World(width,height);
-        new Viewport(width,height,world);
-        world.setScene(scene);
-        
+        new Menu();
+
         //#region testing speed
         // Scene s = Scene.randomSpheres(100);
         // for (int i = 0; i < 10; i++)
         //     s.renderImage(new PhongShader(),true);
         //#endregion
+    }
+
+    public static void start(Scene scene, Shader shader){
+        int height = 800, width = height;
+        World world = new World(width,height,scene);
+        new Viewport(width,height,world,shader);
     }
 }

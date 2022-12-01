@@ -15,9 +15,10 @@ public class World{
     Scene scene;
     Viewport viewport;
  
-    public World(int width, int height){
+    public World(int width, int height, Scene scene){
         this.width = width;
         this.height = height;
+        this.scene = scene;
         frameBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
     }
 

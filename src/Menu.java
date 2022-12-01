@@ -1,4 +1,4 @@
-package gui;
+
 
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -24,7 +24,7 @@ import raytracer.Camera;
 import raytracer.Scene;
 import shader.*;
 
-public class App extends JFrame implements ActionListener, ChangeListener, KeyListener {
+public class Menu extends JFrame implements ActionListener, ChangeListener, KeyListener {
     
     JButton render = new JButton("Render Scene");
     JButton open = new JButton("Open Scene");
@@ -33,8 +33,6 @@ public class App extends JFrame implements ActionListener, ChangeListener, KeyLi
     JFileChooser chooser = new JFileChooser("./scenes/");
     JComboBox<Shader> shaderList = new JComboBox<>();
     JPanel panel = new JPanel();
-    ImagePanel images = new ImagePanel();
-    Viewport viewport = new Viewport(800,800);
 
     HashMap<Integer,Vector> keyMap = new HashMap<>();
     Vector camMovement = Vector.ZERO;
@@ -43,7 +41,7 @@ public class App extends JFrame implements ActionListener, ChangeListener, KeyLi
     String fileName = "simple";
     Shader activeShader = new PhongShader();
 
-    public App(){
+    public Menu(){
         int btnWidth = 160;
         int btnHeight = 40;
 
@@ -81,10 +79,6 @@ public class App extends JFrame implements ActionListener, ChangeListener, KeyLi
         slider.setPaintLabels(true);
         add(slider);
 
-        viewport.setBounds(100,100,800,800);
-        add(viewport);
-
-
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setTitle("Raytracer");
         setSize(1000,1000);
@@ -100,13 +94,7 @@ public class App extends JFrame implements ActionListener, ChangeListener, KeyLi
     @Override
     public void actionPerformed(ActionEvent e) {
         if(e.getSource() == render) {
-            Scene s = new Scene("./scenes/"+fileName+".json");
-
-            Camera camera = s.getCamera();
-            camera.move(camMovement);
-            
-            viewport.renderScene(s, activeShader);
-
+            Main.start(new Scene("./scenes/"+fileName+".json"),activeShader);
         }else if(e.getSource() == open){
             chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
             
@@ -120,13 +108,7 @@ public class App extends JFrame implements ActionListener, ChangeListener, KeyLi
                 fileName = chooser.getSelectedFile().getName().replace(".json", "");
             } else System.out.println("Open command cancelled by user.");
         }else if(e.getSource() == random){
-            Scene s = Scene.randomSpheres(randomCount);
-
-            Camera camera = s.getCamera();
-            camera.move(camMovement);
-
-            viewport.renderScene(s, activeShader);
-
+            Main.start(Scene.randomSpheres(randomCount),activeShader);
         }else if(e.getSource() == shaderList){
             activeShader = (Shader) shaderList.getSelectedItem();
         }

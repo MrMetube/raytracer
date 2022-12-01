@@ -33,9 +33,10 @@ public class Viewport extends JFrame implements KeyListener, ActionListener, Mou
     Robot robot;
     float cameraYaw = 0;
     float cameraPitch = 0;
+    Shader activeShader;
     
-    public Viewport(int width, int height, World world){
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+    public Viewport(int width, int height, World world, Shader shader){
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setTitle("Raytracer");
         setSize(width,height);
         setLayout(null);
@@ -45,6 +46,7 @@ public class Viewport extends JFrame implements KeyListener, ActionListener, Mou
         addKeyListener(this);
         
         this.world = world;
+        activeShader = shader;
         world.setViewport(this);
         
         clock.start();
@@ -102,7 +104,7 @@ public class Viewport extends JFrame implements KeyListener, ActionListener, Mou
     public void actionPerformed(ActionEvent e) {
         if(e.getSource()==clock){
             world.tick();
-            world.renderFrame(new PhongShader());
+            world.renderFrame(activeShader);
             setImage(world.getFrameBuffer());
         }
         
