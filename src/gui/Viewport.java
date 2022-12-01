@@ -1,6 +1,5 @@
 package gui;
 
-import java.awt.AWTException;
 import java.awt.Graphics;
 import java.awt.image.BufferedImage;
 
@@ -12,8 +11,7 @@ import javax.swing.event.MouseInputListener;
 
 import math.Vector;
 import raytracer.Scene;
-import shader.PhongShader;
-import shader.Shader;
+import shader.*;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
@@ -50,7 +48,7 @@ public class Viewport extends JFrame implements KeyListener, ActionListener, Mou
         world.setViewport(this);
         
         clock.start();
-        try{robot = new Robot();}catch(Exception e){}
+        try{ robot = new Robot(); }catch(Exception e){}
     }
 
     public void setImage(BufferedImage image){
@@ -79,54 +77,58 @@ public class Viewport extends JFrame implements KeyListener, ActionListener, Mou
     }
 
     @Override
-    public void keyTyped(KeyEvent e) {
-        // System.out.println(e.getKeyChar());
-    }
+    public void keyTyped(KeyEvent e) { /* System.out.println(e.getKeyChar()); */ }
 
     @Override
     public void keyPressed(KeyEvent e) {
         Vector v = keyMap.get(e.getKeyCode());
-        if(v==null) return;
-        activeKeys.add(v);
+        if(v!=null) activeKeys.add(v);
+        else if(e.getKeyCode()==KeyEvent.VK_F12){
+            System.out.println("Screenshot saved");
+            world.renderToFile(new AmbientShader(), false);
+            world.renderToFile(new DiffuseShader(), false);
+            world.renderToFile(new SpecularShader(), false);
+            world.renderToFile(new PhongShader(), false);
+        }
     }
 
     @Override
     public void keyReleased(KeyEvent e) {
         Vector v = keyMap.get(e.getKeyCode());
-        if(v==null) return;
-        activeKeys.remove(v);
+        if(v!=null) activeKeys.remove(v);
     }
 
     @Override
     public void actionPerformed(ActionEvent e) {
         if(e.getSource()==clock){
             world.tick();
-            world.renderScene(new PhongShader());
+            world.renderFrame(new PhongShader());
             setImage(world.getFrameBuffer());
         }
         
     }
 
     @Override
-    public void mouseClicked(MouseEvent e) { }
+    public void mouseClicked(MouseEvent e) { System.out.println(e); }
 
     @Override
-    public void mousePressed(MouseEvent e) { }
+    public void mousePressed(MouseEvent e) { System.out.println(e); }
 
     @Override
-    public void mouseReleased(MouseEvent e) { }
+    public void mouseReleased(MouseEvent e) { System.out.println(e); }
 
     @Override
-    public void mouseEntered(MouseEvent e) { }
+    public void mouseEntered(MouseEvent e) { System.out.println(e); }
 
     @Override
-    public void mouseExited(MouseEvent e) { }
+    public void mouseExited(MouseEvent e) { System.out.println(e); }
 
     @Override
-    public void mouseDragged(MouseEvent e) { }
+    public void mouseDragged(MouseEvent e) { System.out.println(e); }
 
     @Override
     public void mouseMoved(MouseEvent e) {
+        System.out.println(e);
         float mouseSensitivity = 1;
 
         int centerX = getX() + getWidth() / 2;

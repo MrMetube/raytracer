@@ -52,7 +52,7 @@ class Main {
         Scene scene = Scene.randomSpheres(20);
         int height = 800, width = height;
         World world = new World(width,height);
-        Viewport view = new Viewport(width,height,world);
+        new Viewport(width,height,world);
         world.setScene(scene);
         
         //#region testing speed

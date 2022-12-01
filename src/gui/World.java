@@ -30,11 +30,12 @@ public class World{
         scene.getCamera().move(dir);
     }
 
-    public void renderScene(Shader shader){
+    public void renderFrame(Shader shader){
         if(scene == null) return;
         BufferedImage tempBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
         scene.renderImage(shader, tempBuffer);
         frameBuffer = tempBuffer;
+        // scene.renderImage(shader, frameBuffer);
     }
 
     public void renderToFile(Shader shader, boolean timed){
