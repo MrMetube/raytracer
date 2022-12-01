@@ -141,4 +141,6 @@ public class Viewport extends JFrame implements KeyListener, ActionListener, Mou
         cameraPitch = (Math.min(90, Math.max(-90, cameraPitch + mouseYOffset * mouseSensitivity)));
         robot.mouseMove(centerX, centerY);
     }
+
+    public void setShader(Shader shader){ activeShader = shader; }
 }

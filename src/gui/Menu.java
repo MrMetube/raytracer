@@ -82,14 +82,23 @@ public class Menu extends JFrame implements ActionListener, ChangeListener {
 
     public void start(Scene scene, Shader shader){
         int height = 800, width = height;
-        World world = new World(width,height,scene);
-        new Viewport(width,height,world,shader);
+        if(world==null&&viewport==null){
+            world = new World(width,height,scene);
+            viewport = new Viewport(width,height,world,shader);
+        }else{
+            world.setScene(scene);
+            viewport.setShader(shader);
+        }
     }
 
     @Override
     public void actionPerformed(ActionEvent e) {
         if(e.getSource() == render) {
             start(new Scene("./scenes/"+fileName),activeShader);
+        }else if(e.getSource() == random){
+            start(Scene.randomSpheres(randomCount),activeShader);
+        }else if(e.getSource() == shaderList){
+            activeShader = (Shader) shaderList.getSelectedItem();
         }else if(e.getSource() == open){
             chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
             
@@ -102,10 +111,6 @@ public class Menu extends JFrame implements ActionListener, ChangeListener {
             if (returnVal == JFileChooser.APPROVE_OPTION) {
                 fileName = chooser.getSelectedFile().getName();
             } else System.out.println("Open command cancelled by user.");
-        }else if(e.getSource() == random){
-            start(Scene.randomSpheres(randomCount),activeShader);
-        }else if(e.getSource() == shaderList){
-            activeShader = (Shader) shaderList.getSelectedItem();
         }
         
     }
