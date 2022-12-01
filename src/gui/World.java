@@ -27,11 +27,12 @@ public class World{
         if(scene != Menu.getActiveScene()) scene = Menu.getActiveScene();
         Vector dir = Menu.input.getCamMove();
         Camera cam = scene.getCamera();
-        
+        //Camera movement
+        cam.move(dir.mul(cameraSpeed));
+        //Camera rotation
         // double yOffset = Menu.input.getYOffset(), xOffset = Menu.input.getXOffset();
         // if(yOffset != 0 || xOffset != 0) cam.rotate(yOffset, xOffset);
         
-        cam.move(dir.mul(cameraSpeed));
     }
 
     public void renderFrame(Shader shader){

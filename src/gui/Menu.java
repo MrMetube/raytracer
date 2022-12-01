@@ -4,28 +4,26 @@ package gui;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 
-import javax.swing.JButton;
-import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
-import javax.swing.JSlider;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
 import javax.swing.filechooser.FileFilter;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
 import raytracer.Scene;
 import shader.*;
 
-public class Menu extends JFrame implements ActionListener, ChangeListener {
+public class Menu extends JFrame implements ActionListener{
     
-    JButton open = new JButton("Open Scene");
-    JButton random = new JButton("Random Scene");
-    JSlider slider = new JSlider(0, 500, 250);
-    JFileChooser chooser = new JFileChooser("./scenes/");
-    JComboBox<Shader> shaderList = new JComboBox<>();
+    JFileChooser chooser;
 
-    int randomCount = 50;
+    JMenuItem openItem;
+    JMenuItem randomItem;
+    JMenuItem exitItem;
+
+    int randomCount = 100;
     String fileName = "simple.json";
 
     static Shader activeShader = new PhongShader();
@@ -39,45 +37,37 @@ public class Menu extends JFrame implements ActionListener, ChangeListener {
     public static Input input = new Input();
 
     public Menu(){
-        int btnWidth = 160;
-        int btnHeight = 40;
+        JMenuBar menubar = new JMenuBar();
+        JMenu fileMenu = new JMenu("Scene");
 
-        open.setBounds(40,20,btnWidth,btnHeight);
-        open.setFocusable(false);
-        open.addActionListener(this);
-        add(open);
+        openItem = new JMenuItem("Open Scene");
+        randomItem = new JMenuItem("Random Scene");
+        exitItem = new JMenuItem("Exit");
 
-        shaderList.addItem(new AmbientShader());
-        shaderList.addItem(new DiffuseShader());
-        shaderList.addItem(new SpecularShader());
-        shaderList.addItem(new PhongShader());
-        shaderList.setSelectedIndex(3);
-        shaderList.setBounds(220,20,btnWidth,btnHeight);
-        shaderList.addActionListener(this);
-        add(shaderList);
+        openItem.addActionListener(this);
+        randomItem.addActionListener(this);
+        exitItem.addActionListener(this);
 
+        fileMenu.add(openItem); 
+        fileMenu.add(randomItem); 
+        fileMenu.add(exitItem); 
+
+        menubar.add(fileMenu);
+
+        setJMenuBar(menubar);
+
+        chooser = new JFileChooser("./scenes/");
         chooser.setDialogTitle("Scene auswählen");
-
-        random.setBounds(400,20,btnWidth,btnHeight);
-        random.addActionListener(this);
-        add(random);
-
-        slider.setBounds(580, 20, btnWidth, 60);
-        slider.addChangeListener(this);
-        slider.setPaintTicks(true);
-        slider.setSnapToTicks(true);
-        slider.setMinorTickSpacing(50);
-        slider.setMajorTickSpacing(250);
-        slider.setPaintLabels(true);
-        slider.setValue(randomCount);
-        add(slider);
+        chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        chooser.addChoosableFileFilter((FileFilter) new FileNameExtensionFilter("JSON File","json"));
+        chooser.setAcceptAllFileFilterUsed(false);
 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setTitle("Raytracer");
         setSize(800,150);
         setLayout(null);
         setVisible(true);
-        // setLocationRelativeTo(null);
+        setLocation(2560/2-getWidth()/2, 50);
         setFocusTraversalKeysEnabled(false);
     }
 
@@ -94,31 +84,11 @@ public class Menu extends JFrame implements ActionListener, ChangeListener {
 
     @Override
     public void actionPerformed(ActionEvent e) {
-        if(e.getSource() == random){
-            changeScene(Scene.randomSpheres(randomCount));
-        }else if(e.getSource() == shaderList){
-            activeShader = (Shader) shaderList.getSelectedItem();
-        }else if(e.getSource() == open){
-            chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-            
-            FileFilter filter = new FileNameExtensionFilter("JSON File","json");
-            chooser.addChoosableFileFilter(filter);
-            chooser.setAcceptAllFileFilterUsed(false);
-
-            int returnVal = chooser.showOpenDialog(this);
-
-            if (returnVal == JFileChooser.APPROVE_OPTION) {
-                fileName = chooser.getSelectedFile().getName();
-                changeScene(new Scene("./scenes/"+fileName));
-            } else System.out.println("Open command cancelled by user.");
+        if(e.getSource() == randomItem) changeScene(Scene.randomSpheres(randomCount));
+        else if(e.getSource() == openItem){
+            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION)
+                changeScene(new Scene("./scenes/" + chooser.getSelectedFile().getName()) );
         }
-        
-    }
 
-    @Override
-    public void stateChanged(ChangeEvent e) {
-        if(e.getSource() == slider){
-            randomCount = slider.getValue();
-        }
     }
 }
