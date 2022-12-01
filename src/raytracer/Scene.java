@@ -16,6 +16,8 @@ import math.Color;
 import math.Point;
 import raytracer.geometry.Geometry;
 import raytracer.geometry.Sphere;
+import raytracer.gson.GeometryAdapter;
+import raytracer.gson.LightSourceAdapter;
 import shader.Shader;
 
 public class Scene {
@@ -26,9 +28,9 @@ public class Scene {
     Camera camera;
 
     static Gson gson = new GsonBuilder()
-                            .registerTypeAdapter(Geometry.class, new GeometryAdapter())
-                            .registerTypeAdapter(LightSource.class, new LightSourceAdapter())
-                            .create();
+        .registerTypeAdapter(Geometry.class, new GeometryAdapter())
+        .registerTypeAdapter(LightSource.class, new LightSourceAdapter())
+        .create();
 
     //#endregion
     
@@ -117,29 +119,29 @@ public class Scene {
     public Camera                   getCamera()       { return camera; }
 
     public void addBasicMaterials(){
-        addMaterial("red",     Material.RED);
-        addMaterial("green",   Material.GREEN);
-        addMaterial("blue",    Material.BLUE);
-        addMaterial("cyan",    Material.CYAN);
-        addMaterial("magenta", Material.MAGENTA);
-        addMaterial("yellow",  Material.YELLOW);
-        addMaterial("white",   Material.WHITE);
-        addMaterial("gray",    Material.GRAY);
-        addMaterial("black",   Material.BLACK);
+        addMaterial("red",       Material.RED);
+        addMaterial("green",     Material.GREEN);
+        addMaterial("blue",      Material.BLUE);
+        addMaterial("cyan",      Material.CYAN);
+        addMaterial("magenta",   Material.MAGENTA);
+        addMaterial("yellow",    Material.YELLOW);
+        addMaterial("white",     Material.WHITE);
+        addMaterial("gray",      Material.GRAY);
+        addMaterial("black",     Material.BLACK);
         
-        addMaterial("pink",    Material.PINK   );
-        addMaterial("orange",  Material.ORANGE );
-        addMaterial("lemon",   Material.LEMON    );
-        addMaterial("lime",    Material.LIME   );
-        addMaterial("azure",   Material.AZURE  );
-        addMaterial("purple",  Material.PURPLE );
-        addMaterial("dark",    Material.DARK   );
-        addMaterial("light",   Material.LIGHT  );
+        addMaterial("pink",      Material.PINK   );
+        addMaterial("orange",    Material.ORANGE );
+        addMaterial("lemon",     Material.LEMON    );
+        addMaterial("lime",      Material.LIME   );
+        addMaterial("turqouise", Material.TURQOUISE  );
+        addMaterial("purple",    Material.PURPLE );
+        addMaterial("dark",      Material.DARK   );
+        addMaterial("light",     Material.LIGHT  );
         
-        addMaterial("gold",    Material.GOLD  );
-        addMaterial("silver",  Material.SILVER  );
-        addMaterial("bronze",  Material.BRONZE  );
-        addMaterial("copper",  Material.COPPER  );
+        addMaterial("gold",      Material.GOLD  );
+        addMaterial("silver",    Material.SILVER  );
+        addMaterial("bronze",    Material.BRONZE  );
+        addMaterial("copper",    Material.COPPER  );
 
     }
     //#endregion

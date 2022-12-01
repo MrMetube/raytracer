@@ -1,4 +1,4 @@
-package raytracer;
+package raytracer.gson;
 
 import java.lang.reflect.Type;
 
@@ -11,10 +11,12 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
 
-public class LightSourceAdapter implements JsonDeserializer<LightSource> ,JsonSerializer<LightSource>{
+import raytracer.geometry.Geometry;
+
+public class GeometryAdapter implements JsonDeserializer<Geometry> ,JsonSerializer<Geometry>{
     
     @Override
-    public JsonElement serialize(LightSource src, Type typeOfSrc, JsonSerializationContext context) {
+    public JsonElement serialize(Geometry src, Type typeOfSrc, JsonSerializationContext context) {
         JsonObject result = new JsonObject();
         result.add("type", new JsonPrimitive(src.getClass().getSimpleName()));
         result.add("properties", context.serialize(src, src.getClass()));
@@ -23,12 +25,12 @@ public class LightSourceAdapter implements JsonDeserializer<LightSource> ,JsonSe
     }
     
     @Override
-    public LightSource deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
+    public Geometry deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
         JsonObject jsonObject = json.getAsJsonObject();
         String type = jsonObject.get("type").getAsString();
         JsonElement element = jsonObject.get("properties");
         try {
-            return context.deserialize(element, Class.forName("raytracer." + type));
+            return context.deserialize(element, Class.forName("raytracer.geometry." + type));
         } catch (ClassNotFoundException cnfe) {
             throw new JsonParseException("Unknown element type: " + type, cnfe);
         }

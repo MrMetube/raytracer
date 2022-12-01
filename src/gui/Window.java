@@ -38,7 +38,7 @@ public class Window extends JFrame implements ActionListener{
 
     BufferedImage image;
     Vector camMovement = Vector.ZERO;
-    Timer clock = new Timer(1, this);
+    Timer clock = new Timer(16, this);
 
     public Window(){
         JMenuBar menubar = new JMenuBar();
@@ -52,7 +52,7 @@ public class Window extends JFrame implements ActionListener{
         randomItem.addActionListener(this);
         exitItem.addActionListener(this);
 
-        openItem.setMnemonic(KeyEvent.VK_O);
+        openItem.setMnemonic(KeyEvent.VK_F);
         randomItem.setMnemonic(KeyEvent.VK_R);
         exitItem.setMnemonic(KeyEvent.VK_Q);
         sceneMenu.setMnemonic(KeyEvent.VK_C);
