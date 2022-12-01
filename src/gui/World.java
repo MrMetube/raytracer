@@ -15,17 +15,19 @@ public class World{
     int width,height;
     Scene scene;
     double cameraSpeed = 0.9;
+    Window viewport;
  
-    public World(int width, int height){
+    public World(int width, int height, Window viewport){
         this.width = width;
         this.height = height;
-        this.scene = Menu.getActiveScene();
+        this.viewport = viewport;
+        this.scene = viewport.getActiveScene();
         frameBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
     }
 
     public void tick(){
-        if(scene != Menu.getActiveScene()) scene = Menu.getActiveScene();
-        Vector dir = Menu.input.getCamMove();
+        if(scene != viewport.getActiveScene()) scene = viewport.getActiveScene();
+        Vector dir = viewport.input.getCamMove();
         Camera cam = scene.getCamera();
         //Camera movement
         cam.move(dir.mul(cameraSpeed));

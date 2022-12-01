@@ -1,21 +1,20 @@
 package gui;
 
 
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
+import java.awt.*;
+import java.awt.event.*;
+import java.awt.image.BufferedImage;
 
-import javax.swing.JFileChooser;
-import javax.swing.JFrame;
-import javax.swing.JMenu;
-import javax.swing.JMenuBar;
-import javax.swing.JMenuItem;
+import javax.swing.*;
 import javax.swing.filechooser.FileFilter;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
+import math.Vector;
 import raytracer.Scene;
-import shader.*;
+import shader.PhongShader;
+import shader.Shader;
 
-public class Menu extends JFrame implements ActionListener{
+public class Window extends JFrame implements ActionListener{
     
     JFileChooser chooser;
 
@@ -23,20 +22,25 @@ public class Menu extends JFrame implements ActionListener{
     JMenuItem randomItem;
     JMenuItem exitItem;
 
+    View view;
+
     int randomCount = 100;
     String fileName = "simple.json";
 
     static Shader activeShader = new PhongShader();
     static Scene activeScene = Scene.EMPTY;
 
-    private static int height = 800, width = height;
+    private static int width = 800;
+    private static int height = 800;
 
-    public static World world = new World(width, height);
-    public static Viewport viewport;
-    // public static Viewport viewport = new Viewport(width, height); // this doesnt work because focus is weird
-    public static Input input = new Input();
+    public World world = new World(width, height, this);
+    public Input input = new Input(this);
 
-    public Menu(){
+    BufferedImage image;
+    Vector camMovement = Vector.ZERO;
+    Timer clock = new Timer(1, this);
+
+    public Window(){
         JMenuBar menubar = new JMenuBar();
         JMenu fileMenu = new JMenu("Scene");
 
@@ -64,31 +68,47 @@ public class Menu extends JFrame implements ActionListener{
 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setTitle("Raytracer");
-        setSize(800,150);
-        setLayout(null);
+        setSize(800,800);
         setVisible(true);
-        setLocation(2560/2-getWidth()/2, 50);
+        setResizable(false);
+        setLocationRelativeTo(null);
         setFocusTraversalKeysEnabled(false);
+
+        //--------------
+
+        view = new View(800,800);
+        view.setBounds(0, 0, 800, 800);
+        add(view);
+
+        BufferedImage cursorImg = new BufferedImage(16,16, BufferedImage.TYPE_INT_ARGB);
+        Cursor blank = Toolkit.getDefaultToolkit().createCustomCursor(cursorImg, new Point(0,0), "blank");
+        // getContentPane().setCursor(blank);
+        addMouseListener(input);
+        addMouseMotionListener(input);
+        addKeyListener(input);
+
+        clock.start();
     }
 
     public void changeScene(Scene scene){
         activeScene = scene;
-        if(viewport==null) viewport = new Viewport(width, height);
-        viewport.setVisible(true);
-        viewport.requestFocus();
     }
-
-    public static void setActiveShader(Shader shader){ activeShader = shader; }
-    public static Shader getActiveShader(){ return activeShader; }
-    public static Scene getActiveScene(){ return activeScene; }
+    
+    public void setActiveShader(Shader shader){ activeShader = shader; }
+    public Shader getActiveShader(){ return activeShader; }
+    public Scene getActiveScene(){ return activeScene; }
 
     @Override
     public void actionPerformed(ActionEvent e) {
-        if(e.getSource() == randomItem) changeScene(Scene.randomSpheres(randomCount));
+             if(e.getSource() == randomItem) changeScene(Scene.randomSpheres(randomCount));
         else if(e.getSource() == openItem){
             if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION)
                 changeScene(new Scene("./scenes/" + chooser.getSelectedFile().getName()) );
         }
-
+        else if(e.getSource() == clock && hasFocus()){
+            world.tick();
+            world.renderFrame(activeShader);
+            view.setImage(world.getFrameBuffer());
+        }else if(e.getSource() == exitItem) System.exit(0);
     }
 }

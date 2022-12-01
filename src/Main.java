@@ -1,4 +1,4 @@
-import gui.Menu;
+import gui.Window;
 // import shader.*;
 // import raytracer.*;
 
@@ -31,7 +31,7 @@ class Main {
         // s.toJson("new");
         //#endregion
         
-        new Menu();
+        new Window();
 
         //#region testing speed
         // Scene s = Scene.randomSpheres(100);
