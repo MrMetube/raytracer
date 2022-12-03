@@ -33,9 +33,9 @@ public class Color extends Tuple {
 
     public int rgb(){
         int res = 0;
-        res += (int)(Math.min(1,Math.max(0,x))*255) << 16;
-        res += (int)(Math.min(1,Math.max(0,y))*255) << 8;
-        res += (int)(Math.min(1,Math.max(0,z))*255);
+        res += (int) (MUtils.clamp(x, 0, 1)*255) << 16;
+        res += (int) (MUtils.clamp(y, 0, 1)*255) << 8;
+        res += (int) (MUtils.clamp(z, 0, 1)*255);
         return res;
     }
 

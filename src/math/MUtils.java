@@ -9,6 +9,14 @@ public class MUtils {
         return x < 0.00001;
     }
 
+    public static double clamp(double value, double min, double max){
+        return Math.min(max,Math.max(min,value));
+    }
+
+        public static int clamp(int value, int min, int max){
+        return Math.min(max,Math.max(min,value));
+    }
+
     public static boolean solveQuadratic(double a, double b, double c, Payload payload, Geometry target){
         double t1,t2;
         double discr = b * b - 4 * a * c; 
