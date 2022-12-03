@@ -3,7 +3,7 @@ package shader;
 import math.*;
 import raytracer.*;
 
-public class SpecularShader extends Shader{
+public class Specular extends Shader{
 
     @Override
     public Color getColor(Payload p, Scene scene) {
@@ -13,7 +13,10 @@ public class SpecularShader extends Shader{
         double n = m.shininess();
         Color il = new Color(0, 0, 0);
         for (LightSource ls : scene.getLightSources()) {
-            Vector l = ls.pos().sub(p.hitPoint()).norm();
+            Vector l = ls.pos().sub(p.hitPoint());
+            double distance = l.mag();
+            l = l.div(distance);
+            distance = distance * distance;
             Vector r = l.refl(p.target().normal(p.hitPoint())).norm();
             double vr = r.dot(v);
             // dont calc false values
@@ -21,6 +24,7 @@ public class SpecularShader extends Shader{
             double vrn = Math.pow(vr,n);
             Color lc = ls.color()
                 .mul(ks)
+                .mul(1/distance)
                 .mul(vrn);
             il = il.add(lc);
         }

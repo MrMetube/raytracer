@@ -59,16 +59,16 @@ public class Scene {
 
     public void renderImage(Shader shader, BufferedImage image){
         Camera camera = getCamera();
-        int width = camera.width();
-        int height = camera.height();
+        int totalWidth = camera.width();
+        int totalHeight = camera.height();
 
 
         int threadCount = Runtime.getRuntime().availableProcessors();
         ExecutorService exe =  Executors.newFixedThreadPool(threadCount);
-        int dx = (width/threadCount)+1;
-        int dy = (height/threadCount)+1;
+        int width  = (totalWidth / threadCount)+1;
+        int height = (totalHeight / threadCount)+1;
         for (int i = 0; i < threadCount; i++) for (int j = 0; j < threadCount; j++) 
-            exe.submit(new Trace(this, image, i*dx, (i+1)*dx, j*dy, (j+1)*dy, shader));
+            exe.submit(new Trace(this, image, i*width, j*height, width, height, shader));
         exe.shutdown();
         while(!exe.isTerminated());
         
@@ -87,10 +87,10 @@ public class Scene {
     public static Scene EMPTY = new Scene(new Camera(new Point(0, 0, -10), Point.ZERO, 90, 800, 800));
 
     public static Scene randomSpheres(int count){
-        Scene s = new Scene(new Camera(new Point(0, 12, -12), Point.ZERO, 90, 800, 800));
+        Scene s = new Scene(new Camera(new Point(0, 0, -12), Point.ZERO, 90, 800, 800));
         s.addBasicMaterials();
-        s.addLightSource(new PointLightSource(new Point(0, 20, 10), Color.WHITE, 1));
-        s.addLightSource(new PointLightSource(new Point(0, 10, -10), Color.WHITE, 1));
+        s.addLightSource(new PointLightSource(new Point(0, 10, 10), Color.WHITE, 1));
+        s.addLightSource(new PointLightSource(new Point(0, 10, -10), Color.PINK, 1));
         Object[] materials = s.getMaterials().keySet().toArray();
         Random rdm = new Random();
         for (int i = 0; i < count; i++) {

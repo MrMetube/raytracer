@@ -15,15 +15,15 @@ public class Trace implements Runnable{
     final Scene scene;
     final int xS,xE,yS,yE;
 
-    Trace(Scene scene, BufferedImage image, int xStart, int xEnd, int yStart, int yEnd, Shader shader){
+    Trace(Scene scene, BufferedImage image, int xStart, int yStart, int width, int height, Shader shader){
         this.image = image;
         this.scene = scene;
         this.camera = scene.getCamera();
         this.shader = shader;
         xS = xStart;
         yS = yStart;
-        xE = Math.min(xEnd, camera.width());
-        yE = Math.min(yEnd, camera.height());
+        xE = Math.min(xStart+width, camera.width());
+        yE = Math.min(yStart+height, camera.height());
     }
     
     @Override 

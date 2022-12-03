@@ -5,7 +5,7 @@ import raytracer.Material;
 import raytracer.Payload;
 import raytracer.Scene;
 
-public class AmbientShader extends Shader {
+public class Ambient extends Shader {
 
     @Override
     public Color getColor(Payload p, Scene scene) {

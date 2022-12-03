@@ -14,7 +14,7 @@ public class World{
     BufferedImage frameBuffer;
     int width,height;
     Scene scene;
-    double cameraSpeed = 0.9;
+    double cameraSpeed = 0.2;
     Window viewport;
  
     public World(int width, int height, Window viewport){

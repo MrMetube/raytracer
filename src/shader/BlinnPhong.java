@@ -8,8 +8,7 @@ import raytracer.Payload;
 import raytracer.Scene;
 import raytracer.geometry.Geometry;
 
-public class PhongShader extends Shader{
-
+public class BlinnPhong extends Shader{
     @Override public Color getColor(Payload p, Scene scene) {
         // Constants
         Geometry geometry = p.target();
@@ -28,7 +27,10 @@ public class PhongShader extends Shader{
         Color ambient =  m.color().mul(ka);
 
         for (LightSource ls : scene.getLightSources()) {
-            Vector l = ls.pos().sub(p.hitPoint()).norm();
+            Vector l = ls.pos().sub(p.hitPoint());
+            double distance = l.mag();
+            l = l.div(distance);
+            distance = distance * distance;
             //diffuse
             double nl = n.dot(l);
             //If nl < 0 ?? can you ignore this 
@@ -36,16 +38,18 @@ public class PhongShader extends Shader{
             il = il.add(ls.color()
                 .mul(nl)
                 .mul(ls.intensity())
-                );
+            );
             //specular
-            Vector r = l.refl(n).norm();
-            double vr = r.dot(v);
+            Vector h = v.add(l).norm();
+            double nh = n.dot(h);
             //ignore reflected/opposite results
-            vr = Math.max(vr,0);
-            double vrs = Math.pow(vr,s);
+            nh = Math.max(nh,0);
+            double nhs = Math.pow(nh,s*4);
+
             Color lc = ls.color()
                 .mul(ks)
-                .mul(vrs);
+                .mul(1/distance)
+                .mul(nhs);
             il = il.add(lc);
         }
 

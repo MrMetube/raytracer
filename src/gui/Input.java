@@ -46,10 +46,11 @@ public class Input implements KeyListener, MouseInputListener {
         keyMap.put(KeyEvent.VK_SPACE, Vector.Ypos);
         keyMap.put(KeyEvent.VK_SHIFT, Vector.Yneg);
 
-        keyMap.put(KeyEvent.VK_1, new AmbientShader());
-        keyMap.put(KeyEvent.VK_2, new DiffuseShader());
-        keyMap.put(KeyEvent.VK_3, new SpecularShader());
-        keyMap.put(KeyEvent.VK_4, new PhongShader());
+        keyMap.put(KeyEvent.VK_1, new Ambient());
+        keyMap.put(KeyEvent.VK_2, new Diffuse());
+        keyMap.put(KeyEvent.VK_3, new Specular());
+        keyMap.put(KeyEvent.VK_4, new Phong());
+        keyMap.put(KeyEvent.VK_5, new BlinnPhong());
     }
 
     @Override
@@ -59,10 +60,10 @@ public class Input implements KeyListener, MouseInputListener {
         else if( o instanceof Shader) window.setActiveShader((Shader) o);
         else if(e.getKeyCode()==KeyEvent.VK_F12){
             System.out.println("Screenshot saved");
-            window.world.renderToFile(new AmbientShader(), false);
-            window.world.renderToFile(new DiffuseShader(), false);
-            window.world.renderToFile(new SpecularShader(), false);
-            window.world.renderToFile(new PhongShader(), false);
+            window.world.renderToFile(new Ambient(), false);
+            window.world.renderToFile(new Diffuse(), false);
+            window.world.renderToFile(new Specular(), false);
+            window.world.renderToFile(new Phong(), false);
         }
     }
 

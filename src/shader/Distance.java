@@ -5,7 +5,7 @@ import math.Ray;
 import raytracer.Payload;
 import raytracer.Scene;
 
-public class DistanceShader extends Shader{
+public class Distance extends Shader{
 
     @Override public Color getColor(Payload p, Scene scene) {
         Ray ray = p.ray();

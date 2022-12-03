@@ -11,7 +11,7 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 
 import math.Vector;
 import raytracer.Scene;
-import shader.PhongShader;
+import shader.Phong;
 import shader.Shader;
 
 public class Window extends JFrame implements ActionListener{
@@ -26,7 +26,7 @@ public class Window extends JFrame implements ActionListener{
     int randomCount = 100;
     String fileName = "simple.json";
 
-    static Shader activeShader = new PhongShader();
+    static Shader activeShader = new Phong();
     static Scene activeScene = Scene.EMPTY;
 
     private static int width = 800;
@@ -43,7 +43,6 @@ public class Window extends JFrame implements ActionListener{
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setTitle("Raytracer");
         setSize(800,800);
-        setVisible(true);
         setResizable(false);
         setLocationRelativeTo(null);
         setFocusTraversalKeysEnabled(false);
@@ -74,7 +73,7 @@ public class Window extends JFrame implements ActionListener{
         chooser.setAcceptAllFileFilterUsed(false);
 
         view = new View(width,height);
-        view.setBounds(0, 0, width, height);
+        view.setBounds(0, 100, width, 700);
         add(view);
 
         BufferedImage cursorImg = new BufferedImage(16,16, BufferedImage.TYPE_INT_ARGB);
@@ -85,6 +84,7 @@ public class Window extends JFrame implements ActionListener{
         addMouseMotionListener(input);
         addKeyListener(input);
 
+        setVisible(true);
         clock.start();
     }
 
