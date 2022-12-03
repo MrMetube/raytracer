@@ -18,7 +18,7 @@ public class Phong extends Shader{
         double ks = m.specular();
         double kd = m.diffuse();
         double ka = m.ambient();
-        Vector v = p.hitPoint().sub(p.ray().origin()).norm();
+        Vector v = p.ray().dir().norm();
         double s = m.shininess();
 
         Color il = new Color(0, 0, 0);

@@ -9,7 +9,7 @@ public class Specular extends Shader{
     public Color getColor(Payload p, Scene scene) {
         Material m = scene.getMaterials().get(p.target().material());
         double ks = m.specular();
-        Vector v = p.hitPoint().sub(p.ray().origin()).norm();
+        Vector v = p.ray().dir().norm();
         double n = m.shininess();
         Color il = new Color(0, 0, 0);
         for (LightSource ls : scene.getLightSources()) {
