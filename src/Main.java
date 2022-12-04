@@ -1,5 +1,5 @@
-import gui.Window;
-import gui.World;
+
+import gui.*;
 import shader.*;
 import raytracer.*;
 import java.awt.image.BufferedImage;

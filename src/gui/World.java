@@ -4,7 +4,6 @@ import java.io.File;
 
 import javax.imageio.ImageIO;
 
-import math.Color;
 import math.Vector;
 import raytracer.Camera;
 import raytracer.Scene;
