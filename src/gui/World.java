@@ -28,6 +28,13 @@ public class World{
         frameBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
     }
 
+    public World(int width, int height){
+        // This is only used when I want to time the render. I dont need UI here.
+        // Obviously the other methods wont function properly.
+        this.width = width;
+        this.height = height;
+    }
+
     public void tick(){
         if(scene != viewport.getActiveScene()) scene = viewport.getActiveScene();
         Vector dir = viewport.input.getCamMove();
@@ -74,13 +81,23 @@ public class World{
         if(timed) System.out.printf("%s Saving took:    %s ms%n",name, (System.nanoTime()-start)/1_000_000);
     }
 
+    public void timedRender(Shader shader, int count){
+        String name = shader.getName();
+        scene = Scene.randomSpheres(100);
+        BufferedImage image = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
+        
+        long start = System.nanoTime();
+        for (int i = 0; i < count; i++)
+            scene.renderImage(shader, image);
+        System.out.printf("%s Saving took:    %s ms%n",name, (System.nanoTime()-start)/1_000_000);
+    }
+
     public void writeImage(String name){
         File file = new File("./images/"+name+".png");
         try { ImageIO.write(frameBuffer, "png", file); } catch (Exception e) {}
     }
 
     public void setSupersampling(SupersamplingMode mode){ scene.getCamera().setSupersampling(mode);}
-
     public BufferedImage getFrameBuffer(){ return frameBuffer;}
     
 }

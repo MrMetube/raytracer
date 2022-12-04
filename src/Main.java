@@ -1,6 +1,8 @@
 import gui.Window;
-// import shader.*;
-// import raytracer.*;
+import gui.World;
+import shader.*;
+import raytracer.*;
+import java.awt.image.BufferedImage;
 
 class Main {
     public static void main(String[] args){
@@ -31,12 +33,11 @@ class Main {
         // s.toJson("new");
         //#endregion
         
-        new Window();
+        // new Window();
 
         //#region testing speed
-        // Scene s = Scene.randomSpheres(100);
-        // for (int i = 0; i < 10; i++)
-        //     s.renderImage(new PhongShader(),true);
+        
+        new World(800, 800).timedRender(new Intersect(), 10);
         //#endregion
     }
 }
