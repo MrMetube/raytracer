@@ -33,11 +33,12 @@ class Main {
         // s.toJson("new");
         //#endregion
         
-        // new Window();
+        new Window();
 
         //#region testing speed
         
-        new World(800, 800).timedRender(new Intersect(), 10);
+        // new World(800, 800).timedRender(new Intersect(), 10);
+        
         //#endregion
     }
 }
