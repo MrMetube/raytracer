@@ -1,9 +1,11 @@
 package tests;
 import org.junit.jupiter.api.*;
 
+import math.Color;
 import math.Point;
 import math.Tuple;
 import math.Vector;
+import raytracer.geometry.Sphere;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -125,5 +127,50 @@ class TestMath {
         double r = Math.sqrt(2)/2;
         Vector n = new Vector(r, r, 0);
         assertEquals(new Vector(1, 0, 0), v.refl(n));
+    }
+    
+    @Test void normalVectorOnSphereX(){
+        Sphere s = new Sphere(new Point(0, 0, 0), 1);
+        assertEquals(new Vector(1,0,0), s.normal(new Point(1, 0, 0)));
+    }
+
+    @Test void normalVectorOnSphereY(){
+        Sphere s = new Sphere(new Point(0, 0, 0), 1);
+        assertEquals(new Vector(0,1,0), s.normal(new Point(0, 1, 0)));
+    }
+
+    @Test void normalVectorOnSphereZ(){
+        Sphere s = new Sphere(new Point(0, 0, 0), 1);
+        assertEquals(new Vector(0,0,1), s.normal(new Point(0, 0, 1)));
+    }
+
+    @Test void normalVectorOnSphereNonaxial(){
+        Sphere s = new Sphere(new Point(0, 0, 0), 1);
+        double r = Math.sqrt(3)/3;
+        Vector n = s.normal(new Point(r, r, r));
+        assertEquals(new Vector(r, r, r), n);
+        assertEquals(n, n.norm());
+    }
+
+    @Test void colorFromRGBSimple(){
+        Color r = Color.RED;
+        Color g = Color.GREEN;
+        Color b = Color.BLUE;
+        assertEquals(r, new Color(r.rgb()));
+        assertEquals(g, new Color(g.rgb()));
+        assertEquals(b, new Color(b.rgb()));
+    }
+
+    @Test void colorFromRGB(){
+        Color r = Color.LEMON;
+        Color g = Color.TURQOUISE;
+        Color b = new Color(Math.sqrt(2)/2, Math.PI/4, Math.E/3);
+
+        Color r2 = new Color(r.rgb());
+        Color g2 = new Color(g.rgb());
+        Color b2 = new Color(b.rgb());
+        assertEquals(r, r2);
+        assertEquals(g, g2);
+        assertEquals(b, b2);
     }
 }

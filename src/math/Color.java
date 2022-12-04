@@ -30,6 +30,14 @@ public class Color extends Tuple {
     public Color(double r, double g, double b){ 
         super(r,g,b,-1);
     }
+    public Color(int argb){
+        super(
+            ((argb & 0b00000000_11111111_00000000_00000000)>>16) / 255f,
+            ((argb & 0b00000000_00000000_11111111_00000000)>>8 ) / 255f,
+            ((argb & 0b00000000_00000000_00000000_11111111)    ) / 255f,
+            -1
+        );
+    }
 
     public int rgb(){
         int res = 0;
@@ -39,12 +47,9 @@ public class Color extends Tuple {
         return res;
     }
 
-    public Color mul(Color c){
-        return new Color(r()*c.r(), g()*c.g(), b()*c.b());
-    }
-    public Color mul(double scl){
-        return new Color(r()*scl, g()*scl, b()*scl);
-    }
+    public Color mul(Color c){ return new Color(r()*c.r(), g()*c.g(), b()*c.b()); }
+    public Color mul(double scl){ return new Color(r()*scl, g()*scl, b()*scl); }
+    public Color div(double scl){ return new Color(r()/scl, g()/scl, b()/scl); }
 
     public Color add(Color... colors){
         Color sum = new Color(r(),g(),b());
@@ -63,4 +68,15 @@ public class Color extends Tuple {
 
     @Override
     public String toString(){ return String.format("(%.02f | %.02f | %.02f)",x,y,z); }
+
+    @Override
+    public boolean equals(Object o){
+        if(o == null) return false;
+        if(o == this) return true;
+        final Tuple that = (Tuple) o;
+        return  MUtils.approxEqual(this.x, that.x(), 0.01) &&
+                MUtils.approxEqual(this.y, that.y(), 0.01) &&
+                MUtils.approxEqual(this.z, that.z(), 0.01) &&
+                MUtils.approxEqual(this.w, that.w(), 0.01);
+    }
 }

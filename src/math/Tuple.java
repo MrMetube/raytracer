@@ -57,10 +57,10 @@ public class Tuple {
         if(o == null) return false;
         if(o == this) return true;
         final Tuple that = (Tuple) o;
-        return MUtils.approxEqual(this.x, that.x()) &&
-                MUtils.approxEqual(this.y, that.y()) &&
-                MUtils.approxEqual(this.z, that.z()) &&
-                MUtils.approxEqual(this.w, that.w());
+        return  MUtils.approxEqual(this.x, that.x(), 0.0001) &&
+                MUtils.approxEqual(this.y, that.y(), 0.0001) &&
+                MUtils.approxEqual(this.z, that.z(), 0.0001) &&
+                MUtils.approxEqual(this.w, that.w(), 0.0001);
     }
 
     @Override

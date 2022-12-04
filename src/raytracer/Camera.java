@@ -48,7 +48,6 @@ public class Camera {
         double xOffset, yOffset;
         Vector dir;
         Payload[] out;
-        Random random = new Random(x*width+y);
 
         switch(supersampling){
             case NONE:
@@ -80,7 +79,7 @@ public class Camera {
 
     private Payload[] getRandomPayloads(int x, int y, int amount){
             Payload[] out = new Payload[amount+1];
-            Random random = new Random(x*width+y);
+            Random random = new Random();
             for (int i = 0; i < amount; i++) {
                 double xOffset = (x + random.nextDouble(0,1) - width  / 2) * pixelSize;
                 double yOffset = (y + random.nextDouble(0,1) - height / 2) * pixelSize;

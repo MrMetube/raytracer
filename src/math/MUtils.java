@@ -4,9 +4,9 @@ import raytracer.Payload;
 import raytracer.geometry.Geometry;
 
 public class MUtils {
-    public static boolean approxEqual(double a, double b){
+    public static boolean approxEqual(double a, double b, double epsilon){
         double x = Math.abs(a - b);
-        return x < 0.00001;
+        return x < epsilon;
     }
 
     public static double clamp(double value, double min, double max){
