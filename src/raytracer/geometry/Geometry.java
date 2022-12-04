@@ -1,7 +1,6 @@
 package raytracer.geometry;
 
 import math.Point;
-import math.Ray;
 import math.Vector;
 import raytracer.Payload;
 
@@ -10,6 +9,6 @@ public abstract class Geometry {
     String m;
     public String material(){ return m; }
     public void setMaterial(String material){ this.m = material; }
-    public abstract boolean intersect(Ray ray,Payload payload);
+    public abstract boolean intersect(Payload payload);
     public abstract Vector normal(Point hit);
 }

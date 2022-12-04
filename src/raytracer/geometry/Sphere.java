@@ -24,7 +24,8 @@ public class Sphere extends Geometry{
         this.m = m;
     }
 
-    @Override public boolean intersect(Ray ray,Payload payload){
+    @Override public boolean intersect(Payload payload){
+        Ray ray  = payload.ray();
         Vector dir = ray.dir();
         Vector L = ray.origin().sub(c);
         double a = dir.dot(dir);

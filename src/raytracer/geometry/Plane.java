@@ -31,7 +31,8 @@ public class Plane extends Geometry{
         this.m = m;
     }
 
-    @Override public boolean intersect(Ray ray, Payload payload) {
+    @Override public boolean intersect(Payload payload) {
+        Ray ray  = payload.ray();
         Point  o = ray.origin();
         Vector d = ray.dir();
         double t = n.dot(p.sub(o)) / n.dot(d);

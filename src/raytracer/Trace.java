@@ -1,7 +1,6 @@
 package raytracer;
 
 import math.Color;
-import math.Ray;
 import raytracer.geometry.Geometry;
 
 import java.awt.image.BufferedImage;
@@ -29,12 +28,13 @@ public class Trace implements Runnable{
     @Override 
     public void run(){
         for (int x = xS; x < xE; x++) for (int y = yS; y < yE; y++) {
-            Ray ray = camera.generateRay(x, y);
-            Payload p = new Payload(ray);
-
-            for(Geometry geometry : scene.getGeometries()) geometry.intersect(ray,p);
-            Color color = ( p.target() != null ) ? shader.getColor(p, scene) : def;
-            
+            Payload[] payloads = camera.generatePayload(x, y);
+            Color color = new Color(0, 0, 0);
+            for (Payload payload : payloads) {
+                for(Geometry geometry : scene.getGeometries()) geometry.intersect(payload);
+                color = color.add( ( payload.target() != null ) ? shader.getColor(payload, scene) : def);
+            }
+            color = color.mul(1.0/payloads.length);
             image.setRGB(x, camera.height()-y-1, color.rgb() );
         }
     }

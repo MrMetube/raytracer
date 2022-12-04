@@ -10,6 +10,7 @@ import javax.swing.event.MouseInputListener;
 import java.awt.Robot;
 
 import math.Vector;
+import raytracer.SupersamplingMode;
 import shader.*;
 
 public class Input implements KeyListener, MouseInputListener {
@@ -51,6 +52,12 @@ public class Input implements KeyListener, MouseInputListener {
         keyMap.put(KeyEvent.VK_3, new Specular());
         keyMap.put(KeyEvent.VK_4, new Phong());
         keyMap.put(KeyEvent.VK_5, new BlinnPhong());
+
+        keyMap.put(KeyEvent.VK_F2, SupersamplingMode.NONE);
+        keyMap.put(KeyEvent.VK_F3, SupersamplingMode.X9);
+        keyMap.put(KeyEvent.VK_F4, SupersamplingMode.RANDOMx2);
+        keyMap.put(KeyEvent.VK_F5, SupersamplingMode.RANDOMx4);
+        keyMap.put(KeyEvent.VK_F6, SupersamplingMode.RANDOMx8);
     }
 
     @Override
@@ -58,6 +65,7 @@ public class Input implements KeyListener, MouseInputListener {
         Object o = keyMap.get(e.getKeyCode());
         if( o instanceof Vector) activeKeys.add((Vector)o);
         else if( o instanceof Shader) window.setActiveShader((Shader) o);
+        else if( o instanceof SupersamplingMode) window.world.setSupersampling((SupersamplingMode)o);
         else if(e.getKeyCode()==KeyEvent.VK_F12){
             System.out.println("Screenshot saved");
             window.world.renderToFile(new Ambient(), false);
