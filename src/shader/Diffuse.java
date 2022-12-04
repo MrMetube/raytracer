@@ -21,7 +21,7 @@ public class Diffuse extends Shader{
             if(nl<0) nl = 0;
             Color lc = ls.color()
                 .mul(ls.intensity())
-                .mul(1/distance)
+                // .mul(1/distance)
                 .mul(nl);
             il = il.add(lc);
         }

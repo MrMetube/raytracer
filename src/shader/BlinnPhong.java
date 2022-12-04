@@ -48,7 +48,7 @@ public class BlinnPhong extends Shader{
 
             Color lc = ls.color()
                 .mul(ks)
-                .mul(1/distance)
+                // .mul(1/distance)
                 .mul(nhs);
             il = il.add(lc);
         }

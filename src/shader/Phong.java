@@ -49,7 +49,7 @@ public class Phong extends Shader{
 
             Color lc = ls.color()
                 .mul(ks)
-                .mul(1/distance)
+                // .mul(1/distance)
                 .mul(vrs);
             il = il.add(lc);
         }

@@ -24,7 +24,7 @@ public class Specular extends Shader{
             double vrn = Math.pow(vr,n);
             Color lc = ls.color()
                 .mul(ks)
-                .mul(1/distance)
+                // .mul(1/distance)
                 .mul(vrn);
             il = il.add(lc);
         }

@@ -47,11 +47,14 @@ public class Input implements KeyListener, MouseInputListener {
         keyMap.put(KeyEvent.VK_SPACE, Vector.Ypos);
         keyMap.put(KeyEvent.VK_SHIFT, Vector.Yneg);
 
-        keyMap.put(KeyEvent.VK_1, new Ambient());
-        keyMap.put(KeyEvent.VK_2, new Diffuse());
+        keyMap.put(KeyEvent.VK_1, new Phong());
+        keyMap.put(KeyEvent.VK_2, new BlinnPhong());
         keyMap.put(KeyEvent.VK_3, new Specular());
-        keyMap.put(KeyEvent.VK_4, new Phong());
-        keyMap.put(KeyEvent.VK_5, new BlinnPhong());
+        keyMap.put(KeyEvent.VK_4, new Diffuse());
+        keyMap.put(KeyEvent.VK_5, new Ambient());
+        keyMap.put(KeyEvent.VK_6, new Intersect());
+        keyMap.put(KeyEvent.VK_7, new Normal());
+        keyMap.put(KeyEvent.VK_8, new Distance());
 
         keyMap.put(KeyEvent.VK_F2, SupersamplingMode.NONE);
         keyMap.put(KeyEvent.VK_F3, SupersamplingMode.X9);
@@ -64,9 +67,14 @@ public class Input implements KeyListener, MouseInputListener {
     public void keyPressed(KeyEvent e) {
         Object o = keyMap.get(e.getKeyCode());
         if( o instanceof Vector) activeKeys.add((Vector)o);
-        else if( o instanceof Shader) window.setActiveShader((Shader) o);
-        else if( o instanceof SupersamplingMode) window.world.setSupersampling((SupersamplingMode)o);
-        else if(e.getKeyCode()==KeyEvent.VK_F12){
+        else if( o instanceof Shader) {
+            window.setActiveShader((Shader) o);
+            System.out.println("Shader: " + (Shader) o);
+        }else if( o instanceof SupersamplingMode) {
+            SupersamplingMode s = (SupersamplingMode) o;
+            window.world.setSupersampling(s);
+            System.out.println("Supersamplingmode: " + s.name());
+        }else if(e.getKeyCode()==KeyEvent.VK_F12){
             System.out.println("Screenshot saved");
             window.world.renderToFile(new Ambient(), false);
             window.world.renderToFile(new Diffuse(), false);
