@@ -11,6 +11,7 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 
 import math.Vector;
 import raytracer.Scene;
+import raytracer.SupersamplingMode;
 import shader.Phong;
 import shader.Shader;
 
@@ -87,9 +88,11 @@ public class Window extends JFrame implements ActionListener{
         setVisible(true);
         clock.start();
     }
-
     
-    public void setActiveScene(Scene scene){ activeScene = scene; }
+    public void setActiveScene(Scene scene){ 
+        activeScene = scene;
+        if(scene.getCamera().getSupersampling()==null) scene.getCamera().setSupersampling(SupersamplingMode.NONE);
+    }
     public void setActiveShader(Shader shader){ activeShader = shader; }
 
     public Shader getActiveShader(){ return activeShader; }
@@ -97,9 +100,9 @@ public class Window extends JFrame implements ActionListener{
 
     @Override
     public void actionPerformed(ActionEvent e) {
-             if(e.getSource() == rndmItem) activeScene = Scene.randomSpheres(randomCount);
+             if(e.getSource() == rndmItem) setActiveScene(Scene.randomSpheres(randomCount));
         else if(e.getSource() == fileItem && chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION){
-            activeScene = new Scene("./scenes/" + chooser.getSelectedFile().getName());
+            setActiveScene(new Scene("./scenes/" + chooser.getSelectedFile().getName()));
         }else if(e.getSource() == clock && hasFocus()){
             world.tick();
             world.renderFrame();

@@ -107,5 +107,6 @@ public class Camera {
     public Point pos() {return pos;}
 
     public void setSupersampling(SupersamplingMode mode){ this.supersampling = mode;}
+    public SupersamplingMode getSupersampling(){ return supersampling;}
     
 }

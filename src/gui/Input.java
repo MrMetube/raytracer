@@ -29,12 +29,6 @@ public class Input implements KeyListener, MouseInputListener {
         try{ robot = new Robot(); }catch(Exception e){}
     }
 
-    public Vector getCamMove(){ 
-        Vector dir = Vector.ZERO;
-        for (Vector v : activeKeys) dir = dir.add(v);
-        return dir;
-    }
-
     public void setupKeyMap(){
         keyMap.put(KeyEvent.VK_D,     Vector.Xpos);
         keyMap.put(KeyEvent.VK_A,     Vector.Xneg);
@@ -66,20 +60,19 @@ public class Input implements KeyListener, MouseInputListener {
     @Override
     public void keyPressed(KeyEvent e) {
         Object o = keyMap.get(e.getKeyCode());
-        if( o instanceof Vector) activeKeys.add((Vector)o);
+            if( o instanceof Vector) activeKeys.add((Vector)o);
         else if( o instanceof Shader) {
             window.setActiveShader((Shader) o);
             System.out.println("Shader: " + (Shader) o);
         }else if( o instanceof SupersamplingMode) {
-            SupersamplingMode s = (SupersamplingMode) o;
-            window.world.setSupersampling(s);
-            System.out.println("Supersamplingmode: " + s.name());
+            window.world.setSupersampling((SupersamplingMode) o);
+            System.out.println("Supersamplingmode: " + ((SupersamplingMode) o).name());
         }else if(e.getKeyCode()==KeyEvent.VK_F12){
-            System.out.println("Screenshot saved");
             window.world.renderToFile(new Ambient(), false);
             window.world.renderToFile(new Diffuse(), false);
             window.world.renderToFile(new Specular(), false);
             window.world.renderToFile(new Phong(), false);
+            System.out.println("Screenshot saved");
         }
     }
 
@@ -92,7 +85,7 @@ public class Input implements KeyListener, MouseInputListener {
     @Override
     public void mouseMoved(MouseEvent e) {
         if(captureMouse) {
-            float mouseSensitivity = 1;
+            // float mouseSensitivity = 1;
 
             int centerX = window.getX() + window.getWidth() / 2;
             int centerY = window.getY() + window.getHeight() / 2;
@@ -108,6 +101,8 @@ public class Input implements KeyListener, MouseInputListener {
 
     public double getYOffset(){ return yOffset; }
     public double getXOffset(){ return xOffset; }
+
+    public Vector getCamMove(){ return Vector.ZERO.add((Vector[])activeKeys.toArray());}
 
     @Override public void mouseClicked(MouseEvent e)  { captureMouse = !captureMouse;}
     @Override public void mouseEntered(MouseEvent e)  {}
