@@ -21,10 +21,10 @@ public class Input implements KeyListener, MouseInputListener {
     float yOffset = 0;
     Robot robot;
     boolean captureMouse = false;
-    Window window;
+    World world;
     
-    public Input(Window viewport){
-        this.window = viewport;
+    public Input(World world){
+        this.world = world;
         setupKeyMap();
         try{ robot = new Robot(); }catch(Exception e){}
     }
@@ -50,11 +50,8 @@ public class Input implements KeyListener, MouseInputListener {
         keyMap.put(KeyEvent.VK_7, new Normal());
         keyMap.put(KeyEvent.VK_8, new Distance());
 
-        keyMap.put(KeyEvent.VK_F2, SupersamplingMode.NONE);
-        keyMap.put(KeyEvent.VK_F3, SupersamplingMode.X9);
-        keyMap.put(KeyEvent.VK_F4, SupersamplingMode.RANDOMx2);
-        keyMap.put(KeyEvent.VK_F5, SupersamplingMode.RANDOMx4);
-        keyMap.put(KeyEvent.VK_F6, SupersamplingMode.RANDOMx8);
+        keyMap.put(KeyEvent.VK_F1, SupersamplingMode.NONE);
+        keyMap.put(KeyEvent.VK_F2, SupersamplingMode.X9);
     }
 
     @Override
@@ -62,16 +59,16 @@ public class Input implements KeyListener, MouseInputListener {
         Object o = keyMap.get(e.getKeyCode());
             if( o instanceof Vector) activeKeys.add((Vector)o);
         else if( o instanceof Shader) {
-            window.setActiveShader((Shader) o);
+            world.setShader((Shader) o);
             System.out.println("Shader: " + (Shader) o);
         }else if( o instanceof SupersamplingMode) {
-            window.world.setSupersampling((SupersamplingMode) o);
+            world.setSupersampling((SupersamplingMode) o);
             System.out.println("Supersamplingmode: " + ((SupersamplingMode) o).name());
         }else if(e.getKeyCode()==KeyEvent.VK_F12){
-            window.world.renderToFile(new Ambient(), false);
-            window.world.renderToFile(new Diffuse(), false);
-            window.world.renderToFile(new Specular(), false);
-            window.world.renderToFile(new Phong(), false);
+            world.renderToFile(new Ambient(), false);
+            world.renderToFile(new Diffuse(), false);
+            world.renderToFile(new Specular(), false);
+            world.renderToFile(new Phong(), false);
             System.out.println("Screenshot saved");
         }
     }
@@ -87,22 +84,26 @@ public class Input implements KeyListener, MouseInputListener {
         if(captureMouse) {
             // float mouseSensitivity = 1;
 
-            int centerX = window.getX() + window.getWidth() / 2;
-            int centerY = window.getY() + window.getHeight() / 2;
+            // int centerX = window.getX() + window.getWidth() / 2;
+            // int centerY = window.getY() + window.getHeight() / 2;
 
-            xOffset = ((float) e.getXOnScreen() - centerX) / window.getWidth();
-            yOffset = ((float) e.getYOnScreen() - centerY) / window.getHeight();
+            // xOffset = ((float) e.getXOnScreen() - centerX) / window.getWidth();
+            // yOffset = ((float) e.getYOnScreen() - centerY) / window.getHeight();
             
-            // TODO Rotation isnt working yet
+            // TODO Rotation
             // robot.mouseMove(centerX, centerY);
         }
         // System.out.printf("xOffset: %s, yOffset: %s %n", mouseXOffset,mouseYOffset);
     }
 
-    public double getYOffset(){ return yOffset; }
     public double getXOffset(){ return xOffset; }
+    public double getYOffset(){ return yOffset; }
 
-    public Vector getCamMove(){ return Vector.ZERO.add((Vector[])activeKeys.toArray());}
+    public Vector getCamMove(){ 
+        Vector dir = Vector.ZERO;
+        for (Vector vector : activeKeys) dir = dir.add(vector);
+        return dir;   
+    }
 
     @Override public void mouseClicked(MouseEvent e)  { captureMouse = !captureMouse;}
     @Override public void mouseEntered(MouseEvent e)  {}

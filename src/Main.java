@@ -2,7 +2,6 @@
 import gui.*;
 import shader.*;
 import raytracer.*;
-import java.awt.image.BufferedImage;
 
 class Main {
     public static void main(String[] args){

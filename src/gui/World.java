@@ -1,60 +1,82 @@
 package gui;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.imageio.ImageIO;
 
+import math.Point;
 import math.Vector;
 import raytracer.Camera;
 import raytracer.Scene;
 import raytracer.SupersamplingMode;
+import raytracer.Trace;
+import shader.Phong;
 import shader.Shader;
 
 
 public class World{
     BufferedImage frameBuffer;
     int width,height;
-    Scene scene;
-    double cameraSpeed = 0.2;
-    Window viewport;
+    Camera camera;
+
+    Scene scene = new Scene();
+    Shader shader = new Phong();
+    SupersamplingMode supersampling = SupersamplingMode.NONE;
+
+
+    private double cameraSpeed = 0.2;
     int frameBufferCount = 0;
- 
-    public World(int width, int height, Window viewport){
+    Input input = new Input(this);
+
+    public World(int width, int height){
         this.width = width;
         this.height = height;
-        this.viewport = viewport;
-        this.scene = viewport.getActiveScene();
+        this.camera = new Camera(new Point(0, 0, -10), Point.ZERO, 90, this);
         frameBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
     }
 
-    public World(int width, int height){
-        // This is only used when I want to time the render. I dont need UI here.
-        // Obviously the other methods wont function properly.
-        this.width = width;
-        this.height = height;
-    }
 
     public void tick(){
-        if(scene != viewport.getActiveScene()) scene = viewport.getActiveScene();
-        Vector dir = viewport.input.getCamMove();
+        Vector dir = input.getCamMove();
         if( dir != Vector.ZERO) {
-            Camera cam = scene.getCamera();
             //Camera movement
-            cam.move(dir.mul(cameraSpeed));
+            camera.move(dir.mul(cameraSpeed));
             //Camera rotation
             // double yOffset = Menu.input.getYOffset(), xOffset = Menu.input.getXOffset();
             // if(yOffset != 0 || xOffset != 0) cam.rotate(yOffset, xOffset);
-            frameBufferCount = 0;
-            frameBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
+            // frameBufferCount = 0;
+            // frameBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
         }
-        
+    }
+
+    public void setScene(Scene scene){ this.scene = scene; }
+    public void setShader(Shader shader){ this.shader = shader; }
+    public void setSupersampling(SupersamplingMode mode){ camera.setSupersampling(mode);}
+    
+    public int getWidth() { return width; }
+    public int getHeight() { return height; }
+    public Scene getScene() { return scene; }
+    public Input getInput() { return input; }
+    public Shader getShader(){ return shader; }
+    public BufferedImage getFrameBuffer(){ return frameBuffer;}
+    public SupersamplingMode getSupersampling() { return supersampling; }
+
+    public void renderImage(BufferedImage image){
+        int threadCount = Runtime.getRuntime().availableProcessors();
+        ExecutorService exe =  Executors.newFixedThreadPool(threadCount);
+        int deltaHeight = (height / threadCount)+1;
+        for (int i = 0; i < threadCount; i++) 
+            exe.submit(new Trace(scene, width, height, camera, image, i*deltaHeight, deltaHeight, shader));
+        exe.shutdown();
+        while(!exe.isTerminated());
     }
 
     public void renderFrame(){
-        if(scene == null) return;
-        BufferedImage tempBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
-        scene.renderImage(viewport.getActiveShader(), tempBuffer);
-        frameBuffer = tempBuffer;
+        renderImage(frameBuffer);
+        // BufferedImage tempBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
+        // frameBuffer = tempBuffer;
         // I tried using an additive FrameBuffer, but it didnt work
         // Because when colors are turned to rgb ints their values are clamped to not break to format.
         // It would require stroing the image as a 2D-Color-Array to not lose information between frames.
@@ -68,27 +90,31 @@ public class World{
     }
 
     public void renderToFile(Shader shader, boolean timed){
-        if(scene == null) return;
+        Shader backup = this.shader;
+        this.shader = shader;
         String name = shader.getName();
 
         long start = System.nanoTime();
-        scene.renderImage(shader, frameBuffer);
+        renderImage(frameBuffer);
         if(timed) System.out.printf("%s Rendering took: %s ms%n",name, (System.nanoTime()-start)/1_000_000);
 
         start = System.nanoTime();
         writeImage(name);
         if(timed) System.out.printf("%s Saving took:    %s ms%n",name, (System.nanoTime()-start)/1_000_000);
+        this.shader = backup;
     }
 
     public void timedRender(Shader shader, int count){
+        Shader backup = this.shader;
+        this.shader = shader;
         String name = shader.getName();
         scene = Scene.randomSpheres(100);
         BufferedImage image = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
         
         long start = System.nanoTime();
-        for (int i = 0; i < count; i++)
-            scene.renderImage(shader, image);
+        for (int i = 0; i < count; i++) renderImage(image);
         System.out.printf("%s Saving took:    %s ms%n",name, (System.nanoTime()-start)/1_000_000);
+        this.shader = backup;
     }
 
     public void writeImage(String name){
@@ -96,7 +122,4 @@ public class World{
         try { ImageIO.write(frameBuffer, "png", file); } catch (Exception e) {}
     }
 
-    public void setSupersampling(SupersamplingMode mode){ scene.getCamera().setSupersampling(mode);}
-    public BufferedImage getFrameBuffer(){ return frameBuffer;}
-    
 }
