@@ -69,6 +69,7 @@ public class Input implements KeyListener, MouseInputListener {
             world.renderToFile(new Diffuse(), false);
             world.renderToFile(new Specular(), false);
             world.renderToFile(new Phong(), false);
+            world.renderToFile(new BlinnPhong(), false);
             System.out.println("Screenshot saved");
         }
     }

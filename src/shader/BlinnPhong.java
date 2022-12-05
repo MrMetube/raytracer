@@ -17,7 +17,7 @@ public class BlinnPhong extends Shader{
         double ks = m.specular();
         double kd = m.diffuse();
         double ka = m.ambient();
-        Vector v = p.ray().dir().norm();
+        Vector v = p.ray().dir().norm().neg();
         double s = m.shininess();
 
         Color il = new Color(0, 0, 0);
@@ -33,11 +33,12 @@ public class BlinnPhong extends Shader{
             distance = distance * distance;
             //diffuse
             double nl = n.dot(l);
-            //If nl < 0 ?? can you ignore this 
+            //ignore reflected/opposite results
             nl = Math.max(nl,0);
             il = il.add(ls.color()
                 .mul(nl)
                 .mul(ls.intensity())
+                .div(distance)
             );
             //specular
             Vector h = v.add(l).norm();
@@ -48,8 +49,9 @@ public class BlinnPhong extends Shader{
 
             Color lc = ls.color()
                 .mul(ks)
-                // .mul(1/distance)
-                .mul(nhs);
+                .mul(nhs)
+                .mul(ls.intensity())
+                .div(distance);
             il = il.add(lc);
         }
 

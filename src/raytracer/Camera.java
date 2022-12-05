@@ -1,5 +1,4 @@
 package raytracer;
-import java.util.Random;
 
 import gui.World;
 import math.Point;

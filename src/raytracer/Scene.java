@@ -54,8 +54,8 @@ public class Scene {
     public static Scene randomSpheres(int count){
         Scene s = new Scene();
         s.addBasicMaterials();
-        s.addLightSource(new PointLightSource(new Point(0, 10, 10), Color.WHITE, 1));
-        s.addLightSource(new PointLightSource(new Point(0, 10, -10), Color.PINK, 1));
+        s.addLightSource(new PointLightSource(new Point(0, 10, 10), Color.WHITE, 60));
+        s.addLightSource(new PointLightSource(new Point(0, 10, -10), Color.PINK, 30));
         Object[] materials = s.getMaterials().keySet().toArray();
         Random rdm = new Random();
         for (int i = 0; i < count; i++) {
@@ -89,7 +89,6 @@ public class Scene {
         addMaterial("yellow",    Material.YELLOW);
         addMaterial("white",     Material.WHITE);
         addMaterial("gray",      Material.GRAY);
-        addMaterial("black",     Material.BLACK);
         
         addMaterial("pink",      Material.PINK   );
         addMaterial("orange",    Material.ORANGE );
@@ -97,7 +96,6 @@ public class Scene {
         addMaterial("lime",      Material.LIME   );
         addMaterial("turqouise", Material.TURQOUISE  );
         addMaterial("purple",    Material.PURPLE );
-        addMaterial("dark",      Material.DARK   );
         addMaterial("light",     Material.LIGHT  );
         
         addMaterial("gold",      Material.GOLD  );

@@ -17,12 +17,12 @@ public class Diffuse extends Shader{
             distance = distance * distance;
             
             double nl = n.dot(l);
-            //If nl < 0 ?? can you ignore this 
-            if(nl<0) nl = 0;
+            //ignore reflected/opposite results
+            nl = Math.max(nl,0);
             Color lc = ls.color()
                 .mul(ls.intensity())
-                // .mul(1/distance)
-                .mul(nl);
+                .mul(nl)
+                .div(distance);
             il = il.add(lc);
         }
         Color out = m.color()
