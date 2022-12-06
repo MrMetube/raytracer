@@ -10,7 +10,7 @@ public class Plane extends Geometry{
     Point  p;
     double r;
     
-    static double DRAW_DISTANCE = Double.POSITIVE_INFINITY;
+    static double DRAW_DISTANCE = 10000;
 
     public Plane(Vector normal, Point p) {
         this.n = normal.norm();
@@ -36,14 +36,13 @@ public class Plane extends Geometry{
         Point  o = ray.origin();
         Vector d = ray.dir();
         double t = n.dot(p.sub(o)) / n.dot(d);
-        if( t>0 && (
-            r != 0 && p.sub(o.add(d.mul(t))).mag() < r ||
-            r == 0 && p.sub(o.add(d.mul(t))).mag() < DRAW_DISTANCE )){
+        double l = p.sub(o.add(d.mul(t))).mag();
+        if( t>0 && ( r!=0 && l < r || r==0 && l < DRAW_DISTANCE)){
             payload.hit(this,t);
             return true;
         }
         return false;
     }
 
-    @Override public Vector normal(Point hit) { return n.norm(); } 
+    @Override public Vector normal(Point hit) { return n; } 
 }
