@@ -24,8 +24,9 @@ public class Specular extends Shader{
             double vrn = Math.pow(vr,n);
             Color lc = ls.color()
                 .mul(ks)
-                // .mul(1/distance)
-                .mul(vrn);
+                .mul(vrn)
+                .mul(ls.intensity())
+                .div(distance);
             il = il.add(lc);
         }
         Color out = m.isMetallic() ? m.color().mul(il) : il;

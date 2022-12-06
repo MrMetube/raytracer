@@ -1,6 +1,6 @@
 package raytracer;
-import java.util.Random;
 
+import gui.World;
 import math.Point;
 import math.Ray;
 import math.Vector;
@@ -9,10 +9,8 @@ public class Camera {
     Point pos;
     Point lookAt;
     double fov;
-    //TODO camera  shouldn't set width/height
     int width;
     int height;
-    SupersamplingMode supersampling = SupersamplingMode.NONE;
 
     double pixelSize;
 
@@ -20,12 +18,15 @@ public class Camera {
     Vector up;
     Vector right;
 
-    public Camera(Point pos, Point lookAt, double fovDeg, int width, int height) {
+    World world;
+    SupersamplingMode supersampling = SupersamplingMode.NONE;
+
+    public Camera(Point pos, Point lookAt, double fovDeg, World world) {
         this.pos = pos;
         this.lookAt = lookAt;
         this.fov = Math.toRadians(fovDeg);
-        this.width = width;
-        this.height = height;
+        this.width = world.getWidth();
+        this.height = world.getHeight();
 
         double aspectRatio = width/height;
         double halfHeight = Math.tan(fov/2);
@@ -65,32 +66,9 @@ public class Camera {
                     out[i*3+j] = new Payload( new Ray(pos, dir));
                 }
                 return out;
-            case RANDOMx2: // Generate 2 rays with slight random offset
-                return getRandomPayloads(x, y, 2);
-            case RANDOMx4:
-                return getRandomPayloads(x, y, 4);
-            case RANDOMx8:
-                return getRandomPayloads(x, y, 8);
             default: // just deactivate ss if it isnt set for whatever reason
-                setSupersampling(SupersamplingMode.NONE);
-                return generatePayload(x, y);
+                return new Payload[0];
         }
-    }
-
-    private Payload[] getRandomPayloads(int x, int y, int amount){
-            Payload[] out = new Payload[amount+1];
-            Random random = new Random();
-            for (int i = 0; i < amount; i++) {
-                double xOffset = (x + random.nextDouble(0,1) - width  / 2) * pixelSize;
-                double yOffset = (y + random.nextDouble(0,1) - height / 2) * pixelSize;
-                Vector dir = right.mul(xOffset).add(up.mul(yOffset)).add(vpn);
-                out[i] = new Payload( new Ray(pos, dir));
-            }
-            double xOffset = (x + 0.5 - width  / 2) * pixelSize;
-            double yOffset = (y + 0.5 - height / 2) * pixelSize;
-            Vector dir = right.mul(xOffset).add(up.mul(yOffset)).add(vpn);
-            out[amount] = new Payload( new Ray(pos, dir));
-            return out;
     }
 
     public void move(Vector dir){
@@ -102,11 +80,6 @@ public class Camera {
         calcVectors();
     }
     
-    public int width() {return width;}
-    public int height() {return height;}
     public Point pos() {return pos;}
-
-    public void setSupersampling(SupersamplingMode mode){ this.supersampling = mode;}
-    public SupersamplingMode getSupersampling(){ return supersampling;}
-    
+    public void setSupersampling(SupersamplingMode mode){supersampling = mode;}
 }

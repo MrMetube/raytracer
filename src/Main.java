@@ -2,7 +2,6 @@
 import gui.*;
 import shader.*;
 import raytracer.*;
-import java.awt.image.BufferedImage;
 
 class Main {
     public static void main(String[] args){
@@ -27,8 +26,8 @@ class Main {
         // s.addGeometry(new Plane(right,  new Point(-.45, 1.8, 0), 1,"azure"));
         // s.addGeometry(new Plane(left,  new Point(.45, 1.8, 0), 1,"light"));
         
-        // s.addLightSource(new PointLightSource(new Point(0, 5, 0), Color.WHITE, 0.9));
-        // s.addLightSource(new PointLightSource(new Point(5, 5, 10), Color.WHITE, 0.9));
+        // s.addLightSource(new PointLightSource(new Point(0, 5, 0), Color.WHITE, 9));
+        // s.addLightSource(new PointLightSource(new Point(5, 5, 10), Color.WHITE, 9));
         
         // s.toJson("new");
         //#endregion

@@ -11,9 +11,6 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 
 import math.Vector;
 import raytracer.Scene;
-import raytracer.SupersamplingMode;
-import shader.Phong;
-import shader.Shader;
 
 public class Window extends JFrame implements ActionListener{
     JFileChooser chooser;
@@ -27,14 +24,10 @@ public class Window extends JFrame implements ActionListener{
     int randomCount = 100;
     String fileName = "simple.json";
 
-    static Shader activeShader = new Phong();
-    static Scene activeScene = Scene.EMPTY;
+    int width = 800;
+    int height = 800;
 
-    private static int width = 800;
-    private static int height = 800;
-
-    public World world = new World(width, height, this);
-    public Input input = new Input(this);
+    World world = new World(width, height);
 
     BufferedImage image;
     Vector camMovement = Vector.ZERO;
@@ -60,9 +53,9 @@ public class Window extends JFrame implements ActionListener{
         quitItem.addActionListener(this);
 
         sceneMenu.setMnemonic(KeyEvent.VK_C);
-        sceneMenu.add(fileItem); 
-        sceneMenu.add(rndmItem); 
-        sceneMenu.add(quitItem); 
+        sceneMenu.add(fileItem);
+        sceneMenu.add(rndmItem);
+        sceneMenu.add(quitItem);
 
         menubar.add(sceneMenu);
         setJMenuBar(menubar);
@@ -74,35 +67,26 @@ public class Window extends JFrame implements ActionListener{
         chooser.setAcceptAllFileFilterUsed(false);
 
         view = new View(width,height);
-        view.setBounds(0, 100, width, 700);
+        view.setBounds(0, 0, width, height);
         add(view);
 
         BufferedImage cursorImg = new BufferedImage(16,16, BufferedImage.TYPE_INT_ARGB);
         Cursor blank = Toolkit.getDefaultToolkit().createCustomCursor(cursorImg, new Point(0,0), "blank");
         getContentPane().setCursor(blank);
 
-        addMouseListener(input);
-        addMouseMotionListener(input);
-        addKeyListener(input);
+        addMouseListener(world.getInput());
+        addMouseMotionListener(world.getInput());
+        addKeyListener(world.getInput());
 
         setVisible(true);
         clock.start();
     }
     
-    public void setActiveScene(Scene scene){ 
-        activeScene = scene;
-        if(scene.getCamera().getSupersampling()==null) scene.getCamera().setSupersampling(SupersamplingMode.NONE);
-    }
-    public void setActiveShader(Shader shader){ activeShader = shader; }
-
-    public Shader getActiveShader(){ return activeShader; }
-    public Scene getActiveScene(){ return activeScene; }
-
     @Override
     public void actionPerformed(ActionEvent e) {
-             if(e.getSource() == rndmItem) setActiveScene(Scene.randomSpheres(randomCount));
+             if(e.getSource() == rndmItem) world.setScene(Scene.randomSpheres(randomCount));
         else if(e.getSource() == fileItem && chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION){
-            setActiveScene(new Scene("./scenes/" + chooser.getSelectedFile().getName()));
+            world.setScene(new Scene("./scenes/" + chooser.getSelectedFile().getName()));
         }else if(e.getSource() == clock && hasFocus()){
             world.tick();
             world.renderFrame();

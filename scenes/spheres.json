@@ -1,1 +1,467 @@
-{"geometries":[{"type":"Plane","properties":{"n":{"x":-0.5773502691896258,"y":0.5773502691896258,"z":-0.5773502691896258,"w":0.0},"p":{"x":2.0,"y":0.0,"z":0.0,"w":1.0},"r":1.0,"m":"lemon"}},{"type":"Plane","properties":{"n":{"x":0.0,"y":1.0,"z":0.0,"w":0.0},"p":{"x":0.0,"y":-1.0,"z":0.0,"w":1.0},"r":5.0,"m":"white"}},{"type":"Sphere","properties":{"c":{"x":-1.0,"y":1.2,"z":1.0,"w":1.0},"r":0.75,"m":"yellow"}},{"type":"Sphere","properties":{"c":{"x":1.0,"y":1.2,"z":1.0,"w":1.0},"r":0.75,"m":"yellow"}},{"type":"Sphere","properties":{"c":{"x":0.0,"y":0.0,"z":0.5,"w":1.0},"r":1.0,"m":"purple"}},{"type":"Sphere","properties":{"c":{"x":0.0,"y":1.4,"z":1.0,"w":1.0},"r":0.75,"m":"white"}},{"type":"Sphere","properties":{"c":{"x":1.5,"y":0.0,"z":1.0,"w":1.0},"r":0.75,"m":"lime"}},{"type":"Plane","properties":{"n":{"x":0.5773502691896258,"y":0.5773502691896258,"z":-0.5773502691896258,"w":0.0},"p":{"x":-2.0,"y":0.0,"z":0.0,"w":1.0},"r":1.0,"m":"pink"}},{"type":"Sphere","properties":{"c":{"x":-1.5,"y":0.0,"z":1.0,"w":1.0},"r":0.75,"m":"lime"}}],"lightSources":[{"type":"PointLightSource","properties":{"pos":{"x":-10.0,"y":10.0,"z":-10.0,"w":1.0},"color":{"x":0.51,"y":0.85,"z":0.91,"w":-1.0},"intensity":0.5}},{"type":"PointLightSource","properties":{"pos":{"x":0.0,"y":10.0,"z":-10.0,"w":1.0},"color":{"x":0.99,"y":0.98,"z":0.95,"w":-1.0},"intensity":1.0}},{"type":"PointLightSource","properties":{"pos":{"x":10.0,"y":10.0,"z":-10.0,"w":1.0},"color":{"x":0.98,"y":0.4,"z":0.53,"w":-1.0},"intensity":0.5}}],"materials":{"magenta":{"color":{"x":1.0,"y":0.0,"z":1.0,"w":-1.0},"ambient":0.2,"diffuse":0.9,"specular":0.9,"shininess":100,"isMetallic":false},"pink":{"color":{"x":0.98,"y":0.4,"z":0.53,"w":-1.0},"ambient":0.2,"diffuse":0.9,"specular":0.9,"shininess":100,"isMetallic":false},"green":{"color":{"x":0.0,"y":1.0,"z":0.0,"w":-1.0},"ambient":0.2,"diffuse":0.9,"specular":0.9,"shininess":100,"isMetallic":false},"lime":{"color":{"x":0.65,"y":0.87,"z":0.47,"w":-1.0},"ambient":0.2,"diffuse":0.9,"specular":0.9,"shininess":100,"isMetallic":false},"yellow":{"color":{"x":0.9,"y":0.9,"z":0.5,"w":-1.0},"ambient":0.1,"diffuse":0.9,"specular":0.2,"shininess":5,"isMetallic":true},"black":{"color":{"x":0.0,"y":0.0,"z":0.0,"w":-1.0},"ambient":0.2,"diffuse":0.9,"specular":0.9,"shininess":100,"isMetallic":false},"cyan":{"color":{"x":0.0,"y":1.0,"z":1.0,"w":-1.0},"ambient":0.2,"diffuse":0.9,"specular":0.9,"shininess":100,"isMetallic":false},"red":{"color":{"x":1.0,"y":0.0,"z":0.0,"w":-1.0},"ambient":0.2,"diffuse":0.9,"specular":0.9,"shininess":100,"isMetallic":false},"orange":{"color":{"x":0.97,"y":0.62,"z":0.42,"w":-1.0},"ambient":0.2,"diffuse":0.9,"specular":0.9,"shininess":100,"isMetallic":false},"lemon":{"color":{"x":0.98,"y":0.86,"z":0.42,"w":-1.0},"ambient":0.2,"diffuse":0.9,"specular":0.9,"shininess":100,"isMetallic":false},"NO_MATERIAL":{"color":{"x":1.0,"y":0.0,"z":1.0,"w":-1.0},"ambient":0.2,"diffuse":1.0,"specular":0.0,"shininess":0,"isMetallic":false},"gray":{"color":{"x":0.5,"y":0.5,"z":0.5,"w":-1.0},"ambient":0.2,"diffuse":0.9,"specular":0.9,"shininess":100,"isMetallic":false},"blue":{"color":{"x":0.0,"y":0.0,"z":1.0,"w":-1.0},"ambient":0.2,"diffuse":0.9,"specular":0.9,"shininess":100,"isMetallic":false},"white":{"color":{"x":1.0,"y":1.0,"z":1.0,"w":-1.0},"ambient":0.2,"diffuse":0.9,"specular":0.9,"shininess":100,"isMetallic":false},"light":{"color":{"x":0.99,"y":0.98,"z":0.95,"w":-1.0},"ambient":0.2,"diffuse":0.9,"specular":0.9,"shininess":100,"isMetallic":false},"dark":{"color":{"x":0.17,"y":0.16,"z":0.18,"w":-1.0},"ambient":0.2,"diffuse":0.9,"specular":0.9,"shininess":100,"isMetallic":false},"purple":{"color":{"x":0.69,"y":0.6,"z":0.94,"w":-1.0},"ambient":0.2,"diffuse":0.9,"specular":0.9,"shininess":100,"isMetallic":false},"azure":{"color":{"x":0.51,"y":0.85,"z":0.91,"w":-1.0},"ambient":0.2,"diffuse":0.9,"specular":0.9,"shininess":100,"isMetallic":false}},"camera":{"pos":{"x":0.0,"y":0.0,"z":-2.0,"w":1.0},"lookAt":{"x":0.0,"y":0.0,"z":0.0,"w":1.0},"fov":1.5707963267948966,"width":800,"height":800,"pixelSize":0.0024999999999999996,"vpn":{"x":0.0,"y":0.0,"z":1.0,"w":0.0},"up":{"x":0.0,"y":1.0,"z":0.0,"w":0.0},"right":{"x":1.0,"y":0.0,"z":0.0,"w":0.0}}}
+{
+    "geometries": [
+        {
+            "type": "Plane",
+            "properties": {
+                "n": {
+                    "x": -0.5773502691896258,
+                    "y": 0.5773502691896258,
+                    "z": -0.5773502691896258,
+                    "w": 0.0
+                },
+                "p": {
+                    "x": 2.0,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "w": 1.0
+                },
+                "r": 1.0,
+                "m": "lemon"
+            }
+        },
+        {
+            "type": "Plane",
+            "properties": {
+                "n": {
+                    "x": 0.0,
+                    "y": 1.0,
+                    "z": 0.0,
+                    "w": 0.0
+                },
+                "p": {
+                    "x": 0.0,
+                    "y": -1.0,
+                    "z": 0.0,
+                    "w": 1.0
+                },
+                "r": 5.0,
+                "m": "white"
+            }
+        },
+        {
+            "type": "Sphere",
+            "properties": {
+                "c": {
+                    "x": -1.0,
+                    "y": 1.2,
+                    "z": 1.0,
+                    "w": 1.0
+                },
+                "r": 0.75,
+                "m": "yellow"
+            }
+        },
+        {
+            "type": "Sphere",
+            "properties": {
+                "c": {
+                    "x": 1.0,
+                    "y": 1.2,
+                    "z": 1.0,
+                    "w": 1.0
+                },
+                "r": 0.75,
+                "m": "yellow"
+            }
+        },
+        {
+            "type": "Sphere",
+            "properties": {
+                "c": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.5,
+                    "w": 1.0
+                },
+                "r": 1.0,
+                "m": "purple"
+            }
+        },
+        {
+            "type": "Sphere",
+            "properties": {
+                "c": {
+                    "x": 0.0,
+                    "y": 1.4,
+                    "z": 1.0,
+                    "w": 1.0
+                },
+                "r": 0.75,
+                "m": "white"
+            }
+        },
+        {
+            "type": "Sphere",
+            "properties": {
+                "c": {
+                    "x": 1.5,
+                    "y": 0.0,
+                    "z": 1.0,
+                    "w": 1.0
+                },
+                "r": 0.75,
+                "m": "lime"
+            }
+        },
+        {
+            "type": "Plane",
+            "properties": {
+                "n": {
+                    "x": 0.5773502691896258,
+                    "y": 0.5773502691896258,
+                    "z": -0.5773502691896258,
+                    "w": 0.0
+                },
+                "p": {
+                    "x": -2.0,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "w": 1.0
+                },
+                "r": 1.0,
+                "m": "pink"
+            }
+        },
+        {
+            "type": "Sphere",
+            "properties": {
+                "c": {
+                    "x": -1.5,
+                    "y": 0.0,
+                    "z": 1.0,
+                    "w": 1.0
+                },
+                "r": 0.75,
+                "m": "lime"
+            }
+        }
+    ],
+    "lightSources": [
+        {
+            "type": "PointLightSource",
+            "properties": {
+                "pos": {
+                    "x": -10.0,
+                    "y": 10.0,
+                    "z": -10.0,
+                    "w": 1.0
+                },
+                "color": {
+                    "x": 0.51,
+                    "y": 0.85,
+                    "z": 0.91,
+                    "w": -1.0
+                },
+                "intensity": 50
+            }
+        },
+        {
+            "type": "PointLightSource",
+            "properties": {
+                "pos": {
+                    "x": 0.0,
+                    "y": 10.0,
+                    "z": -10.0,
+                    "w": 1.0
+                },
+                "color": {
+                    "x": 0.99,
+                    "y": 0.98,
+                    "z": 0.95,
+                    "w": -1.0
+                },
+                "intensity": 50
+            }
+        },
+        {
+            "type": "PointLightSource",
+            "properties": {
+                "pos": {
+                    "x": 10.0,
+                    "y": 10.0,
+                    "z": -10.0,
+                    "w": 1.0
+                },
+                "color": {
+                    "x": 0.98,
+                    "y": 0.4,
+                    "z": 0.53,
+                    "w": -1.0
+                },
+                "intensity": 50
+            }
+        }
+    ],
+    "materials": {
+        "magenta": {
+            "color": {
+                "x": 1.0,
+                "y": 0.0,
+                "z": 1.0,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 100,
+            "isMetallic": false
+        },
+        "pink": {
+            "color": {
+                "x": 0.98,
+                "y": 0.4,
+                "z": 0.53,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 100,
+            "isMetallic": false
+        },
+        "green": {
+            "color": {
+                "x": 0.0,
+                "y": 1.0,
+                "z": 0.0,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 100,
+            "isMetallic": false
+        },
+        "lime": {
+            "color": {
+                "x": 0.65,
+                "y": 0.87,
+                "z": 0.47,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 100,
+            "isMetallic": false
+        },
+        "yellow": {
+            "color": {
+                "x": 0.9,
+                "y": 0.9,
+                "z": 0.5,
+                "w": -1.0
+            },
+            "ambient": 0.1,
+            "diffuse": 0.9,
+            "specular": 0.2,
+            "shininess": 5,
+            "isMetallic": true
+        },
+        "black": {
+            "color": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 100,
+            "isMetallic": false
+        },
+        "cyan": {
+            "color": {
+                "x": 0.0,
+                "y": 1.0,
+                "z": 1.0,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 100,
+            "isMetallic": false
+        },
+        "red": {
+            "color": {
+                "x": 1.0,
+                "y": 0.0,
+                "z": 0.0,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 100,
+            "isMetallic": false
+        },
+        "orange": {
+            "color": {
+                "x": 0.97,
+                "y": 0.62,
+                "z": 0.42,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 100,
+            "isMetallic": false
+        },
+        "lemon": {
+            "color": {
+                "x": 0.98,
+                "y": 0.86,
+                "z": 0.42,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 100,
+            "isMetallic": false
+        },
+        "NO_MATERIAL": {
+            "color": {
+                "x": 1.0,
+                "y": 0.0,
+                "z": 1.0,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 1.0,
+            "specular": 0.0,
+            "shininess": 0,
+            "isMetallic": false
+        },
+        "gray": {
+            "color": {
+                "x": 0.5,
+                "y": 0.5,
+                "z": 0.5,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 100,
+            "isMetallic": false
+        },
+        "blue": {
+            "color": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 1.0,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 100,
+            "isMetallic": false
+        },
+        "white": {
+            "color": {
+                "x": 1.0,
+                "y": 1.0,
+                "z": 1.0,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 100,
+            "isMetallic": false
+        },
+        "light": {
+            "color": {
+                "x": 0.99,
+                "y": 0.98,
+                "z": 0.95,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 100,
+            "isMetallic": false
+        },
+        "dark": {
+            "color": {
+                "x": 0.17,
+                "y": 0.16,
+                "z": 0.18,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 100,
+            "isMetallic": false
+        },
+        "purple": {
+            "color": {
+                "x": 0.69,
+                "y": 0.6,
+                "z": 0.94,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 100,
+            "isMetallic": false
+        },
+        "azure": {
+            "color": {
+                "x": 0.51,
+                "y": 0.85,
+                "z": 0.91,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 100,
+            "isMetallic": false
+        }
+    },
+    "camera": {
+        "pos": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -2.0,
+            "w": 1.0
+        },
+        "lookAt": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+        },
+        "fov": 1.5707963267948966,
+        "width": 800,
+        "height": 800,
+        "pixelSize": 0.0024999999999999996,
+        "vpn": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0,
+            "w": 0.0
+        },
+        "up": {
+            "x": 0.0,
+            "y": 1.0,
+            "z": 0.0,
+            "w": 0.0
+        },
+        "right": {
+            "x": 1.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 0.0
+        }
+    }
+}
