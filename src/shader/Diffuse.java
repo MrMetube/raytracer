@@ -2,6 +2,7 @@ package shader;
 
 import math.*;
 import raytracer.*;
+import raytracer.light.LightSource;
 
 public class Diffuse extends Shader{
 
@@ -11,18 +12,12 @@ public class Diffuse extends Shader{
         Color il = new Color(0, 0, 0);
         Vector n = p.target().normal(p.hitPoint());
         for (LightSource ls : scene.getLightSources()) {
-            Vector l = ls.pos().sub(p.hitPoint());
-            double distance = l.mag();
-            l = l.div(distance);
-            distance = distance * distance;
-            
+            Vector l = ls.directionFrom(p.hitPoint());
             double nl = n.dot(l);
             //ignore reflected/opposite results
             nl = Math.max(nl,0);
-            Color lc = ls.color()
-                .mul(ls.intensity())
-                .mul(nl)
-                .div(distance);
+            Color lc = ls.colorAt(p.hitPoint())
+                .mul(nl);
             il = il.add(lc);
         }
         Color out = m.color()

@@ -2,6 +2,7 @@ package shader;
 
 import math.*;
 import raytracer.*;
+import raytracer.light.LightSource;
 
 public class Specular extends Shader{
 
@@ -13,20 +14,15 @@ public class Specular extends Shader{
         double n = m.shininess();
         Color il = new Color(0, 0, 0);
         for (LightSource ls : scene.getLightSources()) {
-            Vector l = ls.pos().sub(p.hitPoint());
-            double distance = l.mag();
-            l = l.div(distance);
-            distance = distance * distance;
+            Vector l = ls.directionFrom(p.hitPoint());
             Vector r = l.refl(p.target().normal(p.hitPoint())).norm();
             double vr = r.dot(v);
             // dont calc false values
             vr = Math.max(vr, 0);
             double vrn = Math.pow(vr,n);
-            Color lc = ls.color()
+            Color lc = ls.colorAt(p.hitPoint())
                 .mul(ks)
-                .mul(vrn)
-                .mul(ls.intensity())
-                .div(distance);
+                .mul(vrn);
             il = il.add(lc);
         }
         Color out = m.isMetallic() ? m.color().mul(il) : il;

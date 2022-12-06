@@ -1,16 +1,18 @@
 package shader;
 
 import math.Color;
+import math.Ray;
 import math.Vector;
-import raytracer.LightSource;
 import raytracer.Material;
 import raytracer.Payload;
 import raytracer.Scene;
 import raytracer.geometry.Geometry;
+import raytracer.light.LightSource;
 
 public class BlinnPhong extends Shader{
     @Override public Color getColor(Payload p, Scene scene) {
         // Constants
+        double epsilon = 0.0001;
         Geometry geometry = p.target();
         Material m = scene.getMaterials().get(geometry.material());
         
@@ -27,19 +29,22 @@ public class BlinnPhong extends Shader{
         Color ambient =  m.color().mul(ka);
 
         for (LightSource ls : scene.getLightSources()) {
-            Vector l = ls.pos().sub(p.hitPoint());
-            double distance = l.mag();
-            l = l.div(distance);
-            distance = distance * distance;
+            Vector l = ls.directionFrom(p.hitPoint());
+            //Check if it is in shade
+            boolean inShade = false;
+            Payload pl = new Payload(new Ray(p.hitPoint().add(n.mul(epsilon)), l));
+            for (Geometry g : scene.getGeometries()) {
+                if (g.intersect(pl)) {
+                    inShade = true;
+                    break;
+                }
+            }
+            if(inShade) continue;
             //diffuse
             double nl = n.dot(l);
             //ignore reflected/opposite results
             nl = Math.max(nl,0);
-            il = il.add(ls.color()
-                .mul(nl)
-                .mul(ls.intensity())
-                .div(distance)
-            );
+            il = il.add(ls.colorAt(p.hitPoint()).mul(nl));
             //specular
             Vector h = v.add(l).norm();
             double nh = h.dot(n);
@@ -47,11 +52,9 @@ public class BlinnPhong extends Shader{
             nh = Math.max(nh,0);
             double nhs = Math.pow(nh,s*4);
 
-            Color lc = ls.color()
+            Color lc = ls.colorAt(p.hitPoint())
                 .mul(ks)
-                .mul(nhs)
-                .mul(ls.intensity())
-                .div(distance);
+                .mul(nhs);
             il = il.add(lc);
         }
 
