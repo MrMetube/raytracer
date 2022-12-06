@@ -11,10 +11,12 @@ import com.google.gson.GsonBuilder;
 
 import math.Color;
 import math.Point;
+import math.Vector;
 import raytracer.geometry.Geometry;
 import raytracer.geometry.Sphere;
-import raytracer.gson.GeometryAdapter;
-import raytracer.gson.LightSourceAdapter;
+import raytracer.light.*;
+import raytracer.stuff.GeometryAdapter;
+import raytracer.stuff.LightSourceAdapter;
 
 public class Scene {
     HashSet<Geometry> geometries;
@@ -54,15 +56,15 @@ public class Scene {
     public static Scene randomSpheres(int count){
         Scene s = new Scene();
         s.addBasicMaterials();
-        s.addLightSource(new PointLightSource(new Point(0, 10, 10), Color.WHITE, 60));
-        s.addLightSource(new PointLightSource(new Point(0, 10, -10), Color.PINK, 30));
+        s.addLightSource(new PointLight(new Point(0, 10, -10), Color.WHITE, 10));
+        s.addLightSource(new DirectionalLight(new Vector(0, -1, 0), Color.WHITE, 1));
         Object[] materials = s.getMaterials().keySet().toArray();
         Random rdm = new Random();
         for (int i = 0; i < count; i++) {
             double x = rdm.nextDouble(-10,10);
             double y = rdm.nextDouble(-10,10);
             double z = rdm.nextDouble(-10,10);
-            double r = rdm.nextDouble(0.1,1);
+            double r = rdm.nextDouble(.5,1.5);
             int m = rdm.nextInt(0,materials.length);
             if(materials[m] instanceof String)
                 s.addGeometry(new Sphere(new Point(x,y,z), r, (String)materials[m]));
@@ -102,6 +104,5 @@ public class Scene {
         addMaterial("silver",    Material.SILVER  );
         addMaterial("bronze",    Material.BRONZE  );
         addMaterial("copper",    Material.COPPER  );
-
     }
 }

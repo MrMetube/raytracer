@@ -16,7 +16,7 @@
     ],
     "lightSources": [
         {
-            "type": "PointLightSource",
+            "type": "PointLight",
             "properties": {
                 "pos": {
                     "x": -2.0,
@@ -30,11 +30,11 @@
                     "z": 0.0,
                     "w": -1.0
                 },
-                "intensity": 20
+                "intensity": 7
             }
         },
         {
-            "type": "PointLightSource",
+            "type": "PointLight",
             "properties": {
                 "pos": {
                     "x": 0.0,
@@ -48,11 +48,11 @@
                     "z": 1.0,
                     "w": -1.0
                 },
-                "intensity": 20
+                "intensity": 7
             }
         },
         {
-            "type": "PointLightSource",
+            "type": "PointLight",
             "properties": {
                 "pos": {
                     "x": 2.0,
@@ -66,7 +66,7 @@
                     "z": 0.0,
                     "w": -1.0
                 },
-                "intensity": 20
+                "intensity": 7
             }
         }
     ],

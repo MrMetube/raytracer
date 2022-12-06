@@ -4,6 +4,7 @@ import gui.World;
 import math.Point;
 import math.Ray;
 import math.Vector;
+import raytracer.stuff.SupersamplingMode;
 
 public class Camera {
     Point pos;
@@ -48,7 +49,7 @@ public class Camera {
     public Payload[] generatePayload(int x, int y){
         double xOffset, yOffset;
         Vector dir;
-        Payload[] out;
+        Payload[] out = {};
 
         switch(supersampling){
             case NONE:
@@ -56,7 +57,16 @@ public class Camera {
                 yOffset = (y + 0.5 - height / 2) * pixelSize;
                 dir = right.mul(xOffset).add(up.mul(yOffset)).add(vpn);
                 out = new Payload[] { new Payload( new Ray(pos, dir)) };
-                return out;
+                break;
+            case X4: // Generate 4 Rays in a square around the center
+                out = new Payload[4];
+                for (int i = 0; i < 2; i++) for (int j = 0; j < 2; j++) {
+                    xOffset = (x + 0.25 + (0.5*i) - width  / 2) * pixelSize;
+                    yOffset = (y + 0.25 + (0.5*j) - height / 2) * pixelSize;
+                    dir = right.mul(xOffset).add(up.mul(yOffset)).add(vpn);
+                    out[i*2+j] = new Payload( new Ray(pos, dir));
+                }
+                break;
             case X9: // Generate 9 Rays, 4 corners, 4 sides, 1 middle
                 out = new Payload[9];
                 for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) {
@@ -65,10 +75,11 @@ public class Camera {
                     dir = right.mul(xOffset).add(up.mul(yOffset)).add(vpn);
                     out[i*3+j] = new Payload( new Ray(pos, dir));
                 }
-                return out;
+                break;
             default: // just deactivate ss if it isnt set for whatever reason
-                return new Payload[0];
+                break;
         }
+        return out;
     }
 
     public void move(Vector dir){

@@ -1,4 +1,4 @@
-package raytracer.gson;
+package raytracer.stuff;
 
 import java.lang.reflect.Type;
 

@@ -10,8 +10,8 @@ import math.Point;
 import math.Vector;
 import raytracer.Camera;
 import raytracer.Scene;
-import raytracer.SupersamplingMode;
 import raytracer.Trace;
+import raytracer.stuff.SupersamplingMode;
 import shader.Phong;
 import shader.Shader;
 
@@ -79,7 +79,7 @@ public class World{
         // frameBuffer = tempBuffer;
         // I tried using an additive FrameBuffer, but it didnt work
         // Because when colors are turned to rgb ints their values are clamped to not break to format.
-        // It would require stroing the image as a 2D-Color-Array to not lose information between frames.
+        // It would require storing the image as a 2D-Color-Array to not lose information between frames.
         // frameBufferCount++;
         // for (int x=0; x<frameBuffer.getWidth(); x++) for (int y = 0; y < frameBuffer.getHeight(); y++) {
         //     Color current = new Color(tempBuffer.getRGB(x, y));
@@ -113,7 +113,7 @@ public class World{
         
         long start = System.nanoTime();
         for (int i = 0; i < count; i++) renderImage(image);
-        System.out.printf("%s Saving took:    %s ms%n",name, (System.nanoTime()-start)/1_000_000);
+        System.out.printf("%s Rendering took:    %s ms%n",name, (System.nanoTime()-start)/1_000_000);
         this.shader = backup;
     }
 

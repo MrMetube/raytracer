@@ -10,7 +10,7 @@ import javax.swing.event.MouseInputListener;
 import java.awt.Robot;
 
 import math.Vector;
-import raytracer.SupersamplingMode;
+import raytracer.stuff.SupersamplingMode;
 import shader.*;
 
 public class Input implements KeyListener, MouseInputListener {
@@ -51,7 +51,8 @@ public class Input implements KeyListener, MouseInputListener {
         keyMap.put(KeyEvent.VK_8, new Distance());
 
         keyMap.put(KeyEvent.VK_F1, SupersamplingMode.NONE);
-        keyMap.put(KeyEvent.VK_F2, SupersamplingMode.X9);
+        keyMap.put(KeyEvent.VK_F2, SupersamplingMode.X4);
+        keyMap.put(KeyEvent.VK_F3, SupersamplingMode.X9);
     }
 
     @Override

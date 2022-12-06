@@ -155,7 +155,7 @@
     ],
     "lightSources": [
         {
-            "type": "PointLightSource",
+            "type": "PointLight",
             "properties": {
                 "pos": {
                     "x": 0.0,
@@ -173,7 +173,7 @@
             }
         },
         {
-            "type": "PointLightSource",
+            "type": "PointLight",
             "properties": {
                 "pos": {
                     "x": 5.0,

@@ -1,4 +1,4 @@
-package raytracer.gson;
+package raytracer.stuff;
 
 import java.lang.reflect.Type;
 
@@ -11,7 +11,7 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
 
-import raytracer.LightSource;
+import raytracer.light.LightSource;
 
 public class LightSourceAdapter implements JsonDeserializer<LightSource> ,JsonSerializer<LightSource>{
     
@@ -30,7 +30,7 @@ public class LightSourceAdapter implements JsonDeserializer<LightSource> ,JsonSe
         String type = jsonObject.get("type").getAsString();
         JsonElement element = jsonObject.get("properties");
         try {
-            return context.deserialize(element, Class.forName("raytracer." + type));
+            return context.deserialize(element, Class.forName("raytracer.light." + type));
         } catch (ClassNotFoundException cnfe) {
             throw new JsonParseException("Unknown element type: " + type, cnfe);
         }

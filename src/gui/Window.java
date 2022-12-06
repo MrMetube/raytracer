@@ -31,7 +31,7 @@ public class Window extends JFrame implements ActionListener{
 
     BufferedImage image;
     Vector camMovement = Vector.ZERO;
-    Timer clock = new Timer(16, this);
+    Timer clock = new Timer(1, this);
 
     public Window(){
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);

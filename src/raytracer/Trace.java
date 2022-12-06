@@ -4,6 +4,7 @@ import math.Color;
 import raytracer.geometry.Geometry;
 
 import java.awt.image.BufferedImage;
+
 import shader.Shader;
 
 public class Trace implements Runnable{

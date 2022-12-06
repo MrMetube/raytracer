@@ -4,25 +4,6 @@
             "type": "Plane",
             "properties": {
                 "n": {
-                    "x": -0.5773502691896258,
-                    "y": 0.5773502691896258,
-                    "z": -0.5773502691896258,
-                    "w": 0.0
-                },
-                "p": {
-                    "x": 2.0,
-                    "y": 0.0,
-                    "z": 0.0,
-                    "w": 1.0
-                },
-                "r": 1.0,
-                "m": "lemon"
-            }
-        },
-        {
-            "type": "Plane",
-            "properties": {
-                "n": {
                     "x": 0.0,
                     "y": 1.0,
                     "z": 0.0,
@@ -34,7 +15,6 @@
                     "z": 0.0,
                     "w": 1.0
                 },
-                "r": 5.0,
                 "m": "white"
             }
         },
@@ -104,25 +84,6 @@
             }
         },
         {
-            "type": "Plane",
-            "properties": {
-                "n": {
-                    "x": 0.5773502691896258,
-                    "y": 0.5773502691896258,
-                    "z": -0.5773502691896258,
-                    "w": 0.0
-                },
-                "p": {
-                    "x": -2.0,
-                    "y": 0.0,
-                    "z": 0.0,
-                    "w": 1.0
-                },
-                "r": 1.0,
-                "m": "pink"
-            }
-        },
-        {
             "type": "Sphere",
             "properties": {
                 "c": {
@@ -138,7 +99,7 @@
     ],
     "lightSources": [
         {
-            "type": "PointLightSource",
+            "type": "PointLight",
             "properties": {
                 "pos": {
                     "x": -10.0,
@@ -152,11 +113,11 @@
                     "z": 0.91,
                     "w": -1.0
                 },
-                "intensity": 50
+                "intensity": 10
             }
         },
         {
-            "type": "PointLightSource",
+            "type": "PointLight",
             "properties": {
                 "pos": {
                     "x": 0.0,
@@ -170,11 +131,11 @@
                     "z": 0.95,
                     "w": -1.0
                 },
-                "intensity": 50
+                "intensity": 10
             }
         },
         {
-            "type": "PointLightSource",
+            "type": "PointLight",
             "properties": {
                 "pos": {
                     "x": 10.0,
@@ -188,7 +149,7 @@
                     "z": 0.53,
                     "w": -1.0
                 },
-                "intensity": 50
+                "intensity": 10
             }
         }
     ],
