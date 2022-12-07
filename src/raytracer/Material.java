@@ -19,7 +19,7 @@ public record Material(Color color, double ambient, double diffuse, double specu
     public static Material ORANGE    = new Material(Color.ORANGE,  .2, .9, .1, 0, false);
     public static Material LEMON     = new Material(Color.LEMON ,  .2, .9, .1, 0, false);
     public static Material LIME      = new Material(Color.LIME  ,  .2, .9, .1, 0, false);
-    public static Material TURQOUISE = new Material(Color.TURQOUISE ,  .2, .9, .1, 0, false);
+    public static Material TURQUOISE = new Material(Color.TURQUOISE ,  .2, .9, .1, 0, false);
     public static Material PURPLE    = new Material(Color.PURPLE,  .2, .9, .1, 0, false);
     public static Material DARK      = new Material(Color.DARK  ,  .2, .9, .1, 0, false);
     public static Material LIGHT     = new Material(Color.LIGHT ,  .2, .9, .1, 0, false);

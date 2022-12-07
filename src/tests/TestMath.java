@@ -163,7 +163,7 @@ class TestMath {
 
     @Test void colorFromRGB(){
         Color r = Color.LEMON;
-        Color g = Color.TURQOUISE;
+        Color g = Color.TURQUOISE;
         Color b = new Color(Math.sqrt(2)/2, Math.PI/4, Math.E/3);
 
         Color r2 = new Color(r.rgb());

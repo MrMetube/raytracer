@@ -92,7 +92,7 @@ public class Input implements KeyListener, MouseInputListener {
             // xOffset = ((float) e.getXOnScreen() - centerX) / window.getWidth();
             // yOffset = ((float) e.getYOnScreen() - centerY) / window.getHeight();
             
-            // TODO Rotation
+            // todo Rotation
             // robot.mouseMove(centerX, centerY);
         }
         // System.out.printf("xOffset: %s, yOffset: %s %n", mouseXOffset,mouseYOffset);

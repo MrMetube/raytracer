@@ -75,7 +75,7 @@ public class World{
 
     public void renderFrame(){
         renderImage(frameBuffer);
-        // BufferedImage tempBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
+        // BufferedImage tempBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_ARGB);
         // frameBuffer = tempBuffer;
         // I tried using an additive FrameBuffer, but it didnt work
         // Because when colors are turned to rgb ints their values are clamped to not break to format.

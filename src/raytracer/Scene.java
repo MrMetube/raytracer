@@ -12,7 +12,9 @@ import com.google.gson.GsonBuilder;
 import math.Color;
 import math.Point;
 import math.Vector;
+import raytracer.geometry.Cube;
 import raytracer.geometry.Geometry;
+import raytracer.geometry.Plane;
 import raytracer.geometry.Sphere;
 import raytracer.light.*;
 import raytracer.stuff.GeometryAdapter;
@@ -66,8 +68,15 @@ public class Scene {
             double z = rdm.nextDouble(-10,10);
             double r = rdm.nextDouble(.5,1.5);
             int m = rdm.nextInt(0,materials.length);
-            if(materials[m] instanceof String)
-                s.addGeometry(new Sphere(new Point(x,y,z), r, (String)materials[m]));
+            if(materials[m] instanceof String){
+                int d = rdm.nextInt(2);
+                Geometry g = null;
+                if(d==0) g = new Sphere(new Point(x,y,z), r, (String)materials[m]);
+                else if (d==1) g = new Cube(new Point(x,y,z), new Point(x+r,y+r,z+r), (String)materials[m]);
+                // else if (d == 2) g = new Plane(new Vector(rdm.nextDouble(-1,1), rdm.nextDouble(-1,1), rdm.nextDouble(-1,1)), new Point(x, y, z), r, (String)materials[m]);
+                s.addGeometry(g);
+            }
+                
         }
         return s;
     }
@@ -96,7 +105,7 @@ public class Scene {
         addMaterial("orange",    Material.ORANGE );
         addMaterial("lemon",     Material.LEMON    );
         addMaterial("lime",      Material.LIME   );
-        addMaterial("turqouise", Material.TURQOUISE  );
+        addMaterial("turquoise", Material.TURQUOISE  );
         addMaterial("purple",    Material.PURPLE );
         addMaterial("light",     Material.LIGHT  );
         
