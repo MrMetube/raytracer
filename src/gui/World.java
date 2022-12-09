@@ -1,90 +1,170 @@
 package gui;
+
+
+
+import java.awt.*;
+import java.awt.Robot;
+import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import javax.imageio.ImageIO;
+import javax.swing.*;
+import javax.swing.event.MouseInputListener;
+import javax.swing.filechooser.FileFilter;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 import math.Point;
-import math.Vector;
-import raytracer.Camera;
-import raytracer.Scene;
-import raytracer.Trace;
-import raytracer.stuff.SupersamplingMode;
-import shader.Phong;
-import shader.Shader;
-
-import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
-import java.awt.event.MouseEvent;
-import java.util.HashMap;
-import java.util.HashSet;
-
-import javax.swing.event.MouseInputListener;
-import java.awt.Robot;
-
-import math.Vector;
-import raytracer.stuff.SupersamplingMode;
+import raytracer.*;
+import raytracer.stuff.Move;
+import raytracer.stuff.Supersampling;
+import raytracer.stuff.Turn;
 import shader.*;
 
-public class World implements KeyListener, MouseInputListener {
+public class World extends JFrame implements ActionListener, KeyListener, MouseInputListener {
     BufferedImage frameBuffer;
-    int width,height;
-    Camera camera;
+    
 
     Scene scene = new Scene();
     Shader shader = new Phong();
-    SupersamplingMode supersampling = SupersamplingMode.NONE;
+    Supersampling supersampling = Supersampling.NONE;
 
     HashMap<Integer,Object> keyMap = new HashMap<>();
-    HashSet<Vector> moveKeys = new HashSet<>();
+    HashSet<Move> moveKeys = new HashSet<>();
+    HashSet<Turn> turnKeys = new HashSet<>();
     float xOffset = 0;
     float yOffset = 0;
     boolean captureMouse = false;
     Robot robot;
 
+    Timer clock = new Timer(1, this);
 
-    private double cameraSpeed = 0.2;
+    int randomCount = 100;
+
     int frameBufferCount = 0;
+    int threadCount = Runtime.getRuntime().availableProcessors();
 
-    public World(int width, int height){
-        this.width = width;
-        this.height = height;
-        this.camera = new Camera(new Point(0, 0, -1), Point.ZERO, 90, this);
+    JFileChooser chooser;
+    JMenuItem fileItem;
+    JMenuItem rndmItem;
+    JMenuItem quitItem;
+    View view;
+
+    int width = 800;
+    int height = 800;
+
+    Camera camera;
+
+    public World(){
+        { // setup Frame
+            setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            setTitle("Raytracer");
+            setSize(800,800);
+            setResizable(false);
+            setLocationRelativeTo(null);
+            setFocusTraversalKeysEnabled(false);
+            
+            JMenuBar menubar = new JMenuBar();
+            JMenu sceneMenu = new JMenu("Scene");
+
+            fileItem = new JMenuItem("Open File",KeyEvent.VK_F);
+            rndmItem = new JMenuItem("Random Scene",KeyEvent.VK_R);
+            quitItem = new JMenuItem("Quit",KeyEvent.VK_Q);
+
+            fileItem.addActionListener(this);
+            rndmItem.addActionListener(this);
+            quitItem.addActionListener(this);
+
+            sceneMenu.setMnemonic(KeyEvent.VK_C);
+            sceneMenu.add(fileItem);
+            sceneMenu.add(rndmItem);
+            sceneMenu.add(quitItem);
+
+            menubar.add(sceneMenu);
+            setJMenuBar(menubar);
+
+            chooser = new JFileChooser("./scenes/");
+            chooser.setDialogTitle("Scene auswählen");
+            chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+            chooser.addChoosableFileFilter((FileFilter) new FileNameExtensionFilter("JSON File","json"));
+            chooser.setAcceptAllFileFilterUsed(false);
+
+            view = new View(width,height);
+            view.setBounds(0, 0, width, height);
+            add(view);
+
+            BufferedImage cursorImg = new BufferedImage(16,16, BufferedImage.TYPE_INT_ARGB);
+            Cursor blank = Toolkit.getDefaultToolkit().createCustomCursor(cursorImg, new java.awt.Point(0,0), "blank");
+            getContentPane().setCursor(blank);
+
+            addMouseListener(this);
+            addMouseMotionListener(this);
+            addKeyListener(this);
+
+            try{ robot = new Robot(); }catch(Exception e){}
+
+            setVisible(true);
+        }
+
+        { // setup KeyMap
+            keyMap.put(KeyEvent.VK_W, Move.FORWARD);
+            keyMap.put(KeyEvent.VK_A, Move.LEFT);
+            keyMap.put(KeyEvent.VK_S, Move.BACKWARD);
+            keyMap.put(KeyEvent.VK_D, Move.RIGHT);
+            keyMap.put(KeyEvent.VK_SPACE, Move.UP);
+            keyMap.put(KeyEvent.VK_SHIFT, Move.DOWN);
+
+            keyMap.put(KeyEvent.VK_UP,    Turn.UP);
+            keyMap.put(KeyEvent.VK_DOWN,  Turn.DOWN);
+            keyMap.put(KeyEvent.VK_LEFT,  Turn.LEFT);
+            keyMap.put(KeyEvent.VK_RIGHT, Turn.RIGHT);
+
+            keyMap.put(KeyEvent.VK_1, new Phong());
+            keyMap.put(KeyEvent.VK_2, new BlinnPhong());
+            keyMap.put(KeyEvent.VK_3, new Specular());
+            keyMap.put(KeyEvent.VK_4, new Diffuse());
+            keyMap.put(KeyEvent.VK_5, new Ambient());
+            keyMap.put(KeyEvent.VK_6, new Intersect());
+            keyMap.put(KeyEvent.VK_7, new Normal());
+            keyMap.put(KeyEvent.VK_8, new Distance());
+
+            keyMap.put(KeyEvent.VK_F1, Supersampling.NONE);
+            keyMap.put(KeyEvent.VK_F2, Supersampling.X4);
+            keyMap.put(KeyEvent.VK_F3, Supersampling.X9);
+        }
+
+        this.camera = new Camera(new Point(0, 0, -10), Point.ZERO, 90, this);
         frameBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
 
-        setupKeyMap();
-        try{ robot = new Robot(); }catch(Exception e){}
+        clock.start();
     }
 
 
     public void tick(){
-        Vector dir = getCamMove();
-        if( dir != Vector.ZERO) {
-            //Camera movement
-            camera.move(dir.mul(cameraSpeed));
-            //Camera rotation
-            // double yOffset = Menu.input.getYOffset(), xOffset = Menu.input.getXOffset();
-            // if(yOffset != 0 || xOffset != 0) cam.rotate(yOffset, xOffset);
-            // frameBufferCount = 0;
-            // frameBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
-        }
+        if(!moveKeys.isEmpty())
+            camera.move(moveKeys);
+        if(!turnKeys.isEmpty())
+            camera.rotate(turnKeys);
+        // frameBufferCount = 0;
+        // frameBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
     }
 
     public void setScene(Scene scene){ this.scene = scene; }
     public void setShader(Shader shader){ this.shader = shader; }
-    public void setSupersampling(SupersamplingMode mode){ camera.setSupersampling(mode);}
+    public void setSupersampling(Supersampling mode){ camera.setSupersampling(mode);}
     
     public int getWidth() { return width; }
     public int getHeight() { return height; }
     public Scene getScene() { return scene; }
     public Shader getShader(){ return shader; }
     public BufferedImage getFrameBuffer(){ return frameBuffer;}
-    public SupersamplingMode getSupersampling() { return supersampling; }
+    public Supersampling getSupersampling() { return supersampling; }
 
     public void renderImage(BufferedImage image){
-        int threadCount = Runtime.getRuntime().availableProcessors();
         ExecutorService exe =  Executors.newFixedThreadPool(threadCount);
         int deltaHeight = (height / threadCount)+1;
         for (int i = 0; i < threadCount; i++) 
@@ -142,45 +222,19 @@ public class World implements KeyListener, MouseInputListener {
         try { ImageIO.write(frameBuffer, "png", file); } catch (Exception e) {}
     }
 
-    public void setupKeyMap(){
-        keyMap.put(KeyEvent.VK_D,     Vector.Xpos);
-        keyMap.put(KeyEvent.VK_A,     Vector.Xneg);
-        keyMap.put(KeyEvent.VK_W,     Vector.Zpos);
-        keyMap.put(KeyEvent.VK_S,     Vector.Zneg);
-        keyMap.put(KeyEvent.VK_RIGHT, Double.valueOf(40));
-        keyMap.put(KeyEvent.VK_LEFT,  Double.valueOf(-40));
-        keyMap.put(KeyEvent.VK_UP,    Double.valueOf(-40));
-        keyMap.put(KeyEvent.VK_DOWN,  Double.valueOf(40));
-        keyMap.put(KeyEvent.VK_SPACE, Vector.Ypos);
-        keyMap.put(KeyEvent.VK_SHIFT, Vector.Yneg);
-
-        keyMap.put(KeyEvent.VK_1, new Phong());
-        keyMap.put(KeyEvent.VK_2, new BlinnPhong());
-        keyMap.put(KeyEvent.VK_3, new Specular());
-        keyMap.put(KeyEvent.VK_4, new Diffuse());
-        keyMap.put(KeyEvent.VK_5, new Ambient());
-        keyMap.put(KeyEvent.VK_6, new Intersect());
-        keyMap.put(KeyEvent.VK_7, new Normal());
-        keyMap.put(KeyEvent.VK_8, new Distance());
-
-        keyMap.put(KeyEvent.VK_F1, SupersamplingMode.NONE);
-        keyMap.put(KeyEvent.VK_F2, SupersamplingMode.X4);
-        keyMap.put(KeyEvent.VK_F3, SupersamplingMode.X9);
-    }
-
-     @Override
+    @Override
     public void keyPressed(KeyEvent e) {
         Object o = keyMap.get(e.getKeyCode());
-             if( o instanceof Vector) moveKeys.add((Vector)o);
-        else if( o instanceof Double) {
-            camera.rotate((double)o, 0);
-            System.out.println("Should rotate");
-        }else if( o instanceof Shader) {
+             if( o instanceof Move) 
+            moveKeys.add((Move)o);
+        else if( o instanceof Turn) {
+            turnKeys.add((Turn)o);
+        } else if( o instanceof Shader) {
             setShader((Shader) o);
             System.out.println("Shader: " + (Shader) o);
-        }else if( o instanceof SupersamplingMode) {
-            setSupersampling((SupersamplingMode) o);
-            System.out.println("Supersamplingmode: " + ((SupersamplingMode) o).name());
+        }else if( o instanceof Supersampling) {
+            setSupersampling((Supersampling) o);
+            System.out.println("Supersamplingmode: " + ((Supersampling) o).name());
         }else if( e.getKeyCode()==KeyEvent.VK_F12){
             renderToFile(new Ambient(), false);
             renderToFile(new Diffuse(), false);
@@ -194,7 +248,8 @@ public class World implements KeyListener, MouseInputListener {
     @Override
     public void keyReleased(KeyEvent e) {
         Object o = keyMap.get(e.getKeyCode());
-        if(o instanceof Vector) moveKeys.remove((Vector)o);
+        if(o instanceof Move) moveKeys.remove((Move)o);
+        else if(o instanceof Turn) turnKeys.remove((Turn)o);
     }
     
     @Override
@@ -214,13 +269,21 @@ public class World implements KeyListener, MouseInputListener {
         // System.out.printf("xOffset: %s, yOffset: %s %n", mouseXOffset,mouseYOffset);
     }
 
-    public double getXOffset(){ return xOffset; }
-    public double getYOffset(){ return yOffset; }
-
-    public Vector getCamMove(){ 
-        Vector dir = Vector.ZERO;
-        for (Vector vector : moveKeys) dir = dir.add(vector);
-        return dir;   
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        if(e.getSource() == clock){
+            tick();
+            renderFrame();
+            view.setImage(frameBuffer);
+        }else if(e.getSource() == rndmItem) {
+            setScene(Scene.randomSpheres(randomCount));
+            System.out.println("Random Scene selected");
+        }else if(e.getSource() == fileItem && chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION){
+            setScene(new Scene("./scenes/" + chooser.getSelectedFile().getName()));
+            System.out.println("File selected: "+chooser.getSelectedFile().getName());
+        }else if(e.getSource() == quitItem) 
+            System.exit(0);
+        
     }
 
     @Override public void mouseClicked(MouseEvent e)  { captureMouse = !captureMouse;}
@@ -230,5 +293,4 @@ public class World implements KeyListener, MouseInputListener {
     @Override public void mouseReleased(MouseEvent e) {}
     @Override public void mouseDragged(MouseEvent e)  {}
     @Override public void keyTyped(KeyEvent e)        {}
-
 }

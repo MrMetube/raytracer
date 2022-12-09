@@ -1,10 +1,14 @@
 package raytracer;
 
+import java.util.HashSet;
+
 import gui.World;
 import math.Point;
 import math.Ray;
 import math.Vector;
-import raytracer.stuff.SupersamplingMode;
+import raytracer.stuff.Move;
+import raytracer.stuff.Supersampling;
+import raytracer.stuff.Turn;
 
 public class Camera {
     Point pos;
@@ -20,7 +24,10 @@ public class Camera {
     Vector right;
 
     World world;
-    SupersamplingMode supersampling = SupersamplingMode.NONE;
+    Supersampling supersampling = Supersampling.NONE;
+
+    double moveSpeed = 0.7;
+    double turnSpeed = 5;
 
     public Camera(Point pos, Point lookAt, double fovDeg, World world) {
         this.pos = pos;
@@ -82,18 +89,48 @@ public class Camera {
         return out;
     }
 
-    public void move(Vector dir){
+    public void move(HashSet<Move> moves){
         //This doesnt work when the cam is not looking directly forward
+        Vector dir = Vector.ZERO;
+        if(moves.contains(Move.FORWARD))
+            dir = dir.add(vpn);
+        if(moves.contains(Move.BACKWARD))
+            dir = dir.add(vpn.neg());
+        if(moves.contains(Move.LEFT))
+            dir = dir.add(right.neg());
+        if(moves.contains(Move.RIGHT))
+            dir = dir.add(right);
+        if(moves.contains(Move.UP))
+            dir = dir.add(up);
+        if(moves.contains(Move.DOWN))
+            dir = dir.add(up.neg());
+
+        dir = dir.mul(moveSpeed);
         pos = pos.add(dir);
         lookAt = lookAt.add(dir);
         calcVectors();
     }
     
+    public void rotate(HashSet<Turn> turns){
+        int rotX = 0, rotY = 0;
+        if(turns.contains(Turn.UP))
+            rotX += turnSpeed;
+        if(turns.contains(Turn.DOWN))
+            rotX -= turnSpeed;
+        if(turns.contains(Turn.LEFT))
+            rotY -= turnSpeed;
+        if(turns.contains(Turn.RIGHT))
+            rotY += turnSpeed;
+        rotate(rotX, rotY);
+    }
+
     public void rotate(double angleX, double angleY){
-        lookAt = lookAt.add(vpn.rotate(angleX, up), vpn.rotate(angleX, right));
+        Vector dir = vpn.rotate(angleX, right).add(vpn.rotate(angleY, up)).norm();
+        lookAt = pos.add(dir);
+
         calcVectors();
     }
     
     public Point pos() {return pos;}
-    public void setSupersampling(SupersamplingMode mode){supersampling = mode;}
+    public void setSupersampling(Supersampling mode){supersampling = mode;}
 }

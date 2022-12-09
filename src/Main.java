@@ -25,7 +25,7 @@ class Main {
         // s.toJson("cube");
         //#endregion
         
-        new Window();
+        new World();
 
         //#region testing speed
         

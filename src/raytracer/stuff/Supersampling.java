@@ -1,6 +1,6 @@
 package raytracer.stuff;
 
-public enum SupersamplingMode{
+public enum Supersampling{
     NONE,
     X4,
     X9
