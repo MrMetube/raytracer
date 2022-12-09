@@ -1,10 +1,10 @@
 package math;
 
 public class Tuple {
-    final double x;
-    final double y;
-    final double z;
-    final double w;
+    protected final double x;
+    protected final double y;
+    protected final double z;
+    protected final double w;
 
     public Tuple(double x, double y, double z, double w){
         this.x = x;
