@@ -50,6 +50,23 @@ public class Vector extends Tuple{
         return this.sub(n.mul(2*this.dot(n)));
     }
 
+    public Vector rotate(double angle, Vector axis){
+        double sinHalfAngle = Math.sin(Math.toRadians(angle/2));
+        double cosHalfAngle = Math.cos(Math.toRadians(angle/2));
+
+        double rX = axis.x() * sinHalfAngle;
+        double rY = axis.y() * sinHalfAngle;
+        double rZ = axis.z() * sinHalfAngle;
+        double rW = cosHalfAngle;
+
+        Quaternion rot = new Quaternion(rX, rY, rZ, rW);
+        Quaternion con = rot.con();
+
+        Quaternion q = rot.mul(this).mul(con);
+
+        return new Vector(q.x(), q.y(), q.z());
+    }
+
     @Override
     public String toString(){ return String.format("(%.02f | %.02f | %.02f)",x,y,z); }
 }

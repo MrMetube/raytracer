@@ -1,10 +1,10 @@
 
 import gui.*;
-import math.*;
-import shader.*;
-import raytracer.*;
-import raytracer.light.*;
-import raytracer.geometry.*;
+// import math.*;
+// import shader.*;
+// import raytracer.*;
+// import raytracer.light.*;
+// import raytracer.geometry.*;
 
 class Main {
     public static void main(String[] args){

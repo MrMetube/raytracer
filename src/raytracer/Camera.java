@@ -25,19 +25,19 @@ public class Camera {
     public Camera(Point pos, Point lookAt, double fovDeg, World world) {
         this.pos = pos;
         this.lookAt = lookAt;
-        this.fov = Math.toRadians(fovDeg);
-        this.width = world.getWidth();
-        this.height = world.getHeight();
+        fov = Math.toRadians(fovDeg);
+        width = world.getWidth();
+        height = world.getHeight();
 
         double aspectRatio = width/height;
         double halfHeight = Math.tan(fov/2);
-        this.pixelSize = (aspectRatio < 1 ? halfHeight : halfHeight/aspectRatio) * 2/height ;
+        pixelSize = (aspectRatio < 1 ? halfHeight : halfHeight/aspectRatio) * 2/height ;
 
         calcVectors();
     }
 
     private void calcVectors(){
-        this.vpn = lookAt.sub(pos).norm();
+        vpn = lookAt.sub(pos).norm();
         // Dies funtioniert nicht, wenn vpn = (0,1,0) ist, weil dann ein Null-Vektor entsteht.
         // Man sollte einfach einen leicht anderen Vektor nehmen. 
         if(vpn.cross(new Vector(0, 1, 0)) != new Vector(0, 0, 0)){
@@ -83,11 +83,14 @@ public class Camera {
     }
 
     public void move(Vector dir){
-        this.pos = pos.add(dir);
+        //This doesnt work when the cam is not looking directly forward
+        pos = pos.add(dir);
+        lookAt = lookAt.add(dir);
+        calcVectors();
     }
     
-    public void rotate(double x, double y){
-        lookAt.add(new Vector(x, y, 0));
+    public void rotate(double angleX, double angleY){
+        lookAt = lookAt.add(vpn.rotate(angleX, up), vpn.rotate(angleX, right));
         calcVectors();
     }
     

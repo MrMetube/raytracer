@@ -14,7 +14,7 @@ import math.Point;
 import math.Vector;
 import raytracer.geometry.Cube;
 import raytracer.geometry.Geometry;
-import raytracer.geometry.Plane;
+// import raytracer.geometry.Plane;
 import raytracer.geometry.Sphere;
 import raytracer.light.*;
 import raytracer.stuff.GeometryAdapter;
