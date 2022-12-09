@@ -74,9 +74,9 @@ public class Window extends JFrame implements ActionListener{
         Cursor blank = Toolkit.getDefaultToolkit().createCustomCursor(cursorImg, new Point(0,0), "blank");
         getContentPane().setCursor(blank);
 
-        addMouseListener(world.getInput());
-        addMouseMotionListener(world.getInput());
-        addKeyListener(world.getInput());
+        addMouseListener(world);
+        addMouseMotionListener(world);
+        addKeyListener(world);
 
         setVisible(true);
         clock.start();
