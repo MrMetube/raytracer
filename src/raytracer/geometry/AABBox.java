@@ -6,17 +6,17 @@ import math.Ray;
 import math.Vector;
 import raytracer.Payload;
 
-public class Cube extends Geometry{
+public class AABBox extends Geometry{
 
     private Point min;
     private Point max;
 
-    public Cube(Point min, Point max, String material) {
+    public AABBox(Point min, Point max, String material) {
         this.min = min;
         this.max = max;
         this.m = material;
     }
-    public Cube(Point min, Point max) {
+    public AABBox(Point min, Point max) {
         this.min = min;
         this.max = max;
         this.m = NO_MATERIAL;
