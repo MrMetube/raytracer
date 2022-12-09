@@ -1,7 +1,5 @@
 package gui;
 
-
-
 import java.awt.*;
 import java.awt.Robot;
 import java.awt.event.*;
@@ -19,15 +17,18 @@ import javax.swing.filechooser.FileFilter;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
 import math.Point;
+import math.Color;
 import raytracer.*;
 import raytracer.stuff.Move;
 import raytracer.stuff.Supersampling;
 import raytracer.stuff.Turn;
 import shader.*;
 
-public class World extends JFrame implements ActionListener, KeyListener, MouseInputListener {
-    BufferedImage frameBuffer;
-    
+public class App extends JFrame implements ActionListener, KeyListener, MouseInputListener {
+    int width = 800;
+    int height = 800;
+    Color[][] frameBuffer;
+    int frameBufferCount;
 
     Scene scene = new Scene();
     Shader shader = new Phong();
@@ -45,7 +46,6 @@ public class World extends JFrame implements ActionListener, KeyListener, MouseI
 
     int randomCount = 100;
 
-    int frameBufferCount = 0;
     int threadCount = Runtime.getRuntime().availableProcessors();
 
     JFileChooser chooser;
@@ -54,16 +54,15 @@ public class World extends JFrame implements ActionListener, KeyListener, MouseI
     JMenuItem quitItem;
     View view;
 
-    int width = 800;
-    int height = 800;
+    BufferedImage image;
 
     Camera camera;
 
-    public World(){
+    public App(){
         { // setup Frame
             setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             setTitle("Raytracer");
-            setSize(800,800);
+            setSize(width,height);
             setResizable(false);
             setLocationRelativeTo(null);
             setFocusTraversalKeysEnabled(false);
@@ -137,56 +136,57 @@ public class World extends JFrame implements ActionListener, KeyListener, MouseI
             keyMap.put(KeyEvent.VK_F3, Supersampling.X9);
         }
 
-        this.camera = new Camera(new Point(0, 0, -10), Point.ZERO, 90, this);
-        frameBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
+        camera = new Camera(new Point(0, 0, -10), Point.ZERO, 90, this);
+        image = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
+
+        resetFrameBuffer();
 
         clock.start();
     }
 
+
+    private void resetFrameBuffer(){
+        frameBuffer = new Color[width][height];
+        for (int x = 0; x < width; x++) for (int y = 0; y < height; y++)
+            frameBuffer[x][y] = Color.BLACK;
+        frameBufferCount = 0;
+        counter = 0;
+    }
 
     public void tick(){
         if(!moveKeys.isEmpty())
             camera.move(moveKeys);
         if(!turnKeys.isEmpty())
             camera.rotate(turnKeys);
-        // frameBufferCount = 0;
-        // frameBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
+        if(!moveKeys.isEmpty() || !turnKeys.isEmpty())
+            resetFrameBuffer();
     }
 
-    public void setScene(Scene scene){ this.scene = scene; }
-    public void setShader(Shader shader){ this.shader = shader; }
-    public void setSupersampling(Supersampling mode){ camera.setSupersampling(mode);}
-    
-    public int getWidth() { return width; }
-    public int getHeight() { return height; }
-    public Scene getScene() { return scene; }
-    public Shader getShader(){ return shader; }
-    public BufferedImage getFrameBuffer(){ return frameBuffer;}
-    public Supersampling getSupersampling() { return supersampling; }
+    int counter;
 
-    public void renderImage(BufferedImage image){
+    public void renderFrame(){
+        Color[][] tempBuffer = new Color[width][height];
+        renderImage(tempBuffer);
+        // Add the new image to the buffer
+        counter++;
+        frameBufferCount++;
+
+        for (int x = 0; x < width; x++) for (int y = 0; y < height; y++){
+            if(tempBuffer[x][y] != null) frameBuffer[x][y] = frameBuffer[x][y].add(tempBuffer[x][y]);
+        // }
+        // // Set the image for the view
+        // for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
+            image.setRGB(x, y, frameBuffer[x][y].div(frameBufferCount).rgb());
+        }
+    }
+
+    public void renderImage(Color[][] buffer){
         ExecutorService exe =  Executors.newFixedThreadPool(threadCount);
         int deltaHeight = (height / threadCount)+1;
         for (int i = 0; i < threadCount; i++) 
-            exe.submit(new Trace(scene, width, height, camera, image, i*deltaHeight, deltaHeight, shader));
+            exe.submit(new Trace(width, height, i*deltaHeight, deltaHeight, scene, camera, buffer, shader));
         exe.shutdown();
         while(!exe.isTerminated());
-    }
-
-    public void renderFrame(){
-        renderImage(frameBuffer);
-        // BufferedImage tempBuffer = new BufferedImage(width,height,BufferedImage.TYPE_INT_ARGB);
-        // frameBuffer = tempBuffer;
-        // I tried using an additive FrameBuffer, but it didnt work
-        // Because when colors are turned to rgb ints their values are clamped to not break to format.
-        // It would require storing the image as a 2D-Color-Array to not lose information between frames.
-        // frameBufferCount++;
-        // for (int x=0; x<frameBuffer.getWidth(); x++) for (int y = 0; y < frameBuffer.getHeight(); y++) {
-        //     Color current = new Color(tempBuffer.getRGB(x, y));
-        //     Color old = new Color(frameBuffer.getRGB(x, y));
-        //     Color next = old.add(current);
-        //     frameBuffer.setRGB(x, y, next.div(frameBufferCount).rgb());
-        // }
     }
 
     public void renderToFile(Shader shader, boolean timed){
@@ -209,7 +209,7 @@ public class World extends JFrame implements ActionListener, KeyListener, MouseI
         this.shader = shader;
         String name = shader.getName();
         scene = Scene.randomSpheres(100);
-        BufferedImage image = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
+        Color[][] image = new Color[width][height];
         
         long start = System.nanoTime();
         for (int i = 0; i < count; i++) renderImage(image);
@@ -219,8 +219,28 @@ public class World extends JFrame implements ActionListener, KeyListener, MouseI
 
     public void writeImage(String name){
         File file = new File("./images/"+name+".png");
-        try { ImageIO.write(frameBuffer, "png", file); } catch (Exception e) {}
+        try { ImageIO.write(image, "png", file); } catch (Exception e) {}
     }
+
+    public void setScene(Scene scene){ 
+        this.scene = scene; 
+        resetFrameBuffer();
+    }
+    public void setShader(Shader shader){ 
+        this.shader = shader; 
+        resetFrameBuffer();
+    }
+    public void setSupersampling(Supersampling mode){ 
+        camera.setSupersampling(mode);
+        resetFrameBuffer();
+    }
+    
+    public int getWidth() { return width; }
+    public int getHeight() { return height; }
+    public Scene getScene() { return scene; }
+    public Shader getShader(){ return shader; }
+    public BufferedImage getImage(){ return image;}
+    public Supersampling getSupersampling() { return supersampling; }
 
     @Override
     public void keyPressed(KeyEvent e) {
@@ -274,7 +294,7 @@ public class World extends JFrame implements ActionListener, KeyListener, MouseI
         if(e.getSource() == clock){
             tick();
             renderFrame();
-            view.setImage(frameBuffer);
+            view.setImage(image);
         }else if(e.getSource() == rndmItem) {
             setScene(Scene.randomSpheres(randomCount));
             System.out.println("Random Scene selected");

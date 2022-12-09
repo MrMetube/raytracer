@@ -2,7 +2,7 @@ package raytracer;
 
 import java.util.HashSet;
 
-import gui.World;
+import gui.App;
 import math.Point;
 import math.Ray;
 import math.Vector;
@@ -23,13 +23,13 @@ public class Camera {
     Vector up;
     Vector right;
 
-    World world;
+    App world;
     Supersampling supersampling = Supersampling.NONE;
 
     double moveSpeed = 0.7;
     double turnSpeed = 5;
 
-    public Camera(Point pos, Point lookAt, double fovDeg, World world) {
+    public Camera(Point pos, Point lookAt, double fovDeg, App world) {
         this.pos = pos;
         this.lookAt = lookAt;
         fov = Math.toRadians(fovDeg);
