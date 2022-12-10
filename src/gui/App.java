@@ -255,6 +255,8 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
         }else if( o instanceof Supersampling) {
             setSupersampling((Supersampling) o);
             System.out.println("Supersamplingmode: " + ((Supersampling) o).name());
+        }else if( e.getKeyCode()==KeyEvent.VK_F5){
+            view.toggleFPS();
         }else if( e.getKeyCode()==KeyEvent.VK_F12){
             renderToFile(new Ambient(), false);
             renderToFile(new Diffuse(), false);
