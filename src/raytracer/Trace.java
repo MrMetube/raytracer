@@ -4,6 +4,7 @@ import math.Color;
 import raytracer.geometry.Geometry;
 
 import shader.Shader;
+import shader.Skybox;
 
 public class Trace implements Runnable{
     final Color[][] buffer;
@@ -12,6 +13,7 @@ public class Trace implements Runnable{
     final Scene scene;
     final Camera camera;
     final int start,end, totalHeight, totalWidth;
+    final Skybox skybox;
 
     public Trace(int totalWidth, int totalHeight,  int start, int deltaHeight, Scene scene, Camera camera, Color[][] buffer,Shader shader){
         this.buffer = buffer;
@@ -21,7 +23,8 @@ public class Trace implements Runnable{
         this.totalHeight = totalHeight;
         this.totalWidth = totalWidth;
         this.start = start;
-        this.end = Math.min(start+deltaHeight, totalHeight);
+        end = Math.min(start+deltaHeight, totalHeight);
+        skybox = new Skybox();
     }
     
     @Override 
@@ -31,7 +34,7 @@ public class Trace implements Runnable{
             Color color = new Color(0, 0, 0);
             for (Payload payload : payloads) {
                 for(Geometry geometry : scene.getGeometries()) geometry.intersect(payload);
-                color = color.add( ( payload.target() != null ) ? shader.getColor(payload, scene) : def);
+                color = color.add( ( payload.target() != null ) ? shader.getColor(payload, scene) : skybox.getColor(payload, scene));
             }
             color = color.div(payloads.length);
             buffer[u][totalHeight-v-1] = color;

@@ -164,7 +164,7 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
 
     int counter;
 
-    public void renderFrame(){
+    public void renderToView(){
         Color[][] tempBuffer = new Color[width][height];
         renderImage(tempBuffer);
         // Add the new image to the buffer
@@ -295,7 +295,7 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
     public void actionPerformed(ActionEvent e) {
         if(e.getSource() == clock){
             tick();
-            renderFrame();
+            renderToView();
             view.setImage(image);
         }else if(e.getSource() == rndmItem) {
             setScene(Scene.randomSpheres(randomCount));
