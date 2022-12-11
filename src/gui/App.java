@@ -7,8 +7,10 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -19,6 +21,7 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 import math.Point;
 import math.Color;
 import raytracer.*;
+import raytracer.geometry.Geometry;
 import raytracer.stuff.Move;
 import raytracer.stuff.Supersampling;
 import raytracer.stuff.Turn;
@@ -32,6 +35,9 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
 
     Scene scene = new Scene();
     Shader shader = new Phong();
+    Skybox skybox = new Skybox();
+    Color def = new Color(0.44, 0.85, 0.93); // if no skybox
+
     Supersampling supersampling = Supersampling.NONE;
 
     HashMap<Integer,Object> keyMap = new HashMap<>();
@@ -181,10 +187,25 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
     }
 
     public void renderImage(Color[][] buffer){
+        // CyclicBarrier barrier = new CyclicBarrier(threadCount);
         ExecutorService exe =  Executors.newFixedThreadPool(threadCount);
         int deltaHeight = (height / threadCount)+1;
-        for (int i = 0; i < threadCount; i++) 
-            exe.submit(new Trace(width, height, i*deltaHeight, deltaHeight, scene, camera, buffer, shader));
+        for (int i = 0; i < threadCount; i++){
+            int start = i*deltaHeight;
+            int end =  Math.min(start+deltaHeight, height);
+            // exe.submit(new Trace(width, height, i*deltaHeight, deltaHeight, scene, camera, buffer, shader));
+            exe.submit( () -> {
+                for (int u = 0; u < width; u++) for (int v = start; v < end; v++) {
+                    Payload[] payloads = camera.generatePayload(u, v);
+                    Color color = new Color(0, 0, 0);
+                    for (Payload payload : payloads) {
+                        for(Geometry geometry : scene.getGeometries()) geometry.intersect(payload);
+                        color = color.add( ( payload.target() != null ) ? shader.getColor(payload, scene) : skybox.getColor(payload, scene));
+                    }
+                    color = color.div(payloads.length);
+                    buffer[u][height-v-1] = color;
+                }
+            });}
         exe.shutdown();
         while(!exe.isTerminated());
     }
