@@ -30,10 +30,8 @@ import shader.*;
 public class App extends JFrame implements ActionListener, KeyListener, MouseInputListener {
     int width = 800;
     int height = 800;
-    Color[][] frameBuffer;
-    int frameBufferCount;
 
-    Scene scene = new Scene();
+    Scene  scene  = new Scene();
     Shader shader = new Phong();
     Skybox skybox = new Skybox();
     Color def = new Color(0.44, 0.85, 0.93); // if no skybox
@@ -48,7 +46,6 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
     boolean captureMouse = false;
     Robot robot;
 
-    Timer clock = new Timer(300, this);
 
     int randomCount = 100;
 
@@ -59,12 +56,15 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
     JFileChooser chooser;
     JMenuItem fileItem;
     JMenuItem rndmItem;
+    JMenuItem emptyItem;
     JMenuItem quitItem;
     View view;
 
     BufferedImage image;
 
     Camera camera;
+
+    Timer clock = new Timer(1, this); // tickrate != framerate
 
     public App(){
         { // setup Frame
@@ -80,15 +80,18 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
 
             fileItem = new JMenuItem("Open File",KeyEvent.VK_F);
             rndmItem = new JMenuItem("Random Scene",KeyEvent.VK_R);
+            emptyItem = new JMenuItem("Empty Scene",KeyEvent.VK_E);
             quitItem = new JMenuItem("Quit",KeyEvent.VK_Q);
 
             fileItem.addActionListener(this);
             rndmItem.addActionListener(this);
+            emptyItem.addActionListener(this);
             quitItem.addActionListener(this);
 
             sceneMenu.setMnemonic(KeyEvent.VK_C);
             sceneMenu.add(fileItem);
             sceneMenu.add(rndmItem);
+            sceneMenu.add(emptyItem);
             sceneMenu.add(quitItem);
 
             menubar.add(sceneMenu);
@@ -103,10 +106,6 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
             view = new View(width,height);
             view.setBounds(0, 0, width, height);
             add(view);
-
-            BufferedImage cursorImg = new BufferedImage(16,16, BufferedImage.TYPE_INT_ARGB);
-            Cursor blank = Toolkit.getDefaultToolkit().createCustomCursor(cursorImg, new java.awt.Point(0,0), "blank");
-            getContentPane().setCursor(blank);
 
             addMouseListener(this);
             addMouseMotionListener(this);
@@ -147,16 +146,8 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
         camera = new Camera(new Point(0, 0, -1), Point.ZERO, 90, this);
         image = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
 
-        resetFrameBuffer();
-
-        clock.start();
-    }
-
-    private void resetFrameBuffer(){
-        frameBuffer = new Color[width][height];
-        for (int x = 0; x < width; x++) for (int y = 0; y < height; y++)
-            frameBuffer[x][y] = Color.BLACK;
-        frameBufferCount = 0;
+        // clock.start();
+        renderToView();
     }
 
     public void tick(){
@@ -164,25 +155,29 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
             camera.move(moveKeys);
         if(!turnKeys.isEmpty())
             camera.rotate(turnKeys);
-        if(!moveKeys.isEmpty() || !turnKeys.isEmpty())
-            resetFrameBuffer();
     }
 
-    Color[][] tempBuffer = new Color[width][height];
+    Color[][] secondaryBuffer = new Color[width][height];
+    Color[][] primaryBuffer = new Color[width][height];
+    boolean renderToPrimary = true;
 
     public void renderToView(){
-        // tempBuffer = new Color[width][height];
-        renderImage(tempBuffer);
+        if(renderToPrimary)
+            renderImage(primaryBuffer);
+        else
+            renderImage(secondaryBuffer);
     }
 
     public void renderImage(Color[][] buffer){
         int deltaHeight = (height / threadCount)+1;
+        Camera camCopy = new Camera(camera);
         for (int i = 0; i < threadCount; i++){
             int start = i*deltaHeight;
             int end =  Math.min(start+deltaHeight, height);
             exe.submit( () -> {
                 for (int u = 0; u < width; u++) for (int v = start; v < end; v++) {
-                    Payload[] payloads = camera.generatePayload(u, v);
+                    //Copy the camera to not change to view mid rendering
+                    Payload[] payloads = camCopy.generatePayload(u, v);
                     Color color = new Color(0, 0, 0);
                     for (Payload payload : payloads) {
                         for(Geometry geometry : scene.getGeometries()) 
@@ -192,23 +187,27 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
                     color = color.div(payloads.length);
                     buffer[u][height-v-1] = color;
                 }
-                try { barrier.await(); } catch (InterruptedException | BrokenBarrierException e) {}
+                try { barrier.await(); } catch (InterruptedException | BrokenBarrierException e) {
+                    e.printStackTrace();
+                }
             });
         }
     }
 
     private void onRenderFinish() {
-        // if(frameBufferCount == 10) resetFrameBuffer();
-        // frameBufferCount++;
-
-        for (int x = 0; x < width; x++) for (int y = 0; y < height; y++){
-            // Add the new image to the buffer
-            // if(tempBuffer[x][y] != null) frameBuffer[x][y] = frameBuffer[x][y].add(tempBuffer[x][y]);
-            // image.setRGB(x, y, frameBuffer[x][y].div(frameBufferCount).rgb());
-            frameBuffer = tempBuffer;
-            image.setRGB(x, y, frameBuffer[x][y].rgb());
+        if(renderToPrimary){
+            for (int x = 0; x < width; x++) for (int y = 0; y < height; y++){
+                image.setRGB(x, y, primaryBuffer[x][y].rgb());
+            }
+        }else{
+            for (int x = 0; x < width; x++) for (int y = 0; y < height; y++){
+                image.setRGB(x, y, secondaryBuffer[x][y].rgb());
+            }
         }
+        renderToPrimary = !renderToPrimary;
         view.setImage(image);
+        if(!clock.isRunning()) tick();
+        renderToView();
     }
 
     public void renderToFile(Shader shader, boolean timed){
@@ -217,11 +216,14 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
         String name = shader.getName();
 
         long start = System.nanoTime();
-        renderImage(frameBuffer);
+        renderImage(primaryBuffer);
         if(timed) System.out.printf("%s Rendering took: %s ms%n",name, (System.nanoTime()-start)/1_000_000);
 
         start = System.nanoTime();
-        writeImage(name);
+
+        File file = new File("./images/"+name+".png");
+        try { ImageIO.write(image, "png", file); } catch (Exception e) {}
+
         if(timed) System.out.printf("%s Saving took:    %s ms%n",name, (System.nanoTime()-start)/1_000_000);
         this.shader = backup;
     }
@@ -239,31 +241,6 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
         this.shader = backup;
     }
 
-    public void writeImage(String name){
-        File file = new File("./images/"+name+".png");
-        try { ImageIO.write(image, "png", file); } catch (Exception e) {}
-    }
-
-    public void setScene(Scene scene){ 
-        this.scene = scene; 
-        resetFrameBuffer();
-    }
-    public void setShader(Shader shader){ 
-        this.shader = shader; 
-        resetFrameBuffer();
-    }
-    public void setSupersampling(Supersampling mode){ 
-        camera.setSupersampling(mode);
-        resetFrameBuffer();
-    }
-    
-    public int getWidth() { return width; }
-    public int getHeight() { return height; }
-    public Scene getScene() { return scene; }
-    public Shader getShader(){ return shader; }
-    public BufferedImage getImage(){ return image;}
-    public Supersampling getSupersampling() { return supersampling; }
-
     @Override
     public void keyPressed(KeyEvent e) {
         Object o = keyMap.get(e.getKeyCode());
@@ -272,11 +249,14 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
         else if( o instanceof Turn) {
             turnKeys.add((Turn)o);
         } else if( o instanceof Shader) {
-            setShader((Shader) o);
+            shader = (Shader) o;
             System.out.println("Shader: " + (Shader) o);
         }else if( o instanceof Supersampling) {
-            setSupersampling((Supersampling) o);
+            camera.setSupersampling((Supersampling) o);
             System.out.println("Supersamplingmode: " + ((Supersampling) o).name());
+        }else if( e.getKeyCode()==KeyEvent.VK_ESCAPE){
+            captureMouse = false;
+            getContentPane().setCursor(null);
         }else if( e.getKeyCode()==KeyEvent.VK_F5){
             view.toggleFPS();
         }else if( e.getKeyCode()==KeyEvent.VK_F12){
@@ -295,41 +275,51 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
         if(o instanceof Move) moveKeys.remove((Move)o);
         else if(o instanceof Turn) turnKeys.remove((Turn)o);
     }
-    
+   
     @Override
     public void mouseMoved(MouseEvent e) {
         if(captureMouse) {
-            // float mouseSensitivity = 1;
+            int mouseSensitivity = 100;
 
-            // int centerX = window.getX() + window.getWidth() / 2;
-            // int centerY = window.getY() + window.getHeight() / 2;
+            int centerX = getX() + getWidth() / 2;
+            int centerY = getY() + getHeight() / 2;
 
-            // xOffset = ((float) e.getXOnScreen() - centerX) / window.getWidth();
-            // yOffset = ((float) e.getYOnScreen() - centerY) / window.getHeight();
-            
-            // todo Rotation
-            // robot.mouseMove(centerX, centerY);
+            xOffset = ((float) e.getXOnScreen() - centerX) / getWidth();
+            yOffset = ((float) e.getYOnScreen() - centerY) / getHeight();
+            // Should not allow turning more than 80° up or down
+            camera.rotate(yOffset*mouseSensitivity,xOffset*mouseSensitivity);
+            robot.mouseMove(centerX, centerY);
         }
-        // System.out.printf("xOffset: %s, yOffset: %s %n", mouseXOffset,mouseYOffset);
     }
 
     @Override
     public void actionPerformed(ActionEvent e) {
         if(e.getSource() == clock){
             tick();
-            renderToView();
+        }else if(e.getSource() == emptyItem) {
+            scene = new Scene();
+            System.out.println("Empty Scene selected");
         }else if(e.getSource() == rndmItem) {
-            setScene(Scene.randomSpheres(randomCount));
+            scene = Scene.randomSpheres(randomCount);
             System.out.println("Random Scene selected");
         }else if(e.getSource() == fileItem && chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION){
-            setScene(new Scene("./scenes/" + chooser.getSelectedFile().getName()));
+            scene = new Scene("./scenes/" + chooser.getSelectedFile().getName());
             System.out.println("File selected: "+chooser.getSelectedFile().getName());
         }else if(e.getSource() == quitItem) 
             System.exit(0);
         
     }
 
-    @Override public void mouseClicked(MouseEvent e)  { captureMouse = !captureMouse;}
+    @Override public void mouseClicked(MouseEvent e)  { 
+        captureMouse = !captureMouse;
+        if(captureMouse){
+            BufferedImage cursorImg = new BufferedImage(16,16, BufferedImage.TYPE_INT_ARGB);
+            Cursor blank = Toolkit.getDefaultToolkit().createCustomCursor(cursorImg, new java.awt.Point(0,0), "blank");
+            getContentPane().setCursor(blank);
+        }else{
+            getContentPane().setCursor(null);
+        }
+    }
     @Override public void mouseEntered(MouseEvent e)  {}
     @Override public void mouseExited(MouseEvent e)   {}
     @Override public void mousePressed(MouseEvent e)  {}
