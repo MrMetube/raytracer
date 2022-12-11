@@ -48,7 +48,7 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
     boolean captureMouse = false;
     Robot robot;
 
-    Timer clock = new Timer(50, this);
+    Timer clock = new Timer(300, this);
 
     int randomCount = 100;
 
@@ -171,7 +171,7 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
     Color[][] tempBuffer = new Color[width][height];
 
     public void renderToView(){
-        tempBuffer = new Color[width][height];
+        // tempBuffer = new Color[width][height];
         renderImage(tempBuffer);
     }
 
