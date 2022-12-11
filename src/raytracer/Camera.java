@@ -23,7 +23,6 @@ public class Camera {
     Vector up;
     Vector right;
 
-    App world;
     Supersampling supersampling = Supersampling.NONE;
 
     double moveSpeed = 0.7;
@@ -35,6 +34,22 @@ public class Camera {
         fov = Math.toRadians(fovDeg);
         width = world.getWidth();
         height = world.getHeight();
+
+        double aspectRatio = width/height;
+        double halfHeight = Math.tan(fov/2);
+        pixelSize = (aspectRatio < 1 ? halfHeight : halfHeight/aspectRatio) * 2/height ;
+
+        calcVectors();
+    }
+
+    public Camera(Camera orig){
+        this.pos = orig.pos.add(Vector.ZERO);
+        this.lookAt = orig.lookAt.add(Vector.ZERO);
+        this.fov = orig.fov;
+        width  = orig.width;
+        height = orig.height;
+        
+        supersampling = orig.supersampling; 
 
         double aspectRatio = width/height;
         double halfHeight = Math.tan(fov/2);
@@ -84,6 +99,7 @@ public class Camera {
                 }
                 break;
             default: // just deactivate ss if it isnt set for whatever reason
+                supersampling = Supersampling.NONE;
                 break;
         }
         return out;
@@ -113,21 +129,16 @@ public class Camera {
     
     public void rotate(HashSet<Turn> turns){
         int rotX = 0, rotY = 0;
-        if(turns.contains(Turn.UP))
-            rotX += turnSpeed;
-        if(turns.contains(Turn.DOWN))
-            rotX -= turnSpeed;
-        if(turns.contains(Turn.LEFT))
-            rotY -= turnSpeed;
-        if(turns.contains(Turn.RIGHT))
-            rotY += turnSpeed;
+        if(turns.contains(Turn.UP))     rotX += turnSpeed;
+        if(turns.contains(Turn.DOWN))   rotX -= turnSpeed;
+        if(turns.contains(Turn.LEFT))   rotY -= turnSpeed;
+        if(turns.contains(Turn.RIGHT))  rotY += turnSpeed;
         rotate(rotX, rotY);
     }
 
     public void rotate(double angleX, double angleY){
         Vector dir = vpn.rotate(angleX, right).add(vpn.rotate(angleY, up)).norm();
         lookAt = pos.add(dir);
-
         calcVectors();
     }
     
