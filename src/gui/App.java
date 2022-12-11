@@ -7,10 +7,10 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -48,11 +48,13 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
     boolean captureMouse = false;
     Robot robot;
 
-    Timer clock = new Timer(1, this);
+    Timer clock = new Timer(50, this);
 
     int randomCount = 100;
 
     int threadCount = Runtime.getRuntime().availableProcessors();
+    ExecutorService exe =  Executors.newFixedThreadPool(threadCount);
+    CyclicBarrier barrier = new CyclicBarrier(threadCount,()->{ onRenderFinish(); });
 
     JFileChooser chooser;
     JMenuItem fileItem;
@@ -142,7 +144,7 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
             keyMap.put(KeyEvent.VK_F3, Supersampling.X9);
         }
 
-        camera = new Camera(new Point(0, 0, -10), Point.ZERO, 90, this);
+        camera = new Camera(new Point(0, 0, -1), Point.ZERO, 90, this);
         image = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
 
         resetFrameBuffer();
@@ -150,13 +152,11 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
         clock.start();
     }
 
-
     private void resetFrameBuffer(){
         frameBuffer = new Color[width][height];
         for (int x = 0; x < width; x++) for (int y = 0; y < height; y++)
             frameBuffer[x][y] = Color.BLACK;
         frameBufferCount = 0;
-        counter = 0;
     }
 
     public void tick(){
@@ -168,46 +168,47 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
             resetFrameBuffer();
     }
 
-    int counter;
+    Color[][] tempBuffer = new Color[width][height];
 
     public void renderToView(){
-        Color[][] tempBuffer = new Color[width][height];
+        tempBuffer = new Color[width][height];
         renderImage(tempBuffer);
-        // Add the new image to the buffer
-        counter++;
-        frameBufferCount++;
-
-        for (int x = 0; x < width; x++) for (int y = 0; y < height; y++){
-            if(tempBuffer[x][y] != null) frameBuffer[x][y] = frameBuffer[x][y].add(tempBuffer[x][y]);
-        // }
-        // // Set the image for the view
-        // for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
-            image.setRGB(x, y, frameBuffer[x][y].div(frameBufferCount).rgb());
-        }
     }
 
     public void renderImage(Color[][] buffer){
-        // CyclicBarrier barrier = new CyclicBarrier(threadCount);
-        ExecutorService exe =  Executors.newFixedThreadPool(threadCount);
         int deltaHeight = (height / threadCount)+1;
         for (int i = 0; i < threadCount; i++){
             int start = i*deltaHeight;
             int end =  Math.min(start+deltaHeight, height);
-            // exe.submit(new Trace(width, height, i*deltaHeight, deltaHeight, scene, camera, buffer, shader));
             exe.submit( () -> {
                 for (int u = 0; u < width; u++) for (int v = start; v < end; v++) {
                     Payload[] payloads = camera.generatePayload(u, v);
                     Color color = new Color(0, 0, 0);
                     for (Payload payload : payloads) {
-                        for(Geometry geometry : scene.getGeometries()) geometry.intersect(payload);
-                        color = color.add( ( payload.target() != null ) ? shader.getColor(payload, scene) : skybox.getColor(payload, scene));
+                        for(Geometry geometry : scene.getGeometries()) 
+                            geometry.intersect(payload);
+                        color = color.add( ( payload.target() != null ) ? shader.getColor(payload, scene) : /* skybox.getColor(payload, scene) */ def);
                     }
                     color = color.div(payloads.length);
                     buffer[u][height-v-1] = color;
                 }
-            });}
-        exe.shutdown();
-        while(!exe.isTerminated());
+                try { barrier.await(); } catch (InterruptedException | BrokenBarrierException e) {}
+            });
+        }
+    }
+
+    private void onRenderFinish() {
+        // if(frameBufferCount == 10) resetFrameBuffer();
+        // frameBufferCount++;
+
+        for (int x = 0; x < width; x++) for (int y = 0; y < height; y++){
+            // Add the new image to the buffer
+            // if(tempBuffer[x][y] != null) frameBuffer[x][y] = frameBuffer[x][y].add(tempBuffer[x][y]);
+            // image.setRGB(x, y, frameBuffer[x][y].div(frameBufferCount).rgb());
+            frameBuffer = tempBuffer;
+            image.setRGB(x, y, frameBuffer[x][y].rgb());
+        }
+        view.setImage(image);
     }
 
     public void renderToFile(Shader shader, boolean timed){
@@ -317,7 +318,6 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
         if(e.getSource() == clock){
             tick();
             renderToView();
-            view.setImage(image);
         }else if(e.getSource() == rndmItem) {
             setScene(Scene.randomSpheres(randomCount));
             System.out.println("Random Scene selected");
