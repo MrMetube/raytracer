@@ -1,6 +1,6 @@
 package raytracer.geometry;
 
-import math.MUtils;
+import math.Util;
 import math.Point;
 import math.Ray;
 import math.Vector;
@@ -69,12 +69,12 @@ public class AABBox extends Geometry{
     @Override
     public Vector normal(Point hit) {
         // Is this always correct??
-             if(MUtils.approxEqual(hit.x(), min.x(), 0.0001)) return Vector.Xneg;
-        else if(MUtils.approxEqual(hit.x(), max.x(), 0.0001)) return Vector.Xpos;
-        else if(MUtils.approxEqual(hit.y(), min.y(), 0.0001)) return Vector.Yneg;
-        else if(MUtils.approxEqual(hit.y(), max.y(), 0.0001)) return Vector.Ypos;
-        else if(MUtils.approxEqual(hit.z(), min.z(), 0.0001)) return Vector.Zneg;
-        else if(MUtils.approxEqual(hit.z(), max.z(), 0.0001)) return Vector.Zpos;
+             if(Util.approxEqual(hit.x(), min.x(), 0.0001)) return Vector.Xneg;
+        else if(Util.approxEqual(hit.x(), max.x(), 0.0001)) return Vector.Xpos;
+        else if(Util.approxEqual(hit.y(), min.y(), 0.0001)) return Vector.Yneg;
+        else if(Util.approxEqual(hit.y(), max.y(), 0.0001)) return Vector.Ypos;
+        else if(Util.approxEqual(hit.z(), min.z(), 0.0001)) return Vector.Zneg;
+        else if(Util.approxEqual(hit.z(), max.z(), 0.0001)) return Vector.Zpos;
         return Vector.Yneg;
     }
     

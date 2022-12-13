@@ -29,10 +29,10 @@ class Main {
 
         //#region testing speed
         
-        // new World(800, 800).timedRender(new Phong(), 10);
-        // new World(800, 800).timedRender(new Phong(), 10);
-        // new World(800, 800).timedRender(new BlinnPhong(), 10);
-        // new World(800, 800).timedRender(new BlinnPhong(), 10);
+        // new App().timedRender(new Phong(), 10);
+        // new App().timedRender(new Phong(), 10);
+        // new App().timedRender(new BlinnPhong(), 10);
+        // new App().timedRender(new BlinnPhong(), 10);
         
         //#endregion
     }

@@ -211,6 +211,7 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
     }
 
     public void renderToFile(Shader shader, boolean timed){
+        //TODO why are some images unfinished
         Shader backup = this.shader;
         this.shader = shader;
         String name = shader.getName();
@@ -229,6 +230,7 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
     }
 
     public void timedRender(Shader shader, int count){
+        // TODO this is broken with the newest version
         Shader backup = this.shader;
         this.shader = shader;
         String name = shader.getName();

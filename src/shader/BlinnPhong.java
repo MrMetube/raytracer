@@ -2,6 +2,7 @@ package shader;
 
 import math.Color;
 import math.Ray;
+import math.Util;
 import math.Vector;
 import raytracer.Material;
 import raytracer.Payload;
@@ -12,7 +13,6 @@ import raytracer.light.LightSource;
 public class BlinnPhong extends Shader{
     @Override public Color getColor(Payload p, Scene scene) {
         // Constants
-        double epsilon = 0.0001;
         Geometry geometry = p.target();
         Material m = scene.getMaterials().get(geometry.material());
         
@@ -32,7 +32,7 @@ public class BlinnPhong extends Shader{
             Vector l = ls.directionFrom(p.hitPoint());
             //Check if it is in shade
             boolean inShade = false;
-            Payload pl = new Payload(new Ray(p.hitPoint().add(n.mul(epsilon)), l));
+            Payload pl = new Payload(new Ray(p.hitPoint().add(n.mul(Util.EPSILON)), l));
             for (Geometry g : scene.getGeometries()) {
                 if (g.intersect(pl)) {
                     inShade = true;

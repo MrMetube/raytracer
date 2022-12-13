@@ -3,7 +3,9 @@ package math;
 import raytracer.Payload;
 import raytracer.geometry.Geometry;
 
-public class MUtils {
+public class Util {
+    public static final double EPSILON = 0.0001;
+
     public static boolean approxEqual(double a, double b, double epsilon){
         double x = Math.abs(a - b);
         return x < epsilon;

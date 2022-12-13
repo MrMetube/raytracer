@@ -41,9 +41,9 @@ public class Color extends Tuple {
 
     public int rgb(){
         int res = 0;
-        res += (int) (MUtils.clamp(x, 0, 1)*255) << 16;
-        res += (int) (MUtils.clamp(y, 0, 1)*255) << 8;
-        res += (int) (MUtils.clamp(z, 0, 1)*255);
+        res += (int) (Util.clamp(x, 0, 1)*255) << 16;
+        res += (int) (Util.clamp(y, 0, 1)*255) << 8;
+        res += (int) (Util.clamp(z, 0, 1)*255);
         return res;
     }
 
@@ -74,9 +74,9 @@ public class Color extends Tuple {
         if(o == null) return false;
         if(o == this) return true;
         final Tuple that = (Tuple) o;
-        return  MUtils.approxEqual(this.x, that.x(), 0.01) &&
-                MUtils.approxEqual(this.y, that.y(), 0.01) &&
-                MUtils.approxEqual(this.z, that.z(), 0.01) &&
-                MUtils.approxEqual(this.w, that.w(), 0.01);
+        return  Util.approxEqual(this.x, that.x(), 0.01) &&
+                Util.approxEqual(this.y, that.y(), 0.01) &&
+                Util.approxEqual(this.z, that.z(), 0.01) &&
+                Util.approxEqual(this.w, that.w(), 0.01);
     }
 }

@@ -1,6 +1,6 @@
 package raytracer.geometry;
 
-import math.MUtils;
+import math.Util;
 import math.Point;
 import math.Ray;
 import math.Vector;
@@ -31,7 +31,7 @@ public class Sphere extends Geometry{
         double a = dir.dot(dir);
         double b = 2 * dir.dot(L);
         double c = L.dot(L) - r*r;
-        return MUtils.solveQuadratic(a,b,c,payload,this);
+        return Util.solveQuadratic(a,b,c,payload,this);
     }
     
     @Override public Vector normal(Point hit){
