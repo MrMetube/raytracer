@@ -7,7 +7,7 @@ import raytracer.light.LightSource;
 public class Specular extends Shader{
 
     @Override
-    public Color getColor(Payload p, Scene scene) {
+    public void getColor(Payload p, Scene scene) {
         Material m = scene.getMaterials().get(p.target().material());
         double ks = m.specular();
         Vector v = p.ray().dir().norm();
@@ -27,6 +27,6 @@ public class Specular extends Shader{
         }
         Color out = m.isMetallic() ? m.color().mul(il) : il;
 
-        return out;
+        p.setColor(out);
     }
 }

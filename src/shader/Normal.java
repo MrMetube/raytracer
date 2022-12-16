@@ -7,8 +7,8 @@ import raytracer.Scene;
 
 public class Normal extends Shader {
 
-    @Override public Color getColor(Payload p, Scene scene) {
+    @Override public void getColor(Payload p, Scene scene) {
         Vector v = p.target().normal(p.hitPoint());
-        return new Color(Math.abs(v.x()),Math.abs(v.y()),Math.abs(v.z()));
+        p.setColor(new Color(Math.abs(v.x()),Math.abs(v.y()),Math.abs(v.z())));
     }
 }

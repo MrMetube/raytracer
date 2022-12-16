@@ -11,7 +11,7 @@ import raytracer.geometry.Geometry;
 import raytracer.light.LightSource;
 
 public class BlinnPhong extends Shader{
-    @Override public Color getColor(Payload p, Scene scene) {
+    @Override public void getColor(Payload p, Scene scene) {
         // Constants
         Geometry geometry = p.target();
         Material m = scene.getMaterials().get(geometry.material());
@@ -63,6 +63,6 @@ public class BlinnPhong extends Shader{
             .mul(il)
             .mul(kd)
             .add(ambient);
-        return out;
+        p.setColor(out);
     }
 }

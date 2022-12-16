@@ -4,7 +4,6 @@ import java.awt.*;
 import java.awt.Robot;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.concurrent.BrokenBarrierException;
@@ -12,7 +11,6 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.event.MouseInputListener;
 import javax.swing.filechooser.FileFilter;
@@ -28,13 +26,14 @@ import raytracer.stuff.Turn;
 import shader.*;
 
 public class App extends JFrame implements ActionListener, KeyListener, MouseInputListener {
-    int width = 1000;
-    int height = width;
+    public static boolean useSkybox = true;
+
+    int width = 800;
+    int height = 600;
 
     Scene  scene  = new Scene();
     Shader shader = new Phong();
     Skybox skybox = new Skybox();
-    Color def = new Color(0.44, 0.85, 0.93); // if no skybox
 
     Supersampling supersampling = Supersampling.NONE;
 
@@ -45,7 +44,6 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
     float yOffset = 0;
     boolean captureMouse = false;
     Robot robot;
-
 
     int randomCount = 100;
 
@@ -163,33 +161,36 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
 
     void renderToView(){
         if(renderToPrimary)
-            renderImage(primaryBuffer);
+            renderImage(primaryBuffer,shader);
         else
-            renderImage(secondaryBuffer);
+            renderImage(secondaryBuffer,shader);
     }
 
-    void renderImage(Color[][] buffer){
-        int deltaHeight = (height / threadCount)+1;
+    void renderImage(Color[][] buffer, Shader shader){
+        //Copy the camera to not change to view mid rendering
         Camera camCopy = new Camera(camera);
+        int deltaHeight = (height / threadCount)+1;
         for (int i = 0; i < threadCount; i++){
             int start = i*deltaHeight;
             int end =  Math.min(start+deltaHeight, height);
             exe.submit( () -> {
                 for (int u = 0; u < width; u++) for (int v = start; v < end; v++) {
-                    //Copy the camera to not change to view mid rendering
                     Payload[] payloads = camCopy.generatePayload(u, v);
                     Color color = new Color(0, 0, 0);
-                    for (Payload payload : payloads) {
-                        for(Geometry geometry : scene.getGeometries()) 
-                            geometry.intersect(payload);
-                        try{
-                            color = color.add( ( payload.target() != null ) ? shader.getColor(payload, scene) : skybox.getColor(payload, scene) /* def */);
-                        }catch(Exception e){
-                            e.printStackTrace();
-                        }
-                    }
+                    for (Payload payload : payloads)
+                        traceRay(payload);
+                    for (Payload payload : payloads)
+                        color = color.add(payload.color());
                     color = color.div(payloads.length);
                     buffer[u][height-v-1] = color;
+                    
+                    // This is copied from moodle. It doesnt work right now
+                    // Payload[] payloads = camCopy.generatePayload(u, v);
+                    // Color color = new Color(0, 0, 0);
+                    // for (Payload payload : payloads)
+                    //     color = color.add(traceRay(payload));
+                    // color = color.div(payloads.length);
+                    // buffer[u][height-v-1] = color;
                 }
                 try { barrier.await(); } catch (InterruptedException | BrokenBarrierException e) {
                     e.printStackTrace();
@@ -198,53 +199,55 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
         }
     }
 
-    void onRenderFinish() {
-        if(renderToPrimary){
-            for (int x = 0; x < width; x++) for (int y = 0; y < height; y++){
-                image.setRGB(x, y, primaryBuffer[x][y].rgb());
-            }
-        }else{
-            for (int x = 0; x < width; x++) for (int y = 0; y < height; y++){
-                image.setRGB(x, y, secondaryBuffer[x][y].rgb());
-            }
+    private Color traceRay(Payload payload){
+        for(Geometry geometry : scene.getGeometries()) 
+            geometry.intersect(payload);
+        if (payload.target() != null)
+            shader.getColor(payload, scene);
+        else 
+            skybox.getColor(payload, scene);
+        Color c = payload.color();
+        if(payload.reflection()!=null &&
+            (c.r()>0.1 || c.g()>0.1 || c.b()>0.1) 
+        ){
+            payload.setColor(payload.color().add(traceRay(new Payload(payload.reflection())).mul(payload.reflectStrength())));
+
         }
+        return payload.color();
+    }
+
+    int TRACEDEPTH = 100;
+
+    // private Color traceRay(Payload payload){
+    //     int level = 1;
+    //     double contributionWeight = 1;
+    //     Color accumulated = new Color(0, 0, 0);
+    //     while(payload.ray()!=null && level < TRACEDEPTH && contributionWeight > 0.001){
+    //         for(Geometry geometry : scene.getGeometries()) 
+    //             geometry.intersect(payload);
+    //         if (payload.target() != null)
+    //             shader.getColor(payload, scene);
+    //         else 
+    //             skybox.getColor(payload, scene);
+    //         accumulated.add(payload.color().mul(payload.reflectStrength()));
+    //         contributionWeight *= payload.reflectStrength();
+    //         payload = new Payload(payload.reflection());
+    //         level++;
+    //     }
+    //     return accumulated;
+    // }
+
+    void onRenderFinish() {
+        if(renderToPrimary)
+            for (int x = 0; x < width; x++) for (int y = 0; y < height; y++)
+                image.setRGB(x, y, primaryBuffer[x][y].rgb());
+        else
+            for (int x = 0; x < width; x++) for (int y = 0; y < height; y++)
+                image.setRGB(x, y, secondaryBuffer[x][y].rgb());
         renderToPrimary = !renderToPrimary;
         renderToView();
         view.setImage(image);
         if(!clock.isRunning()) tick();
-    }
-
-    void renderToFile(Shader shader, boolean timed){
-        //TODO why are some images unfinished
-        Shader backup = this.shader;
-        this.shader = shader;
-        String name = shader.getName();
-
-        long start = System.nanoTime();
-        renderImage(primaryBuffer);
-        if(timed) System.out.printf("%s Rendering took: %s ms%n",name, (System.nanoTime()-start)/1_000_000);
-
-        start = System.nanoTime();
-
-        File file = new File("./images/"+name+".png");
-        try { ImageIO.write(image, "png", file); } catch (Exception e) {}
-
-        if(timed) System.out.printf("%s Saving took:    %s ms%n",name, (System.nanoTime()-start)/1_000_000);
-        this.shader = backup;
-    }
-
-    void timedRender(Shader shader, int count){
-        // TODO this is broken with the newest version
-        Shader backup = this.shader;
-        this.shader = shader;
-        String name = shader.getName();
-        scene = Scene.randomSpheres(100);
-        Color[][] image = new Color[width][height];
-        
-        long start = System.nanoTime();
-        for (int i = 0; i < count; i++) renderImage(image);
-        System.out.printf("%s Rendering took:    %s ms%n",name, (System.nanoTime()-start)/1_000_000);
-        this.shader = backup;
     }
 
     @Override
@@ -265,13 +268,6 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
             getContentPane().setCursor(null);
         }else if( e.getKeyCode()==KeyEvent.VK_F5){
             view.toggleFPS();
-        }else if( e.getKeyCode()==KeyEvent.VK_F12){
-            renderToFile(new Ambient(), false);
-            renderToFile(new Diffuse(), false);
-            renderToFile(new Specular(), false);
-            renderToFile(new Phong(), false);
-            renderToFile(new BlinnPhong(), false);
-            System.out.println("Screenshot saved");
         }
     }
 

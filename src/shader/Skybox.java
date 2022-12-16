@@ -11,12 +11,13 @@ import java.io.IOException;
 
 import javax.imageio.ImageIO;
 
+import gui.App;
 import raytracer.Scene;
 
 public class Skybox extends Shader{
 
     BufferedImage image;
-
+    Color defaultColor = new Color(0.44, 0.85, 0.93);
     int size = 1000;
 
     double[] vLookUp = new double[size*2];
@@ -35,7 +36,7 @@ public class Skybox extends Shader{
         }
 
         try {
-            image = ImageIO.read(new File("./res/Skybox.hdr"));
+            image = hdrToBufferedImage(new File("./res/Skybox.hdr"));
         } catch (IOException e) { 
             image = new BufferedImage(800,800,BufferedImage.TYPE_INT_RGB);
             e.printStackTrace();
@@ -43,15 +44,19 @@ public class Skybox extends Shader{
     }
 
     @Override
-    public Color getColor(Payload p, Scene scene) {
-        Ray ray = p.ray();
-        Vector dir = ray.dir().norm();
+    public void getColor(Payload p, Scene scene) {
+        if(App.useSkybox){
+            Ray ray = p.ray();
+            Vector dir = ray.dir().norm();
 
-        double u = uLookUp[clamp(dir.x())][clamp(dir.z())];
-        double v = vLookUp[clamp(dir.y())];
+            double u = uLookUp[clamp(dir.x())][clamp(dir.z())];
+            double v = vLookUp[clamp(dir.y())];
 
-        int rgb = image.getRGB((int)(image.getWidth()*(1-u)), (int)(image.getHeight()*(1-v)));
-        return new Color(rgb);
+            int rgb = image.getRGB((int)(image.getWidth()*(1-u)), (int)(image.getHeight()*(1-v)));
+            p.setColor(new Color(rgb));
+        }else{
+            p.setColor(defaultColor);
+        }
     }
 
     int clamp(double x){

@@ -7,7 +7,7 @@ import raytracer.light.LightSource;
 public class Diffuse extends Shader{
 
     @Override
-    public Color getColor(Payload p, Scene scene) {
+    public void getColor(Payload p, Scene scene) {
         Material m = scene.getMaterials().get(p.target().material());
         Color il = new Color(0, 0, 0);
         Vector n = p.target().normal(p.hitPoint());
@@ -23,7 +23,7 @@ public class Diffuse extends Shader{
         Color out = m.color()
             .mul(il)
             .mul(m.diffuse());
-        return out;
+        p.setColor(out);
     }
 
 }
