@@ -7,9 +7,9 @@ import raytracer.Scene;
 
 public class Distance extends Shader{
 
-    @Override public Color getColor(Payload p, Scene scene) {
+    @Override public void getColor(Payload p, Scene scene) {
         Ray ray = p.ray();
         double dis = 1/ray.origin().sub(p.hitPoint()).mag();
-        return new Color(dis,dis,dis);
+        p.setColor(new Color(dis,dis,dis));
     }
 }

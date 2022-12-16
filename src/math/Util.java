@@ -15,7 +15,7 @@ public class Util {
         return Math.min(max,Math.max(min,value));
     }
 
-        public static int clamp(int value, int min, int max){
+    public static int clamp(int value, int min, int max){
         return Math.min(max,Math.max(min,value));
     }
 

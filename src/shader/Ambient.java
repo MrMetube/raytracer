@@ -1,6 +1,5 @@
 package shader;
 
-import math.Color;
 import raytracer.Material;
 import raytracer.Payload;
 import raytracer.Scene;
@@ -8,8 +7,8 @@ import raytracer.Scene;
 public class Ambient extends Shader {
 
     @Override
-    public Color getColor(Payload p, Scene scene) {
+    public void getColor(Payload p, Scene scene) {
         Material m = scene.getMaterials().get(p.target().material());
-        return m.color().mul(m.ambient());
+        p.setColor(m.color().mul(m.ambient()));
     }
 }

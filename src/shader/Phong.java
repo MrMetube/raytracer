@@ -1,6 +1,7 @@
 package shader;
 
 import math.Color;
+import math.Point;
 import math.Util;
 import math.Ray;
 import math.Vector;
@@ -12,7 +13,7 @@ import raytracer.light.LightSource;
 
 public class Phong extends Shader{
 
-    @Override public Color getColor(Payload p, Scene scene) {
+    @Override public void getColor(Payload p, Scene scene) {
         // Constants
         Geometry geometry = p.target();
         Material m = scene.getMaterials().get(geometry.material());
@@ -23,17 +24,19 @@ public class Phong extends Shader{
         Vector v = p.ray().dir().norm();
         double s = m.shininess();
 
+
         Color il = new Color(0, 0, 0);
         
         Vector n = geometry.normal(p.hitPoint());
+        Point hitShifted = p.hitPoint().add(n.mul(Util.EPSILON));
         //Colors
         Color ambient =  m.color().mul(ka);
 
+        boolean inShade = false;
         for (LightSource ls : scene.getLightSources()) {
             Vector l = ls.directionFrom(p.hitPoint());
             //Check if it is in shade
-            boolean inShade = false;
-            Payload pl = new Payload(new Ray(p.hitPoint().add(n.mul(Util.EPSILON)), l));
+            Payload pl = new Payload(new Ray(hitShifted, l));
             for (Geometry g : scene.getGeometries()) {
                 if (g.intersect(pl)) {
                     inShade = true;
@@ -54,16 +57,18 @@ public class Phong extends Shader{
             double vrs = Math.pow(vr,s);
 
             Color lc = ls.colorAt(p.hitPoint())
-                .mul(ks)
-                .mul(vrs);
+                .mul(ks*vrs);
             il = il.add(lc);
         }
+        // Reflection, tell the payload that it has a reflection
+        if(m.reflectivity()>0)
+            p.setReflection(new Ray(hitShifted, v.refl(n)), m.reflectivity());
 
         if(m.isMetallic()) il.mul(m.color());
         Color out = m.color()
             .mul(il)
             .mul(kd)
             .add(ambient);
-        return out;
+        p.setColor(out);
     }
 }

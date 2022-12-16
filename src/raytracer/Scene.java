@@ -58,14 +58,15 @@ public class Scene {
     public static Scene randomSpheres(int count){
         Scene s = new Scene();
         s.addBasicMaterials();
-        s.addLightSource(new PointLight(new Point(0, 10, -10), Color.WHITE, 10));
+        s.addLightSource(new PointLight(new Point(0, 10, -10), Color.WHITE, 1));
         s.addLightSource(new DirectionalLight(new Vector(0, -1, 0), Color.WHITE, 1));
         Object[] materials = s.getMaterials().keySet().toArray();
         Random rdm = new Random();
+        double bounds = Math.sqrt(count);
         for (int i = 0; i < count; i++) {
-            double x = rdm.nextDouble(-10,10);
-            double y = rdm.nextDouble(-10,10);
-            double z = rdm.nextDouble(-10,10);
+            double x = rdm.nextDouble(-bounds,bounds);
+            double y = rdm.nextDouble(-bounds,bounds);
+            double z = rdm.nextDouble(-bounds,bounds);
             double r = rdm.nextDouble(.5,1.5);
             int m = rdm.nextInt(0,materials.length);
             if(materials[m] instanceof String){
