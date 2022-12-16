@@ -39,12 +39,12 @@ public class View extends JPanel {
         if(showFps >= 1){
             g.setColor(java.awt.Color.yellow);
             g.setFont(new Font("Verdana", Font.BOLD, 18));
-            g.drawString(String.format("%d FPS",fps), 700, 20);
+            g.drawString(String.format("%d FPS",fps), getWidth()-100, 20);
             if(showFps > 1){
                 maxfps = Math.max((counter%200 == 0) ? 0 : maxfps, (int)fps);
                 minfps = Math.min((counter%200 == 0) ? 2000 : minfps, (int)fps);
-                g.drawString(String.format("%d min",minfps), 700, 40);
-                g.drawString(String.format("%d max",maxfps), 700, 60);
+                g.drawString(String.format("%d min",minfps), getWidth()-100, 40);
+                g.drawString(String.format("%d max",maxfps), getWidth()-100, 60);
             }
         }
         time = System.nanoTime();

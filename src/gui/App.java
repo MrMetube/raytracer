@@ -28,8 +28,8 @@ import raytracer.stuff.Turn;
 import shader.*;
 
 public class App extends JFrame implements ActionListener, KeyListener, MouseInputListener {
-    int width = 800;
-    int height = 800;
+    int width = 1000;
+    int height = width;
 
     Scene  scene  = new Scene();
     Shader shader = new Phong();
@@ -150,7 +150,7 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
         renderToView();
     }
 
-    public void tick(){
+    void tick(){
         if(!moveKeys.isEmpty())
             camera.move(moveKeys);
         if(!turnKeys.isEmpty())
@@ -161,14 +161,14 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
     Color[][] primaryBuffer = new Color[width][height];
     boolean renderToPrimary = true;
 
-    public void renderToView(){
+    void renderToView(){
         if(renderToPrimary)
             renderImage(primaryBuffer);
         else
             renderImage(secondaryBuffer);
     }
 
-    public void renderImage(Color[][] buffer){
+    void renderImage(Color[][] buffer){
         int deltaHeight = (height / threadCount)+1;
         Camera camCopy = new Camera(camera);
         for (int i = 0; i < threadCount; i++){
@@ -182,7 +182,11 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
                     for (Payload payload : payloads) {
                         for(Geometry geometry : scene.getGeometries()) 
                             geometry.intersect(payload);
-                        color = color.add( ( payload.target() != null ) ? shader.getColor(payload, scene) : /* skybox.getColor(payload, scene) */ def);
+                        try{
+                            color = color.add( ( payload.target() != null ) ? shader.getColor(payload, scene) : skybox.getColor(payload, scene) /* def */);
+                        }catch(Exception e){
+                            e.printStackTrace();
+                        }
                     }
                     color = color.div(payloads.length);
                     buffer[u][height-v-1] = color;
@@ -194,7 +198,7 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
         }
     }
 
-    private void onRenderFinish() {
+    void onRenderFinish() {
         if(renderToPrimary){
             for (int x = 0; x < width; x++) for (int y = 0; y < height; y++){
                 image.setRGB(x, y, primaryBuffer[x][y].rgb());
@@ -205,12 +209,12 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
             }
         }
         renderToPrimary = !renderToPrimary;
+        renderToView();
         view.setImage(image);
         if(!clock.isRunning()) tick();
-        renderToView();
     }
 
-    public void renderToFile(Shader shader, boolean timed){
+    void renderToFile(Shader shader, boolean timed){
         //TODO why are some images unfinished
         Shader backup = this.shader;
         this.shader = shader;
@@ -229,7 +233,7 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
         this.shader = backup;
     }
 
-    public void timedRender(Shader shader, int count){
+    void timedRender(Shader shader, int count){
         // TODO this is broken with the newest version
         Shader backup = this.shader;
         this.shader = shader;

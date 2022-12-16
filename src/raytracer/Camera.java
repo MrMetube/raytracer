@@ -28,12 +28,12 @@ public class Camera {
     double moveSpeed = 0.7;
     double turnSpeed = 5;
 
-    public Camera(Point pos, Point lookAt, double fovDeg, App world) {
+    public Camera(Point pos, Point lookAt, double fovDeg, App app) {
         this.pos = pos;
         this.lookAt = lookAt;
         fov = Math.toRadians(fovDeg);
-        width = world.getWidth();
-        height = world.getHeight();
+        width = app.getWidth();
+        height = app.getHeight();
 
         double aspectRatio = width/height;
         double halfHeight = Math.tan(fov/2);
