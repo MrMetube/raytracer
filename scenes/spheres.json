@@ -113,7 +113,7 @@
                     "z": 0.91,
                     "w": -1.0
                 },
-                "intensity": 10
+                "intensity": 5
             }
         },
         {
@@ -131,7 +131,7 @@
                     "z": 0.95,
                     "w": -1.0
                 },
-                "intensity": 10
+                "intensity": 5
             }
         },
         {
@@ -149,7 +149,7 @@
                     "z": 0.53,
                     "w": -1.0
                 },
-                "intensity": 10
+                "intensity": 5
             }
         }
     ],
@@ -204,7 +204,8 @@
             "diffuse": 0.9,
             "specular": 0.9,
             "shininess": 100,
-            "isMetallic": false
+            "isMetallic": false,
+            "reflectivity": 0.5
         },
         "yellow": {
             "color": {
@@ -373,7 +374,8 @@
             "diffuse": 0.9,
             "specular": 0.9,
             "shininess": 100,
-            "isMetallic": false
+            "isMetallic": false,
+            "reflectivity": 0.95
         },
         "azure": {
             "color": {

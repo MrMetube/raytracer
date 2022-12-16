@@ -1,0 +1,539 @@
+{
+    "geometries": [
+        {
+            "type": "AABBox",
+            "properties": {
+                "min": {
+                    "x": 0.9043929718269337,
+                    "y": 1.6027815905975422,
+                    "z": 1.3240697231822236,
+                    "w": 1.0
+                },
+                "max": {
+                    "x": 1.6775970331572498,
+                    "y": 2.3759856519278584,
+                    "z": 2.0972737845125398,
+                    "w": 1.0
+                },
+                "m": "green"
+            }
+        },
+        {
+            "type": "AABBox",
+            "properties": {
+                "min": {
+                    "x": -1.1337186196854505,
+                    "y": -2.9848861117271537,
+                    "z": 0.2840405308983369,
+                    "w": 1.0
+                },
+                "max": {
+                    "x": 0.28332620533592223,
+                    "y": -1.567841286705781,
+                    "z": 1.7010853559197097,
+                    "w": 1.0
+                },
+                "m": "NO_MATERIAL"
+            }
+        },
+        {
+            "type": "Sphere",
+            "properties": {
+                "c": {
+                    "x": 1.001,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "w": 1.0
+                },
+                "r": 1.0,
+                "m": "silver"
+            }
+        },
+        {
+            "type": "AABBox",
+            "properties": {
+                "min": {
+                    "x": -1.756595471692481,
+                    "y": -2.815398941553964,
+                    "z": -2.3545664937035156,
+                    "w": 1.0
+                },
+                "max": {
+                    "x": -0.9719735899748837,
+                    "y": -2.030777059836367,
+                    "z": -1.5699446119859184,
+                    "w": 1.0
+                },
+                "m": "red"
+            }
+        },
+        {
+            "type": "Sphere",
+            "properties": {
+                "c": {
+                    "x": 0.8241566864985947,
+                    "y": -1.0845340457682107,
+                    "z": 1.529999957732302,
+                    "w": 1.0
+                },
+                "r": 1.1065807410405655,
+                "m": "turquoise"
+            }
+        },
+        {
+            "type": "AABBox",
+            "properties": {
+                "min": {
+                    "x": -0.24103912176814024,
+                    "y": -1.1079995729631933,
+                    "z": 2.2520772942133997,
+                    "w": 1.0
+                },
+                "max": {
+                    "x": 0.7201056958924452,
+                    "y": -0.14685475530260783,
+                    "z": 3.213222111873985,
+                    "w": 1.0
+                },
+                "m": "gold"
+            }
+        },
+        {
+            "type": "AABBox",
+            "properties": {
+                "min": {
+                    "x": -0.5145431951210364,
+                    "y": 0.031910322681254044,
+                    "z": 0.5182151881587687,
+                    "w": 1.0
+                },
+                "max": {
+                    "x": 0.608935508205275,
+                    "y": 1.1553890260075654,
+                    "z": 1.64169389148508,
+                    "w": 1.0
+                },
+                "m": "green"
+            }
+        },
+        {
+            "type": "Sphere",
+            "properties": {
+                "c": {
+                    "x": -1.001,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "w": 1.0
+                },
+                "r": 1.0,
+                "m": "gold"
+            }
+        },
+        {
+            "type": "AABBox",
+            "properties": {
+                "min": {
+                    "x": -3.082470867012096,
+                    "y": -1.3709601109728013,
+                    "z": -3.1321093101247923,
+                    "w": 1.0
+                },
+                "max": {
+                    "x": -1.6602039496495495,
+                    "y": 0.051306806389745274,
+                    "z": -1.7098423927622457,
+                    "w": 1.0
+                },
+                "m": "silver"
+            }
+        },
+        {
+            "type": "AABBox",
+            "properties": {
+                "min": {
+                    "x": -0.7720461902326416,
+                    "y": -0.5400446092911282,
+                    "z": 2.8757493161419103,
+                    "w": 1.0
+                },
+                "max": {
+                    "x": -0.14840929530743507,
+                    "y": 0.08359228563407839,
+                    "z": 3.499386211067117,
+                    "w": 1.0
+                },
+                "m": "lime"
+            }
+        },
+        {
+            "type": "Plane",
+            "properties": {
+                "n": {
+                    "x": 0.0,
+                    "y": 1.0,
+                    "z": 0.0,
+                    "w": 0.0
+                },
+                "p": {
+                    "x": 0.0,
+                    "y": -1.0,
+                    "z": 0.0,
+                    "w": 1.0
+                },
+                "r": 5.0,
+                "m": "lime"
+            }
+        },
+        {
+            "type": "AABBox",
+            "properties": {
+                "min": {
+                    "x": 0.7409409141343981,
+                    "y": 0.7412573645902536,
+                    "z": 2.0669504692241003,
+                    "w": 1.0
+                },
+                "max": {
+                    "x": 1.8254396929364134,
+                    "y": 1.8257561433922689,
+                    "z": 3.1514492480261156,
+                    "w": 1.0
+                },
+                "m": "copper"
+            }
+        },
+        {
+            "type": "Sphere",
+            "properties": {
+                "c": {
+                    "x": 1.2220549991493352,
+                    "y": 2.418657819522904,
+                    "z": 0.9306873867749617,
+                    "w": 1.0
+                },
+                "r": 1.182423305975264,
+                "m": "cyan"
+            }
+        }
+    ],
+    "lightSources": [
+        {
+            "type": "PointLight",
+            "properties": {
+                "pos": {
+                    "x": 0.0,
+                    "y": 10.0,
+                    "z": -10.0,
+                    "w": 1.0
+                },
+                "color": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0,
+                    "w": -1.0
+                },
+                "intensity": 1.0
+            }
+        },
+        {
+            "type": "DirectionalLight",
+            "properties": {
+                "dir": {
+                    "x": 0.0,
+                    "y": -1.0,
+                    "z": 0.0,
+                    "w": 0.0
+                },
+                "color": {
+                    "x": 1.0,
+                    "y": 1.0,
+                    "z": 1.0,
+                    "w": -1.0
+                },
+                "intensity": 1.0
+            }
+        }
+    ],
+    "materials": {
+        "magenta": {
+            "color": {
+                "x": 1.0,
+                "y": 0.0,
+                "z": 1.0,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 10,
+            "reflectivity": 0.05,
+            "isMetallic": false
+        },
+        "pink": {
+            "color": {
+                "x": 0.98,
+                "y": 0.4,
+                "z": 0.53,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.1,
+            "shininess": 0,
+            "reflectivity": 0.01,
+            "isMetallic": false
+        },
+        "green": {
+            "color": {
+                "x": 0.0,
+                "y": 1.0,
+                "z": 0.0,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 10,
+            "reflectivity": 0.05,
+            "isMetallic": false
+        },
+        "lime": {
+            "color": {
+                "x": 0.65,
+                "y": 0.87,
+                "z": 0.47,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.1,
+            "shininess": 0,
+            "reflectivity": 0.01,
+            "isMetallic": false
+        },
+        "yellow": {
+            "color": {
+                "x": 1.0,
+                "y": 1.0,
+                "z": 0.0,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 10,
+            "reflectivity": 0.05,
+            "isMetallic": false
+        },
+        "turquoise": {
+            "color": {
+                "x": 0.51,
+                "y": 0.85,
+                "z": 0.91,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.1,
+            "shininess": 0,
+            "reflectivity": 0.01,
+            "isMetallic": false
+        },
+        "cyan": {
+            "color": {
+                "x": 0.0,
+                "y": 1.0,
+                "z": 1.0,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 10,
+            "reflectivity": 0.05,
+            "isMetallic": false
+        },
+        "bronze": {
+            "color": {
+                "x": 0.72,
+                "y": 0.45,
+                "z": 0.2,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 200,
+            "reflectivity": 0.9,
+            "isMetallic": true
+        },
+        "red": {
+            "color": {
+                "x": 1.0,
+                "y": 0.0,
+                "z": 0.0,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 10,
+            "reflectivity": 0.05,
+            "isMetallic": false
+        },
+        "orange": {
+            "color": {
+                "x": 0.97,
+                "y": 0.62,
+                "z": 0.42,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.1,
+            "shininess": 0,
+            "reflectivity": 0.01,
+            "isMetallic": false
+        },
+        "gold": {
+            "color": {
+                "x": 1.0,
+                "y": 0.84,
+                "z": 0.0,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 200,
+            "reflectivity": 0.9,
+            "isMetallic": true
+        },
+        "lemon": {
+            "color": {
+                "x": 0.98,
+                "y": 0.86,
+                "z": 0.42,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.1,
+            "shininess": 0,
+            "reflectivity": 0.01,
+            "isMetallic": false
+        },
+        "NO_MATERIAL": {
+            "color": {
+                "x": 1.0,
+                "y": 0.0,
+                "z": 1.0,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 1.0,
+            "specular": 0.0,
+            "shininess": 0,
+            "reflectivity": 0.0,
+            "isMetallic": false
+        },
+        "gray": {
+            "color": {
+                "x": 0.5,
+                "y": 0.5,
+                "z": 0.5,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 10,
+            "reflectivity": 0.05,
+            "isMetallic": false
+        },
+        "blue": {
+            "color": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 1.0,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 10,
+            "reflectivity": 0.05,
+            "isMetallic": false
+        },
+        "white": {
+            "color": {
+                "x": 1.0,
+                "y": 1.0,
+                "z": 1.0,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 10,
+            "reflectivity": 0.05,
+            "isMetallic": false
+        },
+        "light": {
+            "color": {
+                "x": 0.99,
+                "y": 0.98,
+                "z": 0.95,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.1,
+            "shininess": 0,
+            "reflectivity": 0.01,
+            "isMetallic": false
+        },
+        "purple": {
+            "color": {
+                "x": 0.69,
+                "y": 0.6,
+                "z": 0.94,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.1,
+            "shininess": 0,
+            "reflectivity": 0.01,
+            "isMetallic": false
+        },
+        "copper": {
+            "color": {
+                "x": 0.8,
+                "y": 0.5,
+                "z": 0.2,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 200,
+            "reflectivity": 0.9,
+            "isMetallic": true
+        },
+        "silver": {
+            "color": {
+                "x": 0.51,
+                "y": 0.54,
+                "z": 0.59,
+                "w": -1.0
+            },
+            "ambient": 0.2,
+            "diffuse": 0.9,
+            "specular": 0.9,
+            "shininess": 200,
+            "reflectivity": 0.9,
+            "isMetallic": true
+        }
+    }
+}
