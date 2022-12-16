@@ -183,14 +183,6 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
                         color = color.add(payload.color());
                     color = color.div(payloads.length);
                     buffer[u][height-v-1] = color;
-                    
-                    // This is copied from moodle. It doesnt work right now
-                    // Payload[] payloads = camCopy.generatePayload(u, v);
-                    // Color color = new Color(0, 0, 0);
-                    // for (Payload payload : payloads)
-                    //     color = color.add(traceRay(payload));
-                    // color = color.div(payloads.length);
-                    // buffer[u][height-v-1] = color;
                 }
                 try { barrier.await(); } catch (InterruptedException | BrokenBarrierException e) {
                     e.printStackTrace();
@@ -206,36 +198,11 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
             shader.getColor(payload, scene);
         else 
             skybox.getColor(payload, scene);
-        Color c = payload.color();
-        if(payload.reflection()!=null &&
-            (c.r()>0.1 || c.g()>0.1 || c.b()>0.1) 
-        ){
+        if(payload.reflection()!=null){
             payload.setColor(payload.color().add(traceRay(new Payload(payload.reflection())).mul(payload.reflectStrength())));
-
         }
         return payload.color();
     }
-
-    int TRACEDEPTH = 100;
-
-    // private Color traceRay(Payload payload){
-    //     int level = 1;
-    //     double contributionWeight = 1;
-    //     Color accumulated = new Color(0, 0, 0);
-    //     while(payload.ray()!=null && level < TRACEDEPTH && contributionWeight > 0.001){
-    //         for(Geometry geometry : scene.getGeometries()) 
-    //             geometry.intersect(payload);
-    //         if (payload.target() != null)
-    //             shader.getColor(payload, scene);
-    //         else 
-    //             skybox.getColor(payload, scene);
-    //         accumulated.add(payload.color().mul(payload.reflectStrength()));
-    //         contributionWeight *= payload.reflectStrength();
-    //         payload = new Payload(payload.reflection());
-    //         level++;
-    //     }
-    //     return accumulated;
-    // }
 
     void onRenderFinish() {
         if(renderToPrimary)
