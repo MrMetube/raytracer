@@ -68,12 +68,14 @@ public class Scene {
             double y = rdm.nextDouble(-bounds,bounds);
             double z = rdm.nextDouble(-bounds,bounds);
             double r = rdm.nextDouble(.5,1.5);
+            double r2 = rdm.nextDouble(.5,1.5);
+            double r3 = rdm.nextDouble(.5,1.5);
             int m = rdm.nextInt(0,materials.length);
             if(materials[m] instanceof String){
                 int d = rdm.nextInt(2);
                 Geometry g = null;
                 if(d==0) g = new Sphere(new Point(x,y,z), r, (String)materials[m]);
-                else if (d==1) g = new AABBox(new Point(x,y,z), new Point(x+r,y+r,z+r), (String)materials[m]);
+                else if (d==1) g = new AABBox(new Point(x,y,z), new Point(x+r,y+r2,z+r3), (String)materials[m]);
                 // else if (d == 2) g = new Plane(new Vector(rdm.nextDouble(-1,1), rdm.nextDouble(-1,1), rdm.nextDouble(-1,1)), new Point(x, y, z), r, (String)materials[m]);
                 s.addGeometry(g);
             }

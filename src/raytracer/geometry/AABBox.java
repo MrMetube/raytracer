@@ -69,12 +69,13 @@ public class AABBox extends Geometry{
     @Override
     public Vector normal(Point hit) {
         // Is this always correct??
-             if(Util.approxEqual(hit.x(), min.x(), 0.0001)) return Vector.Xneg;
-        else if(Util.approxEqual(hit.x(), max.x(), 0.0001)) return Vector.Xpos;
-        else if(Util.approxEqual(hit.y(), min.y(), 0.0001)) return Vector.Yneg;
-        else if(Util.approxEqual(hit.y(), max.y(), 0.0001)) return Vector.Ypos;
-        else if(Util.approxEqual(hit.z(), min.z(), 0.0001)) return Vector.Zneg;
-        else if(Util.approxEqual(hit.z(), max.z(), 0.0001)) return Vector.Zpos;
+        double epsilon = 0.0001;
+             if(Util.approxEqual(hit.x(), min.x(), epsilon)) return Vector.Xneg;
+        else if(Util.approxEqual(hit.x(), max.x(), epsilon)) return Vector.Xpos;
+        else if(Util.approxEqual(hit.y(), min.y(), epsilon)) return Vector.Yneg;
+        else if(Util.approxEqual(hit.y(), max.y(), epsilon)) return Vector.Ypos;
+        else if(Util.approxEqual(hit.z(), min.z(), epsilon)) return Vector.Zneg;
+        else if(Util.approxEqual(hit.z(), max.z(), epsilon)) return Vector.Zpos;
         return Vector.Yneg;
     }
     

@@ -28,7 +28,7 @@ import shader.*;
 public class App extends JFrame implements ActionListener, KeyListener, MouseInputListener {
     public static boolean useSkybox = true;
 
-    int width = 800;
+    int width = 600;
     int height = 600;
 
     Scene  scene  = new Scene();

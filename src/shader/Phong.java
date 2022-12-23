@@ -64,7 +64,7 @@ public class Phong extends Shader{
         if(m.reflectivity()>0)
             p.setReflection(new Ray(hitShifted, v.refl(n)), m.reflectivity());
 
-        if(m.isMetallic()) il.mul(m.color());
+        if(m.isMetallic()) il = il.mul(m.color());
         Color out = m.color()
             .mul(il)
             .mul(kd)
