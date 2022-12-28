@@ -8,7 +8,6 @@ public abstract class LightSource {
     Color color;
     double intensity;
 
-    public abstract boolean isDirectional();
     public abstract Vector directionFrom(Point p);
     public abstract double distanceFrom(Point p);
     public abstract Color colorAt(Point p);

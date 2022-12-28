@@ -10,7 +10,7 @@ public class Payload{
     double t = Double.MAX_VALUE;
     Ray ray;
     Color color;
-    Ray reflection;
+    Payload reflection;
     double reflectStrength = 1;
 
     public Payload(Ray ray){
@@ -29,10 +29,10 @@ public class Payload{
     public double t() { return t;}
     public Ray ray() { return ray;}
     public Color color(){ return color; }
-    public Ray reflection() { return reflection;}
+    public Payload reflection() { return reflection;}
     public double reflectStrength() { return reflectStrength;}
 
-    public void setReflection(Ray ray, double r){ 
+    public void setReflection(Payload ray, double r){ 
         reflection = ray; 
         reflectStrength = r;
     }

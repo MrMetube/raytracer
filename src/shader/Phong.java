@@ -62,7 +62,7 @@ public class Phong extends Shader{
         }
         // Reflection, tell the payload that it has a reflection
         if(m.reflectivity()>0)
-            p.setReflection(new Ray(hitShifted, v.refl(n)), m.reflectivity());
+            p.setReflection(new Payload(new Ray(hitShifted, v.refl(n))), m.reflectivity());
 
         if(m.isMetallic()) il = il.mul(m.color());
         Color out = m.color()

@@ -69,40 +69,29 @@ public class Camera {
     }
 
     public Payload[] generatePayload(int x, int y){
-        double xOffset, yOffset;
-        Vector dir;
-        Payload[] out = {};
-
-        switch(supersampling){
-            case NONE:
-                xOffset = (x + 0.5 - width  / 2) * pixelSize;
-                yOffset = (y + 0.5 - height / 2) * pixelSize;
-                dir = right.mul(xOffset).add(up.mul(yOffset)).add(vpn);
-                out = new Payload[] { new Payload( new Ray(pos, dir)) };
-                break;
-            case X4: // Generate 4 Rays in a square around the center
+        Payload[] out = switch(supersampling){
+            case NONE -> new Payload[] { makePayload(x, y, 0.5, 0.5) };
+            case X4 ->{// Generate 4 Rays in a square around the center
                 out = new Payload[4];
-                for (int i = 0; i < 2; i++) for (int j = 0; j < 2; j++) {
-                    xOffset = (x + 0.25 + (0.5*i) - width  / 2) * pixelSize;
-                    yOffset = (y + 0.25 + (0.5*j) - height / 2) * pixelSize;
-                    dir = right.mul(xOffset).add(up.mul(yOffset)).add(vpn);
-                    out[i*2+j] = new Payload( new Ray(pos, dir));
+                for (int i = 0; i < 2; i++) for (int j = 0; j < 2; j++) 
+                    out[i*2+j] = makePayload(x, y, 0.25 + 0.5*i, 0.25 + 0.5*j);
+                yield out;
                 }
-                break;
-            case X9: // Generate 9 Rays, 4 corners, 4 sides, 1 middle
+            case X9 -> {// Generate 9 Rays, 4 corners, 4 sides, 1 middle
                 out = new Payload[9];
-                for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) {
-                    xOffset = (x + (0.5*i) - width  / 2) * pixelSize;
-                    yOffset = (y + (0.5*j) - height / 2) * pixelSize;
-                    dir = right.mul(xOffset).add(up.mul(yOffset)).add(vpn);
-                    out[i*3+j] = new Payload( new Ray(pos, dir));
+                for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++)
+                    out[i*3+j] = makePayload(x, y, 0.5*i, 0.5*j);
+                yield out;
                 }
-                break;
-            default: // just deactivate ss if it isnt set for whatever reason
-                supersampling = Supersampling.NONE;
-                break;
-        }
+        };
         return out;
+    }
+
+    private Payload makePayload(int x, int y, double xShift, double yShift){
+        double xOffset = (x + xShift - width  / 2) * pixelSize;
+        double yOffset = (y + yShift - height / 2) * pixelSize;
+        Vector dir = right.mul(xOffset).add(up.mul(yOffset)).add(vpn);
+        return new Payload( new Ray(pos, dir));
     }
 
     public void move(HashSet<Move> moves){
@@ -117,9 +106,9 @@ public class Camera {
         if(moves.contains(Move.RIGHT))
             dir = dir.add(right);
         if(moves.contains(Move.UP))
-            dir = dir.add(up);
+            dir = dir.add(Vector.Ypos);
         if(moves.contains(Move.DOWN))
-            dir = dir.add(up.neg());
+            dir = dir.add(Vector.Yneg);
 
         dir = dir.mul(moveSpeed);
         pos = pos.add(dir);
@@ -129,15 +118,16 @@ public class Camera {
     
     public void rotate(HashSet<Turn> turns){
         int rotX = 0, rotY = 0;
-        if(turns.contains(Turn.UP))     rotX += turnSpeed;
-        if(turns.contains(Turn.DOWN))   rotX -= turnSpeed;
-        if(turns.contains(Turn.LEFT))   rotY -= turnSpeed;
-        if(turns.contains(Turn.RIGHT))  rotY += turnSpeed;
+        if(turns.contains(Turn.UP))     rotY -= turnSpeed;
+        if(turns.contains(Turn.DOWN))   rotY += turnSpeed;
+        if(turns.contains(Turn.LEFT))   rotX -= turnSpeed;
+        if(turns.contains(Turn.RIGHT))  rotX += turnSpeed;
         rotate(rotX, rotY);
     }
 
     public void rotate(double angleX, double angleY){
-        Vector dir = vpn.rotate(angleX, right).add(vpn.rotate(angleY, up)).norm();
+        Vector dir = vpn.rotate(angleX, up).add(vpn.rotate(angleY, right)).norm();
+        if(Math.abs(pos.sub(pos.add(dir)).norm().y())>0.98) return;
         lookAt = pos.add(dir);
         calcVectors();
     }

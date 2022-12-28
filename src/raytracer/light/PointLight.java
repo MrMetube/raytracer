@@ -13,7 +13,6 @@ public class PointLight extends LightSource{
         this.intensity = intensity;
     }
 
-    @Override public boolean isDirectional() { return false;}
     @Override public Vector directionFrom(Point p) { return pos.sub(p); }
     @Override public double distanceFrom(Point p) { return pos.sub(p).mag(); }
     @Override public Color colorAt(Point p) { return color.mul(intensity).div(distanceFrom(p)*distanceFrom(p)); }
