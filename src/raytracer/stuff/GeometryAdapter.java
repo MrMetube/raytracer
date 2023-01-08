@@ -17,7 +17,7 @@ public class GeometryAdapter implements JsonDeserializer<Geometry> ,JsonSerializ
     
     @Override
     public JsonElement serialize(Geometry src, Type typeOfSrc, JsonSerializationContext context) {
-        JsonObject result = new JsonObject();
+        var result = new JsonObject();
         result.add("type", new JsonPrimitive(src.getClass().getSimpleName()));
         result.add("properties", context.serialize(src, src.getClass()));
  
@@ -26,9 +26,9 @@ public class GeometryAdapter implements JsonDeserializer<Geometry> ,JsonSerializ
     
     @Override
     public Geometry deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
-        JsonObject jsonObject = json.getAsJsonObject();
+        var jsonObject = json.getAsJsonObject();
         String type = jsonObject.get("type").getAsString();
-        JsonElement element = jsonObject.get("properties");
+        var element = jsonObject.get("properties");
         try {
             return context.deserialize(element, Class.forName("raytracer.geometry." + type));
         } catch (ClassNotFoundException cnfe) {

@@ -21,10 +21,10 @@ public class Color extends Tuple {
     public static final Color DARK      = new Color(0.17, 0.16, 0.18);
     public static final Color LIGHT     = new Color(0.99, 0.98, 0.95);
 
-    public static final Color GOLD    = new Color(1, 0.84, 0);
-    public static final Color SILVER  = new Color(0.51, 0.54, 0.59);
-    public static final Color BRONZE  = new Color(0.72, 0.45, 0.2);
-    public static final Color COPPER  = new Color(0.8, 0.5, 0.2);
+    public static final Color GOLD    = new Color(1,    0.84,   0);
+    public static final Color SILVER  = new Color(0.51, 0.54,   0.59);
+    public static final Color BRONZE  = new Color(0.72, 0.45,   0.2);
+    public static final Color COPPER  = new Color(0.8,  0.5,    0.2);
     //#endregion
     
     public Color(double r, double g, double b){ 

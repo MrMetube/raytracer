@@ -39,8 +39,8 @@ public class Scene {
 
     public Scene(String path){
         try {
-            FileReader fR = new FileReader(new File(path));
-            Scene s = gson.fromJson(fR, Scene.class);
+            var fR = new FileReader(new File(path));
+            var s = gson.fromJson(fR, Scene.class);
             this.geometries = s.getGeometries();
             this.lightSources = s.getLightSources();
             this.materials = s.getMaterials();
@@ -49,19 +49,19 @@ public class Scene {
 
     public void toJson(String name){
         try {
-            FileWriter fw = new FileWriter("./scenes/"+name+".json");
+            var fw = new FileWriter("./scenes/"+name+".json");
             fw.write(gson.toJson(this));
             fw.close();
         } catch (Exception e) {}
     }
     
     public static Scene randomSpheres(int count){
-        Scene s = new Scene();
+        var s = new Scene();
         s.addBasicMaterials();
         s.addLightSource(new PointLight(new Point(0, 10, -10), Color.WHITE, 1));
         s.addLightSource(new DirectionalLight(new Vector(0, -1, 0), Color.WHITE, 1));
         Object[] materials = s.getMaterials().keySet().toArray();
-        Random rdm = new Random();
+        var rdm = new Random();
         double bounds = Math.sqrt(count);
         for (int i = 0; i < count; i++) {
             double x  = rdm.nextDouble(-bounds,bounds);

@@ -30,11 +30,14 @@ public class Payload{
     public Ray ray() { return ray;}
     public Color color(){ return color; }
     public Payload reflection() { return reflection;}
-    public double reflectStrength() { return reflectStrength;}
 
     public void setReflection(Payload ray, double r){ 
         reflection = ray; 
         reflectStrength = r;
     }
     public void setColor(Color c){ color = c;}
+
+    public void reflect(Color c) {
+        color = color.add(c.mul(reflectStrength));
+    }
 }

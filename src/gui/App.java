@@ -18,7 +18,6 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 import math.Point;
 import math.Color;
 import raytracer.*;
-import raytracer.geometry.Geometry;
 import raytracer.stuff.Move;
 import raytracer.stuff.Supersampling;
 import raytracer.stuff.Turn;
@@ -30,7 +29,7 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
     int width = 960;
     int height = 540;
 
-    Scene  scene  = new Scene();
+    public Scene  scene  = new Scene();
     Shader shader = new Phong();
     Skybox skybox = new Skybox();
 
@@ -39,7 +38,7 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
     HashMap<Integer,Object> keyMap = new HashMap<>();
     HashSet<Move> moveKeys = new HashSet<>();
     HashSet<Turn> turnKeys = new HashSet<>();
-    boolean captureMouse = false;
+    boolean isActive = false;
     Robot robot;
 
     int randomCount = 100;
@@ -70,8 +69,8 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
             setLocationRelativeTo(null);
             setFocusTraversalKeysEnabled(false);
             
-            JMenuBar menubar = new JMenuBar();
-            JMenu sceneMenu = new JMenu("Scene");
+            var menubar = new JMenuBar();
+            var sceneMenu = new JMenu("Scene");
 
             fileItem = new JMenuItem("Open File",KeyEvent.VK_F);
             rndmItem = new JMenuItem("Random Scene",KeyEvent.VK_R);
@@ -166,7 +165,7 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
 
     void renderImage(Color[][] buffer, Shader shader){
         //Copy the camera to not change to view mid rendering
-        Camera camCopy = new Camera(camera);
+        var camCopy = new Camera(camera);
         int deltaHeight = (height / threadCount)+1;
         for (int i = 0; i < threadCount; i++){
             int start = i*deltaHeight;
@@ -174,8 +173,8 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
             exe.submit( () -> {
                 for (int u = 0; u < width; u++) for (int v = start; v < end; v++) {
                     Payload[] payloads = camCopy.generatePayload(u, v);
-                    Color color = new Color(0, 0, 0);
-                    for (Payload payload : payloads){
+                    var color = new Color(0, 0, 0);
+                    for (var payload : payloads){
                         traceRay(payload);
                         color = color.add(payload.color());
                     }
@@ -188,14 +187,16 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
     }
 
     Color traceRay(Payload payload){
-        for(Geometry geometry : scene.getGeometries()) 
+        for(var geometry : scene.getGeometries()) 
             geometry.intersect(payload);
         if (payload.target() != null)
             shader.getColor(payload, scene);
         else 
             skybox.getColor(payload, scene);
+
         if(payload.reflection()!=null)
-            payload.setColor(payload.color().add(traceRay(payload.reflection()).mul(payload.reflectStrength())));
+            payload.reflect(traceRay(payload.reflection()));
+            
         
         return payload.color();
     }
@@ -213,10 +214,10 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
 
     @Override
     public void keyPressed(KeyEvent e) {
-        Object o = keyMap.get(e.getKeyCode());
-             if( o instanceof Move)
+        var o = keyMap.get(e.getKeyCode());
+             if( isActive && o instanceof Move)
             moveKeys.add((Move)o);
-        else if( o instanceof Turn)
+        else if( isActive && o instanceof Turn)
             turnKeys.add((Turn)o);
         else if( o instanceof Shader) {
             shader = (Shader) o;
@@ -225,7 +226,7 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
             camera.setSupersampling((Supersampling) o);
             System.out.println("Supersamplingmode: " + ((Supersampling) o).name());
         }else if( e.getKeyCode()==KeyEvent.VK_ESCAPE){
-            captureMouse = false;
+            isActive = false;
             getContentPane().setCursor(null);
         }else if( e.getKeyCode()==KeyEvent.VK_F5)
             view.toggleFPS();
@@ -233,14 +234,14 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
 
     @Override
     public void keyReleased(KeyEvent e) {
-        Object o = keyMap.get(e.getKeyCode());
+        var o = keyMap.get(e.getKeyCode());
         if(o instanceof Move) moveKeys.remove((Move)o);
         else if(o instanceof Turn) turnKeys.remove((Turn)o);
     }
    
     @Override
     public void mouseMoved(MouseEvent e) {
-        if(captureMouse) {
+        if(isActive) {
             int mouseSensitivity = 100;
 
             int centerX = getX() + getWidth() / 2;
@@ -275,8 +276,8 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
 
     @Override 
     public void mouseClicked(MouseEvent e)  { 
-        captureMouse = !captureMouse;
-        getContentPane().setCursor(captureMouse ? blankCursor : null);
+        isActive = !isActive;
+        getContentPane().setCursor(isActive ? blankCursor : null);
     }
     
     @Override public void mouseEntered(MouseEvent e)  {}

@@ -69,22 +69,22 @@ public class Camera {
     }
 
     public Payload[] generatePayload(int x, int y){
-        Payload[] out = switch(supersampling){
+        return switch(supersampling){
             case NONE -> new Payload[] { makePayload(x, y, 0.5, 0.5) };
             case X4 ->{// Generate 4 Rays in a square around the center
-                out = new Payload[4];
+                var out = new Payload[4];
                 for (int i = 0; i < 2; i++) for (int j = 0; j < 2; j++) 
                     out[i*2+j] = makePayload(x, y, 0.25 + 0.5*i, 0.25 + 0.5*j);
                 yield out;
                 }
             case X9 -> {// Generate 9 Rays, 4 corners, 4 sides, 1 middle
-                out = new Payload[9];
+                var out = new Payload[9];
                 for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++)
                     out[i*3+j] = makePayload(x, y, 0.5*i, 0.5*j);
                 yield out;
                 }
+            default -> new Payload[0];
         };
-        return out;
     }
 
     private Payload makePayload(int x, int y, double xShift, double yShift){
@@ -96,7 +96,7 @@ public class Camera {
 
     public void move(HashSet<Move> moves){
         //This doesnt work when the cam is not looking directly forward
-        Vector dir = Vector.zero;
+        var dir = Vector.zero;
         if(moves.contains(Move.FORWARD))
             dir = dir.add(vpn);
         if(moves.contains(Move.BACKWARD))
@@ -126,7 +126,7 @@ public class Camera {
     }
 
     public void rotate(double angleX, double angleY){
-        Vector dir = vpn.rotate(angleX, up).add(vpn.rotate(angleY, right)).norm();
+        var dir = vpn.rotate(angleX, up).add(vpn.rotate(angleY, right)).norm();
         if(Math.abs(pos.sub(pos.add(dir)).norm().y())>0.98) return;
         lookAt = pos.add(dir);
         calcVectors();
