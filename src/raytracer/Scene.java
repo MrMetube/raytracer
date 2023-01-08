@@ -12,7 +12,7 @@ import com.google.gson.GsonBuilder;
 import math.Color;
 import math.Point;
 import math.Vector;
-import raytracer.geometry.AABBox;
+import raytracer.geometry.BoundingBox;
 import raytracer.geometry.Geometry;
 import raytracer.geometry.Plane;
 import raytracer.geometry.Sphere;
@@ -74,7 +74,7 @@ public class Scene {
             s.addGeometry(
                 switch(rdm.nextInt(2)){
                     case 0 -> new Sphere(new Point(x,y,z), r, m);
-                    case 1 -> new AABBox(new Point(x,y,z), new Point(x+r,y+r2,z+r3), m);
+                    case 1 -> new BoundingBox(new Point(x,y,z), new Point(x+r,y+r2,z+r3), m);
                     case 2 -> new Plane(new Vector(rdm.nextDouble(-1,1), rdm.nextDouble(-1,1), rdm.nextDouble(-1,1)), new Point(x, y, z), r, m);
                     default -> null;
                 }
