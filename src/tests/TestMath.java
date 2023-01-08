@@ -27,6 +27,7 @@ class TestMath {
         assertEquals(   0, a.w());
     }
 
+
     @Test void addTuples(){
         Tuple a = new Tuple( 3, -2, 5, 1);
         Tuple b = new Tuple(-2,  3, 1, 0);
@@ -38,11 +39,13 @@ class TestMath {
         Point p2 = new Point(5, 6, 7);
         assertEquals(new Vector(-2, -4, -6), p1.sub(p2));
     }
+    
     @Test void subVecFromPoint(){
         Point p  = new Point(3, 2, 1);
         Vector v = new Vector(5, 6, 7);
         assertEquals(new Point(-2, -4, -6), p.sub(v));
     }
+    
     @Test void subVecFromVec(){
         Vector v1 = new Vector(3, 2, 1);
         Vector v2 = new Vector(5, 6, 7);
@@ -54,15 +57,18 @@ class TestMath {
         Vector v    = new Vector(1, -2, 3);
         assertEquals(new Vector(-1, 2, -3), zero.sub(v));
     }
+    
     @Test void negateTuple(){
         Vector v = new Vector(1, -2, 3);
         assertEquals(new Vector(-1, 2, -3), v.neg());
     }
 
+
     @Test void multiplyTupleByScalar(){
         Tuple a = new Tuple(1, -2, 3, -4);
         assertEquals(new Tuple(3.5, -7, 10.5, -14), a.mul(3.5));
     }
+    
     @Test void multiplyTupleByFraction(){
         Tuple a = new Tuple(1, -2, 3, -4);
         assertEquals(new Tuple(0.5, -1, 1.5, -2), a.mul(0.5));
@@ -72,6 +78,7 @@ class TestMath {
         Tuple a = new Tuple(1, -2, 3, -4);
         assertEquals(new Tuple(0.5, -1, 1.5, -2), a.div(2));
     }
+
 
     @Test void magnitudeOfVec(){
         Vector v1 = new Vector(1, 0, 0);
@@ -99,11 +106,13 @@ class TestMath {
         assertEquals(1, v.norm().mag());
     }
 
+
     @Test void dotProductOfTuples(){
         Tuple a = new Vector(1, 2, 3);
         Tuple b = new Vector(2, 3, 4);
         assertEquals(20,a.dot(b));
     }
+    
     @Test void dotProductOfVecs(){
         Vector a = new Vector(1, 2, 3);
         Vector b = new Vector(2, 3, 4);
@@ -117,6 +126,7 @@ class TestMath {
         assertEquals(new Vector(1, -2, 1),b.cross(a));
     }
 
+
     @Test void reflectionOfVec45deg(){
         Vector v = new Vector(1, -1, 0);
         Vector n = new Vector(0, 1, 0);
@@ -129,7 +139,8 @@ class TestMath {
         Vector n = new Vector(r, r, 0);
         assertEquals(new Vector(1, 0, 0), v.refl(n));
     }
-    
+
+
     @Test void normalVectorOnSphereX(){
         Sphere s = new Sphere(new Point(0, 0, 0), 1);
         assertEquals(new Vector(1,0,0), s.normal(new Point(1, 0, 0)));
@@ -153,6 +164,7 @@ class TestMath {
         assertEquals(n, n.norm());
     }
 
+
     @Test void colorFromRGBSimple(){
         Color r = Color.RED;
         Color g = Color.GREEN;
@@ -174,6 +186,7 @@ class TestMath {
         assertEquals(g, g2);
         assertEquals(b, b2);
     }
+
 
     @Test void isMatrix4x4(){
         var actual = new Matrix(
@@ -258,6 +271,7 @@ class TestMath {
         assertNotEquals(a, d);
     }
 
+
     @Test void multiplyMatrices(){
         var a = new Matrix(
             1,2,3,4,
@@ -318,6 +332,7 @@ class TestMath {
         assertEquals(a, Matrix.identity4.mul(a));
     }
 
+
     @Test void transposeMatrix(){
         var a = new Matrix(
             0,9,3,0,
@@ -335,6 +350,7 @@ class TestMath {
     @Test void transposeIndentityMatrix(){
         assertEquals(Matrix.identity4, Matrix.identity4.transpose());
     }
+
 
     @Test void submatrix(){
         var a = new Matrix(
@@ -408,6 +424,7 @@ class TestMath {
         assertEquals( 51, a.cofactor(0, 3));
         assertEquals(-4071, a.determinant());
     }
+
 
     @Test void isInvertible(){
         var a = new Matrix(
@@ -483,5 +500,120 @@ class TestMath {
             6 , -2 , 0 , 5);
         var c = a.mul(b);
         assertEquals(a, c.mul(b.inverse()));
+    }
+
+
+    @Test void translatePoint(){
+        var transform = Matrix.translation(5, -3, 2);
+        var p = new Point(-3,4,5);
+        assertEquals(new Point(2,1,7), transform.mul(p));
+    }
+    
+    @Test void translatePointByInverse(){
+        var transform = Matrix.translation(5, -3, 2).inverse();
+        var p = new Point(-3,4,5);
+        assertEquals(new Point(-8,7,3), transform.mul(p));
+    }
+
+    @Test void translateVector(){
+        var transform = Matrix.translation(5, -3, 2);
+        var v = new Vector(-3,4,5);
+        assertEquals(v, transform.mul(v));
+    }
+
+    @Test void scalePoint(){
+        var transform = Matrix.scaling(2, 3, 4);
+        var p = new Point(-4,6,8);
+        assertEquals(new Point(-8,18,32), transform.mul(p));
+    }
+
+    @Test void scaleVector(){
+        var transform = Matrix.scaling(2, 3, 4);
+        var v = new Vector(-4,6,8);
+        assertEquals(new Vector(-8,18,32), transform.mul(v));
+    }
+    
+    @Test void scaleVectorByInverse(){
+        var transform = Matrix.scaling(2, 3, 4).inverse();
+        var v = new Vector(-4,6,8);
+        assertEquals(new Vector(-2,2,2), transform.mul(v));
+    }
+
+    @Test void reflectPoint(){
+        var transform = Matrix.scaling(-1,1,1);
+        var p = new Point(2,3,4);
+        assertEquals(new Point(-2,3,4), transform.mul(p));
+    }
+
+    @Test void rotatePointOverX(){
+        var p = new Point(0,1,0);
+        var halfQuarter = Matrix.rotationX(Math.PI/4);
+        var fullQuarter = Matrix.rotationX(Math.PI/2);
+        var inverse     = halfQuarter.inverse(); 
+        var r2 = Math.sqrt(2)/2;
+
+        assertEquals(new Point(0,r2,r2), halfQuarter.mul(p));
+        assertEquals(new Point(0,0,1), fullQuarter.mul(p));
+
+        assertEquals(new Point(0,r2,-r2), inverse.mul(p));
+
+    }
+    
+    @Test void rotatePointOverY(){
+        var p = new Point(0,0,1);
+        var halfQuarter = Matrix.rotationY(Math.PI/4);
+        var fullQuarter = Matrix.rotationY(Math.PI/2);
+        var r2 = Math.sqrt(2)/2;
+
+        assertEquals(new Point(r2,0,r2), halfQuarter.mul(p));
+        assertEquals(new Point(1,0,0), fullQuarter.mul(p));
+    }
+        
+    @Test void rotatePointOverZ(){
+        var p = new Point(0,1,0);
+        var halfQuarter = Matrix.rotationZ(Math.PI/4);
+        var fullQuarter = Matrix.rotationZ(Math.PI/2);
+        var r2 = Math.sqrt(2)/2;
+
+        assertEquals(new Point(-r2,r2,0), halfQuarter.mul(p));
+        assertEquals(new Point(-1,0,0), fullQuarter.mul(p));
+    }
+
+    @Test void shearPoint(){
+        var p = new Point(2,3,4);
+        var xy = Matrix.shearing(1, 0, 0, 0, 0, 0);
+        var xz = Matrix.shearing(0, 1, 0, 0, 0, 0);
+        var yx = Matrix.shearing(0, 0, 1, 0, 0, 0);
+        var yz = Matrix.shearing(0, 0, 0, 1, 0, 0);
+        var zx = Matrix.shearing(0, 0, 0, 0, 1, 0);
+        var zy = Matrix.shearing(0, 0, 0, 0, 0, 1);
+
+        assertEquals(new Point(5,3,4), xy.mul(p));
+        assertEquals(new Point(6,3,4), xz.mul(p));
+        assertEquals(new Point(2,5,4), yx.mul(p));
+        assertEquals(new Point(2,7,4), yz.mul(p));
+        assertEquals(new Point(2,3,6), zx.mul(p));
+        assertEquals(new Point(2,3,7), zy.mul(p));
+    }
+
+    @Test void chainTransformations(){
+        var p = new Point(1,0,1);
+        var a = Matrix.rotationX(Math.PI/2);
+        var b = Matrix.scaling(5, 5, 5);
+        var c = Matrix.translation(10, 5, 7);
+
+        var p2 = a.mul(p);
+        assertEquals(new Point(1, -1, 0), p2);
+
+        var p3 = b.mul(p2);
+        assertEquals(new Point(5, -5, 0),p3);
+
+        var p4 = c.mul(p3);
+        assertEquals(new Point(15, 0, 7), p4);
+
+        var t = c.mul(b).mul(a);
+        var p5 = t.mul(p);
+        assertEquals(new Point(15, 0, 7), p5);
+        assertEquals(p4,p5);
     }
 }
