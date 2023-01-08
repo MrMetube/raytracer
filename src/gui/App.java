@@ -138,10 +138,10 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
             keyMap.put(KeyEvent.VK_F3, Supersampling.X9);
         }
 
-        camera = new Camera(new Point(0, 0, -1), Point.ZERO, 90, this);
+        camera = new Camera(new Point(0, 0, -1), Point.zero, 90, this);
         image = new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);
 
-        clock.start();
+        // clock.start();
         renderToView();
     }
 

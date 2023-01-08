@@ -43,8 +43,8 @@ public class Camera {
     }
 
     public Camera(Camera orig){
-        this.pos = orig.pos.add(Vector.ZERO);
-        this.lookAt = orig.lookAt.add(Vector.ZERO);
+        this.pos = orig.pos.add(Vector.zero);
+        this.lookAt = orig.lookAt.add(Vector.zero);
         this.fov = orig.fov;
         width  = orig.width;
         height = orig.height;
@@ -96,7 +96,7 @@ public class Camera {
 
     public void move(HashSet<Move> moves){
         //This doesnt work when the cam is not looking directly forward
-        Vector dir = Vector.ZERO;
+        Vector dir = Vector.zero;
         if(moves.contains(Move.FORWARD))
             dir = dir.add(vpn);
         if(moves.contains(Move.BACKWARD))

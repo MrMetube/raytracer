@@ -7,8 +7,7 @@ public class Util {
     public static final double EPSILON = 0.0001;
 
     public static boolean approxEqual(double a, double b, double epsilon){
-        double x = Math.abs(a - b);
-        return x < epsilon;
+        return Math.abs(a - b) < epsilon;
     }
 
     public static double clamp(double value, double min, double max){

@@ -2,15 +2,11 @@ package math;
 
 public class Point extends Tuple{
 
-    public static Point ZERO = new Point(0, 0, 0);
+    public static Point zero = new Point(0, 0, 0);
 
     public Point(double x, double y, double z){ super(x,y,z,1); }
 
-    public Point add(Vector... vecs){
-        Point sum = new Point(x,y,z);
-        for (Vector v : vecs) sum = new Point(sum.x()+v.x(), sum.y()+v.y(), sum.z()+v.z());
-        return sum;
-    }
+    public Point add(Vector v){ return new Point(x+v.x(), y+v.y(), z+v.z()); }
     public Vector sub(Point t){ return new Vector(x-t.x(), y-t.y(), z-t.z()); }
 
     @Override

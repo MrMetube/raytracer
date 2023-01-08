@@ -13,27 +13,9 @@ public class Tuple {
         this.w = w;
     }
 
-    public Tuple add(Tuple... tups){
-        Tuple sum = new Tuple(x,y,z,w);
-        for (Tuple t : tups) sum = new Tuple(
-            sum.x()+t.x(), 
-            sum.y()+t.y(), 
-            sum.z()+t.z(), 
-            sum.w()+t.w()
-        );
-        return sum;
-    }
-    public Tuple sub(Tuple... tups){
-        Tuple dif = new Tuple(x,y,z,w);
-        for (Tuple t : tups) dif = new Tuple(
-            dif.x()-t.x(), 
-            dif.y()-t.y(), 
-            dif.z()-t.z(), 
-            dif.w()-t.w()
-        );
-        return dif;
-    }
-    public Tuple neg(){ return new Tuple(0,0,0,0).sub(this); }
+    public Tuple add(Tuple t) { return new Tuple(x+t.x(), y+t.y(), z+t.z(), w+t.w()); }
+    public Tuple sub(Tuple t) { return new Tuple(x-t.x(), y-t.y(), z-t.z(), w-t.w()); }
+    public Tuple neg()        { return new Tuple(-x,-y,-z,-w); }
 
     public Tuple mul(double scl){ return new Tuple(x*scl, y*scl, z*scl, w*scl); }
     public Tuple div(double scl){ return new Tuple(x/scl, y/scl, z/scl, w/scl); }

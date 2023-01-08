@@ -17,7 +17,6 @@ class Main {
         // s.addGeometry(new Sphere(new Point(-1.001,0,0), 1, "gold"));
 
         // s.toJson("reflection");
-        
         new App();
     }
 }
