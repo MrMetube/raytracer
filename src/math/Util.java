@@ -9,6 +9,10 @@ public class Util {
     public static boolean approxEqual(double a, double b, double epsilon){
         return Math.abs(a - b) < epsilon;
     }
+    
+    public static boolean approxEqual(double a, double b){
+        return approxEqual(a, b, EPSILON);
+    }
 
     public static double clamp(double value, double min, double max){
         return Math.min(max,Math.max(min,value));
