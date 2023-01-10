@@ -37,9 +37,9 @@ public class Scene {
         this.materials.put(Geometry.NO_MATERIAL,Material.DEFAULT);
     }
 
-    public Scene(String path){
+    public Scene(String fileName){
         try {
-            var fR = new FileReader(new File(path));
+            var fR = new FileReader(new File("./scenes/"+fileName+".json"));
             var s = gson.fromJson(fR, Scene.class);
             this.geometries = s.getGeometries();
             this.lightSources = s.getLightSources();
