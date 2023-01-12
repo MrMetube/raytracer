@@ -39,12 +39,14 @@ public class Scene {
 
     public Scene(String fileName){
         try {
-            var fR = new FileReader(new File("./scenes/"+fileName+".json"));
+            var fR = new FileReader(new File("./scenes/"+fileName));
             var s = gson.fromJson(fR, Scene.class);
             this.geometries = s.getGeometries();
             this.lightSources = s.getLightSources();
             this.materials = s.getMaterials();
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     public void toJson(String name){

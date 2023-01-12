@@ -58,8 +58,6 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
 
     Camera camera;
 
-    Timer clock = new Timer(16, this); // tickrate != framerate
-
     public App(){
         { // setup Frame
             setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -72,10 +70,10 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
             var menubar = new JMenuBar();
             var sceneMenu = new JMenu("Scene");
 
-            fileItem = new JMenuItem("Open File",KeyEvent.VK_F);
-            rndmItem = new JMenuItem("Random Scene",KeyEvent.VK_R);
+            fileItem  = new JMenuItem("Open File",KeyEvent.VK_F);
+            rndmItem  = new JMenuItem("Random Scene",KeyEvent.VK_R);
             emptyItem = new JMenuItem("Empty Scene",KeyEvent.VK_E);
-            quitItem = new JMenuItem("Quit",KeyEvent.VK_Q);
+            quitItem  = new JMenuItem("Quit",KeyEvent.VK_Q);
 
             fileItem.addActionListener(this);
             rndmItem.addActionListener(this);
@@ -174,12 +172,10 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
                 for (int u = 0; u < width; u++) for (int v = start; v < end; v++) {
                     Payload[] payloads = camCopy.generatePayload(u, v);
                     var color = new Color(0, 0, 0);
-                    for (var payload : payloads){
-                        traceRay(payload);
-                        color = color.add(payload.color());
-                    }
-                    color = color.div(payloads.length);
-                    buffer[u][height-v-1] = color;
+                    for (var payload : payloads)
+                        color = color.add(traceRay(payload));
+                    
+                    buffer[u][height-v-1] = color.div(payloads.length);
                 }
                 try { barrier.await(); } catch (Exception e) { e.printStackTrace(); }
             });
@@ -196,7 +192,6 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
 
         if(payload.reflection()!=null)
             payload.reflect(traceRay(payload.reflection()));
-            
         
         return payload.color();
     }
@@ -209,22 +204,21 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
         renderToPrimary = !renderToPrimary;
         renderToView();
         view.setImage(image);
-        if(!clock.isRunning()) tick();
     }
 
     @Override
     public void keyPressed(KeyEvent e) {
         var o = keyMap.get(e.getKeyCode());
-             if( isActive && o instanceof Move)
-            moveKeys.add((Move)o);
-        else if( isActive && o instanceof Turn)
-            turnKeys.add((Turn)o);
-        else if( o instanceof Shader) {
-            shader = (Shader) o;
-            System.out.println("Shader: " + (Shader) o);
-        }else if( o instanceof Supersampling) {
-            camera.setSupersampling((Supersampling) o);
-            System.out.println("Supersamplingmode: " + ((Supersampling) o).name());
+             if( isActive && o instanceof Move m)
+            moveKeys.add(m);
+        else if( isActive && o instanceof Turn t)
+            turnKeys.add(t);
+        else if( o instanceof Shader s) {
+            shader = s;
+            System.out.println("Shader: " + s);
+        }else if( o instanceof Supersampling s) {
+            camera.setSupersampling(s);
+            System.out.println("Supersamplingmode: " + s.name());
         }else if( e.getKeyCode()==KeyEvent.VK_ESCAPE){
             isActive = false;
             getContentPane().setCursor(null);
@@ -235,8 +229,8 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
     @Override
     public void keyReleased(KeyEvent e) {
         var o = keyMap.get(e.getKeyCode());
-        if(o instanceof Move) moveKeys.remove((Move)o);
-        else if(o instanceof Turn) turnKeys.remove((Turn)o);
+             if(o instanceof Move m) moveKeys.remove(m);
+        else if(o instanceof Turn t) turnKeys.remove(t);
     }
    
     @Override
@@ -256,20 +250,17 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
 
     @Override
     public void actionPerformed(ActionEvent e) {
-        if(e.getSource() == clock){
-            tick();
-        }else if(e.getSource() == emptyItem) {
+        if(e.getSource() == emptyItem) {
             scene = new Scene();
             System.out.println("Empty Scene selected");
         }else if(e.getSource() == rndmItem) {
             scene = Scene.randomSpheres(randomCount);
             System.out.println("Random Scene selected");
         }else if(e.getSource() == fileItem && chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION){
-            scene = new Scene("./scenes/" + chooser.getSelectedFile().getName());
+            scene = new Scene(chooser.getSelectedFile().getName());
             System.out.println("File selected: "+chooser.getSelectedFile().getName());
         }else if(e.getSource() == quitItem) 
             System.exit(0);
-        
     }
 
     Cursor blankCursor = Toolkit.getDefaultToolkit().createCustomCursor(new BufferedImage(16,16, BufferedImage.TYPE_INT_ARGB), new java.awt.Point(0,0), "blank");

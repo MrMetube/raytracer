@@ -1,7 +1,7 @@
 {
     "geometries": [
         {
-            "type": "AABBox",
+            "type": "BoundingBox",
             "properties": {
                 "min": {
                     "x": 1.0,
@@ -19,7 +19,7 @@
             }
         },
         {
-            "type": "AABBox",
+            "type": "BoundingBox",
             "properties": {
                 "min": {
                     "x": -1.1,
@@ -56,7 +56,7 @@
             }
         },
         {
-            "type": "AABBox",
+            "type": "BoundingBox",
             "properties": {
                 "min": {
                     "x": 1.0,
@@ -74,7 +74,7 @@
             }
         },
         {
-            "type": "AABBox",
+            "type": "BoundingBox",
             "properties": {
                 "min": {
                     "x": 0.0,

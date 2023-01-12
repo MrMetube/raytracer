@@ -1,7 +1,7 @@
 {
     "geometries": [
         {
-            "type": "AABBox",
+            "type": "BoundingBox",
             "properties": {
                 "min": {
                     "x": 0.9043929718269337,
@@ -19,7 +19,7 @@
             }
         },
         {
-            "type": "AABBox",
+            "type": "BoundingBox",
             "properties": {
                 "min": {
                     "x": -1.1337186196854505,
@@ -50,7 +50,7 @@
             }
         },
         {
-            "type": "AABBox",
+            "type": "BoundingBox",
             "properties": {
                 "min": {
                     "x": -1.756595471692481,
@@ -81,7 +81,7 @@
             }
         },
         {
-            "type": "AABBox",
+            "type": "BoundingBox",
             "properties": {
                 "min": {
                     "x": -0.24103912176814024,
@@ -99,7 +99,7 @@
             }
         },
         {
-            "type": "AABBox",
+            "type": "BoundingBox",
             "properties": {
                 "min": {
                     "x": -0.5145431951210364,
@@ -130,7 +130,7 @@
             }
         },
         {
-            "type": "AABBox",
+            "type": "BoundingBox",
             "properties": {
                 "min": {
                     "x": -3.082470867012096,
@@ -148,7 +148,7 @@
             }
         },
         {
-            "type": "AABBox",
+            "type": "BoundingBox",
             "properties": {
                 "min": {
                     "x": -0.7720461902326416,
@@ -185,7 +185,7 @@
             }
         },
         {
-            "type": "AABBox",
+            "type": "BoundingBox",
             "properties": {
                 "min": {
                     "x": 0.7409409141343981,

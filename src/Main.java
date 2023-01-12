@@ -18,7 +18,7 @@ class Main {
         // s.addGeometry(new Triangle(new Point(2,0,0), new Point(-2,-1,0), new Point(0, 3, 3) , "silver"));
 
         // s.toJson("triangle");
-        var s = new Scene("mirrors");
-        app.scene = s;
+        var s = new Scene("mirrors.json");
+        // app.scene = s;
     }
 }
