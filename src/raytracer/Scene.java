@@ -1,5 +1,4 @@
 package raytracer;
-import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.util.HashMap;
@@ -33,13 +32,13 @@ public class Scene {
     public Scene() {
         this.geometries = new HashSet<>();
         this.lightSources = new HashSet<>();
-        this.materials = new HashMap<String,Material>();
+        this.materials = new HashMap<>();
         this.materials.put(Geometry.NO_MATERIAL,Material.DEFAULT);
     }
 
     public Scene(String fileName){
         try {
-            var fR = new FileReader(new File("./scenes/"+fileName));
+            var fR = new FileReader("./scenes/"+fileName);
             var s = gson.fromJson(fR, Scene.class);
             this.geometries = s.getGeometries();
             this.lightSources = s.getLightSources();
@@ -54,7 +53,7 @@ public class Scene {
             var fw = new FileWriter("./scenes/"+name+".json");
             fw.write(gson.toJson(this));
             fw.close();
-        } catch (Exception e) {}
+        } catch (Exception ignored) {}
     }
     
     public static Scene randomSpheres(int count){

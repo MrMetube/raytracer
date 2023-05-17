@@ -4,14 +4,14 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.image.BufferedImage;
 import javax.swing.JPanel;
-
 public class View extends JPanel {
+    final Font font = new Font(Font.MONOSPACED, Font.BOLD, 18);
     BufferedImage image;
     long time;
     int counter = 0;
     int maxfps = 0;
     int minfps = 2000;
-    int showFps = 0;
+    boolean showFps = false;
 
     public View(int width, int height){
         super();
@@ -24,28 +24,23 @@ public class View extends JPanel {
     }
 
     public void toggleFPS(){
-        showFps++;
-        showFps %= 3;
+        showFps = !showFps;
     }
 
     @Override
     public void paint(Graphics g) {
         super.paint(g);
-        if(image != null) g.drawImage(image, 0, 0, this);
+        if(image != null)
+            g.drawImage(image, 0, 0, this);
         
-            counter++;
-            double dif = System.nanoTime()-time;
-            long fps = Math.round(1_000_000_000/dif);
-        if(showFps >= 1){
+        counter++;
+        double dif = System.nanoTime()-time;
+        long fps = Math.round(1_000_000_000/dif);
+
+        if(showFps){
             g.setColor(java.awt.Color.yellow);
-            g.setFont(new Font("Verdana", Font.BOLD, 18));
+            g.setFont(font);
             g.drawString(String.format("%d FPS",fps), getWidth()-100, 20);
-            if(showFps > 1){
-                maxfps = Math.max((counter%200 == 0) ? 0 : maxfps, (int)fps);
-                minfps = Math.min((counter%200 == 0) ? 2000 : minfps, (int)fps);
-                g.drawString(String.format("%d min",minfps), getWidth()-100, 40);
-                g.drawString(String.format("%d max",maxfps), getWidth()-100, 60);
-            }
         }
         time = System.nanoTime();
     }

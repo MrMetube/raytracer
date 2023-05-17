@@ -5,7 +5,7 @@ import math.Point;
 import math.Vector;
 
 public class PointLight extends LightSource{
-    Point pos;
+    private final Point pos;
 
     public PointLight(Point pos, Color color, double intensity){
         this.pos = pos;

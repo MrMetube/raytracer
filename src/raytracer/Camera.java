@@ -35,23 +35,7 @@ public class Camera {
         width = app.getWidth();
         height = app.getHeight();
 
-        double aspectRatio = width/height;
-        double halfHeight = Math.tan(fov/2);
-        pixelSize = (aspectRatio < 1 ? halfHeight : halfHeight/aspectRatio) * 2/height ;
-
-        calcVectors();
-    }
-
-    public Camera(Camera orig){
-        this.pos = orig.pos.add(Vector.zero);
-        this.lookAt = orig.lookAt.add(Vector.zero);
-        this.fov = orig.fov;
-        width  = orig.width;
-        height = orig.height;
-        
-        supersampling = orig.supersampling; 
-
-        double aspectRatio = width/height;
+        double aspectRatio = (double) width/height;
         double halfHeight = Math.tan(fov/2);
         pixelSize = (aspectRatio < 1 ? halfHeight : halfHeight/aspectRatio) * 2/height ;
 
@@ -60,9 +44,9 @@ public class Camera {
 
     private void calcVectors(){
         vpn = lookAt.sub(pos).norm();
-        // Dies funtioniert nicht, wenn vpn = (0,1,0) ist, weil dann ein Null-Vektor entsteht.
-        // Man sollte einfach einen leicht anderen Vektor nehmen. 
-        if(vpn.cross(new Vector(0, 1, 0)) != new Vector(0, 0, 0)){
+        // Dies funktioniert nicht, wenn vpn = (0,1,0) ist, weil dann ein Null-Vektor entsteht.
+        // Man sollte einfach einen leicht anderen Vektor nehmen.
+        if(!vpn.cross(new Vector(0, 1, 0)).equals(new Vector(0, 0, 0))){
             this.right = new Vector(0, 1, 0).cross(vpn).norm();
             this.up = vpn.cross(right).norm();
         }
@@ -83,19 +67,18 @@ public class Camera {
                     out[i*3+j] = makePayload(x, y, 0.5*i, 0.5*j);
                 yield out;
                 }
-            default -> new Payload[0];
         };
     }
 
     private Payload makePayload(int x, int y, double xShift, double yShift){
-        double xOffset = (x + xShift - width  / 2) * pixelSize;
-        double yOffset = (y + yShift - height / 2) * pixelSize;
+        double xOffset = (x + xShift - (double) width  / 2) * pixelSize;
+        double yOffset = (y + yShift - (double) height / 2) * pixelSize;
         Vector dir = right.mul(xOffset).add(up.mul(yOffset)).add(vpn);
         return new Payload( new Ray(pos, dir));
     }
 
     public void move(HashSet<Move> moves){
-        //This doesnt work when the cam is not looking directly forward
+        //This doesn't work when the cam is not looking directly forward
         var dir = Vector.zero;
         if(moves.contains(Move.FORWARD))
             dir = dir.add(vpn);

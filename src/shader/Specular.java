@@ -17,7 +17,7 @@ public class Specular extends Shader{
             Vector l = ls.directionFrom(p.hitPoint());
             Vector r = l.refl(p.target().normal(p.hitPoint())).norm();
             double vr = r.dot(v);
-            // dont calc false values
+            // don't calc false values
             vr = Math.max(vr, 0);
             double vrn = Math.pow(vr,n);
             Color lc = ls.colorAt(p.hitPoint())

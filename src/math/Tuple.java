@@ -13,14 +13,14 @@ public class Tuple {
         this.w = w;
     }
 
-    public Tuple add(Tuple t) { return new Tuple(x+t.x(), y+t.y(), z+t.z(), w+t.w()); }
-    public Tuple sub(Tuple t) { return new Tuple(x-t.x(), y-t.y(), z-t.z(), w-t.w()); }
+    public Tuple add(Tuple t) { return new Tuple(x+t.x, y+t.y, z+t.z, w+t.w); }
+    public Tuple sub(Tuple t) { return new Tuple(x-t.x, y-t.y, z-t.z, w-t.w); }
     public Tuple neg()        { return new Tuple(-x,-y,-z,-w); }
 
     public Tuple mul(double scl){ return new Tuple(x*scl, y*scl, z*scl, w*scl); }
     public Tuple div(double scl){ return new Tuple(x/scl, y/scl, z/scl, w/scl); }
 
-    public double dot(Tuple t){ return x*t.x() + y*t.y() + z*t.z() + w*t.w(); }
+    public double dot(Tuple t){ return x*t.x + y*t.y + z*t.z + w*t.w; }
     
     public double mag(){ return Math.sqrt( x*x + y*y + z*z + w*w ); }
 

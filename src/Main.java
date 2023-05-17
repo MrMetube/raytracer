@@ -1,9 +1,5 @@
-import gui.*;
-import math.*;
-import shader.*;
+import gui.App;
 import raytracer.*;
-import raytracer.light.*;
-import raytracer.geometry.*;
 
 @SuppressWarnings("unused")
 class Main {
@@ -19,6 +15,6 @@ class Main {
 
         // s.toJson("triangle");
         var s = new Scene("mirrors.json");
-        // app.scene = s;
+        app.scene = s;
     }
 }

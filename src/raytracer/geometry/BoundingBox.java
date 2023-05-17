@@ -8,8 +8,8 @@ import raytracer.Payload;
 
 public class BoundingBox extends Geometry{
 
-    private Point min;
-    private Point max;
+    private final Point min;
+    private final Point max;
 
     public BoundingBox(Point min, Point max, String material) {
         this.min = min;

@@ -27,19 +27,21 @@ public class Skybox extends Shader{
         //Setup LookUp-Table
         for (int y = 0; y < vLookUp.length; y++) {
             double d = (double)(y-size)/size;
-            vLookUp[y] = (double) (0.5 + Math.asin(d) / Math.PI);
+            vLookUp[y] = 0.5 + Math.asin(d) / Math.PI;
         }
         for (int x = 0; x < uLookUp.length; x++) for (int z = 0; z < uLookUp[0].length; z++){
             double d = (double)(x-size)/size;
             double e = (double)(z-size)/size;
-            uLookUp[x][z] = (double) (0.5 + (Math.atan2(e,d) / (2*Math.PI)));
+            uLookUp[x][z] = 0.5 + (Math.atan2(e,d) / (2*Math.PI));
         }
 
-        try {
-            image = hdrToBufferedImage(new File("./res/Skybox.hdr"));
-        } catch (IOException e) { 
-            image = new BufferedImage(800,800,BufferedImage.TYPE_INT_RGB);
-            e.printStackTrace();
+        if(App.useSkybox){
+            try {
+                image = hdrToBufferedImage(new File("./res/Skybox.hdr"));
+            } catch (Exception e) {
+                image = new BufferedImage(800,800,BufferedImage.TYPE_INT_RGB);
+                e.printStackTrace();
+            }
         }
     }
 

@@ -47,9 +47,7 @@ public class Color extends Tuple {
     public Color mul(double scl){ return new Color(r()*scl,     g()*scl,    b()*scl);   }
     public Color div(double scl){ return new Color(r()/scl,     g()/scl,    b()/scl);   }
 
-    public Color add(Color c){
-        return new Color(r()+c.r(), g()+c.g(), b()+c.b());
-    }
+    public Color add(Color c){ return new Color(r()+c.r(), g()+c.g(), b()+c.b()); }
 
     public Color norm(){
         double mag = this.mag();
@@ -61,7 +59,7 @@ public class Color extends Tuple {
     public double b(){ return z; }
 
     @Override
-    public String toString(){ return String.format("(%.02f | %.02f | %.02f)",x,y,z); }
+    public String toString(){ return String.format("(%.2f | %.2f | %.2f)",x,y,z); }
 
     @Override
     public boolean equals(Object o){

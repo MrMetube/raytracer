@@ -5,7 +5,7 @@ import math.Point;
 import math.Vector;
 
 public class DirectionalLight extends LightSource{
-    Vector dir;
+    private final Vector dir;
 
     public DirectionalLight(Vector dir, Color color, double intensity){
         this.dir = dir;

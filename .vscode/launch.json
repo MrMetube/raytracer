@@ -6,10 +6,10 @@
     "configurations": [
         {
             "type": "java",
-            "name": "Launch Main",
+            "name": "Main",
             "request": "launch",
             "mainClass": "Main",
-            "projectName": "Raytracer_8ec7b65f"
+            "projectName": "Raytracer_dc7696f2"
         }
     ]
 }
