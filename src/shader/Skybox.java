@@ -56,9 +56,8 @@ public class Skybox extends Shader{
 
             int rgb = image.getRGB((int)(image.getWidth()*(1-u)), (int)(image.getHeight()*(1-v)));
             p.setColor(new Color(rgb));
-        }else{
+        }else
             p.setColor(defaultColor);
-        }
     }
 
     int clamp(double x){

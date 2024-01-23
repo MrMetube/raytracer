@@ -32,9 +32,9 @@ public class Color extends Tuple {
     }
     public Color(int argb){
         super(
-            ((argb & 0b00000000_11111111_00000000_00000000)>>16) / 255f,
-            ((argb & 0b00000000_00000000_11111111_00000000)>>8 ) / 255f,
-            ((argb & 0b00000000_00000000_00000000_11111111)    ) / 255f,
+            ((argb & 0x00ff0000)>>16) / 255f,
+            ((argb & 0x0000ff00)>>8 ) / 255f,
+            ((argb & 0x000000ff)   ) / 255f,
             -1
         );
     }
@@ -65,7 +65,7 @@ public class Color extends Tuple {
     public boolean equals(Object o){
         if(o == null) return false;
         if(o == this) return true;
-        final Tuple that = (Tuple) o;
+        if(!(o instanceof Tuple that)) return false;
         return  Util.approxEqual(this.x, that.x(), 0.01) &&
                 Util.approxEqual(this.y, that.y(), 0.01) &&
                 Util.approxEqual(this.z, that.z(), 0.01) &&

@@ -1,11 +1,9 @@
 import gui.App;
 import raytracer.*;
 
-@SuppressWarnings("unused")
 class Main {
-    public static void main(String[] args){
+    public static void main(String[] args) throws Exception {
         var app = new App();
-        
         // var s = new Scene();
         // s.addBasicMaterials();
         // s.addLightSource(new DirectionalLight(new Vector(0, -1, -.2), Color.WHITE, 1));

@@ -9,8 +9,6 @@ public class View extends JPanel {
     BufferedImage image;
     long time;
     int counter = 0;
-    int maxfps = 0;
-    int minfps = 2000;
     boolean showFps = false;
 
     public View(int width, int height){

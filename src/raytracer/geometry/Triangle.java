@@ -69,7 +69,7 @@ public class Triangle extends Geometry{
         var v = normal.dot(cross);
         if(v<0) return false;
 
-        // iterpolate between the colors at each vertex with these
+        // interpolate between the colors at each vertex with these
         // need to remake the color and material
         // u /= denom;
         // v /= denom;

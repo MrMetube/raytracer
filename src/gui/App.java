@@ -90,7 +90,7 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
         keyMap.put(KeyEvent.VK_F3,      Supersampling.X9);
     }
 
-    void setupFrame() {
+    void setupFrame(){
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setTitle("Raytracer");
         setSize(width,height);
@@ -121,7 +121,7 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
         setJMenuBar(menubar);
 
         chooser = new JFileChooser("./scenes/");
-        chooser.setDialogTitle("Scene auswählen");
+        chooser.setDialogTitle("Select Scene");
         chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
         chooser.addChoosableFileFilter(new FileNameExtensionFilter("JSON File","json"));
         chooser.setAcceptAllFileFilterUsed(false);
@@ -172,7 +172,7 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
                     var color = new Color(0, 0, 0);
                     for (var payload : payloads)
                         color = color.add(traceRay(payload));
-                    
+
                     buffer[u][height-v-1] = color.div(payloads.length);
                 }
                 try { barrier.await(); } catch (Exception e) { e.printStackTrace(); }
@@ -181,12 +181,10 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
     }
 
     Color traceRay(Payload payload){
-        for(var geometry : scene.getGeometries()) 
+        for(var geometry : scene.getGeometries())
             geometry.intersect(payload);
-        if (payload.target() != null)
-            shader.getColor(payload, scene);
-        else 
-            skybox.getColor(payload, scene);
+
+        (payload.target() != null ? shader : skybox).getColor(payload, scene);
 
         if (payload.reflection() != null)
             payload.reflect(traceRay(payload.reflection()));
@@ -207,14 +205,13 @@ public class App extends JFrame implements ActionListener, KeyListener, MouseInp
     @Override
     public void keyPressed(KeyEvent e) {
         var o = keyMap.get(e.getKeyCode());
-             if( isActive && o instanceof Move)
-            moveKeys.add((Move) o);
-        else if( isActive && o instanceof Turn)
-            turnKeys.add((Turn)o);
-        else if( o instanceof Shader) {
-            shader = (Shader) o;
-            System.out.println("Shader: " + shader);
-        }else if( o instanceof Supersampling s) {
+             if( isActive && o instanceof Move m)
+            moveKeys.add(m);
+        else if( isActive && o instanceof Turn t)
+            turnKeys.add(t);
+        else if( o instanceof Shader s)
+            System.out.println("Shader: " + s);
+        else if( o instanceof Supersampling s) {
             camera.setSupersampling(s);
             System.out.println("Supersampling mode: " + s.name());
         }else if( e.getKeyCode()==KeyEvent.VK_ESCAPE){

@@ -31,8 +31,6 @@ public class Quaternion extends Tuple {
     }
 
 
-    public Tuple div(double scl){ return new Tuple(x/scl, y/scl, z/scl, w/scl); }
-
     public double dot(Tuple t){ return x*t.x() + y*t.y() + z*t.z() + w*t.w(); }
     
     public Quaternion norm(){ 
