@@ -7,12 +7,20 @@ import "core:simd/x86"
 ////////////////////////////////////////////////
 // Atomics
 
-atomic_compare_exchange :: proc "contextless" (dst: ^$T, old, new: T) -> (ok: b32, was: T) {
+atomic_compare_exchange :: proc (dst: ^$T, old, new: T) -> (ok: b32, was: T) {
     ok_: bool
     was, ok_ = intrinsics.atomic_compare_exchange_strong(dst, old, new)
     ok = cast(b32) ok_
     return ok, was
 }
+
+atomic_compare_exchange_or_fail :: proc (dst: ^$T, old, new: T) -> (was: T) {
+    ok: b32
+    ok, was = atomic_compare_exchange(dst, old, new)
+    assert(ok)
+    return was
+}
+
 
 volatile_load      :: intrinsics.volatile_load
 volatile_store     :: intrinsics.volatile_store

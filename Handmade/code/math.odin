@@ -314,7 +314,7 @@ rectangle_min_max  :: proc(min, max: $T) -> Rectangle(T) {
 }
 rectangle_min_dimension  :: proc { rectangle_min_dimension_2, rectangle_min_dimension_v }
 rectangle_min_dimension_2  :: proc(x: $E, y, w, h: E) -> Rectangle([2]E) {
-    return min_dimension_v([2]E{x, y}, [2]E{w, h})
+    return rectangle_min_dimension_v([2]E{x, y}, [2]E{w, h})
 }
 rectangle_min_dimension_v  :: proc(min: $T, dimension: T) -> Rectangle(T) {
     return { min, min + dimension }

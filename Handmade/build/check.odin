@@ -30,7 +30,9 @@ CheckContext :: struct {
     procedures:   map[string]Procedure,
 }
 
-CodeDir       :: `D:\plates\code`
+
+// @todo(viktor): This needs to be changed manually. A relative path makes to files map not work with the ast.node positions/files
+CodeDir       :: `D:\raytracer\Handmade\code`
 
 check_printlikes :: proc() -> (succes: b32) {
     using my_context: CheckContext

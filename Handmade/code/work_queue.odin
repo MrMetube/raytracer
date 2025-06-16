@@ -4,11 +4,9 @@ import "base:runtime"
 import "core:thread"
 import win "core:sys/windows"
 
-PlatformWorkQueueCallback :: #type proc(data: pmm)
-PlatformEnqueueWork       :: #type proc(queue: ^PlatformWorkQueue, callback: PlatformWorkQueueCallback, data: pmm)
-PlatformCompleteAllWork   :: #type proc(queue: ^PlatformWorkQueue)
+WorkQueueCallback :: #type proc(data: pmm)
 
-PlatformWorkQueue :: struct {
+WorkQueue :: struct {
     semaphore_handle: win.HANDLE,
     
     completion_goal, 
@@ -17,22 +15,22 @@ PlatformWorkQueue :: struct {
     next_entry_to_write, 
     next_entry_to_read:  u32,
     
-    entries: [4096]PlatformWorkQueueEntry,
+    entries: [4096]WorkQueueEntry,
 }
 
-PlatformWorkQueueEntry :: struct {
-    callback: PlatformWorkQueueCallback,
+WorkQueueEntry :: struct {
+    callback: WorkQueueCallback,
     data:     pmm,
 }
 
 CreateThreadInfo :: struct {
-    queue: ^PlatformWorkQueue,
+    queue: ^WorkQueue,
     index: u32,
 }
 
 @(private="file") created_thread_count: u32 = 1
 
-init_work_queue :: proc(queue: ^PlatformWorkQueue, infos: []CreateThreadInfo) {
+init_work_queue :: proc(queue: ^WorkQueue, infos: []CreateThreadInfo) {
     queue.semaphore_handle = win.CreateSemaphoreW(nil, 0, auto_cast len(infos), nil)
     
     for &info in infos {
@@ -50,48 +48,43 @@ init_work_queue :: proc(queue: ^PlatformWorkQueue, infos: []CreateThreadInfo) {
 }
 
 enqueue_work_or_do_immediatly :: proc { enqueue_work_or_do_immediatly_t, enqueue_work_or_do_immediatly_any }
-enqueue_work_or_do_immediatly_t :: proc(queue: ^PlatformWorkQueue, callback: proc(data: ^$T), data: ^T) { enqueue_work_or_do_immediatly_any(queue, auto_cast callback, data) }
-enqueue_work_or_do_immediatly_any : PlatformEnqueueWork : proc(queue: ^PlatformWorkQueue, callback: PlatformWorkQueueCallback, data: pmm) {
+enqueue_work_or_do_immediatly_t :: proc(queue: ^WorkQueue, callback: proc(data: ^$T), data: ^T) { enqueue_work_or_do_immediatly_any(queue, auto_cast callback, data) }
+enqueue_work_or_do_immediatly_any :: proc(queue: ^WorkQueue, callback: WorkQueueCallback, data: pmm) {
     if queue != nil {
         enqueue_work(queue, callback, data)
     } else {
         callback(data)
     }
 }
+
 enqueue_work :: proc { enqueue_work_t, enqueue_work_any }
-enqueue_work_t :: proc(queue: ^PlatformWorkQueue, callback: proc(data: ^$T), data: ^T) { enqueue_work_any(queue, auto_cast callback, data) }
-enqueue_work_any : PlatformEnqueueWork : proc(queue: ^PlatformWorkQueue, callback: PlatformWorkQueueCallback, data: pmm) {
+enqueue_work_t :: proc(queue: ^WorkQueue, callback: proc(data: ^$T), data: ^T) { enqueue_work_any(queue, auto_cast callback, data) }
+enqueue_work_any :: proc(queue: ^WorkQueue, callback: WorkQueueCallback, data: pmm) {
     old_next_entry := queue.next_entry_to_write
     new_next_entry := (old_next_entry + 1) % len(queue.entries)
-    assert(new_next_entry != queue.next_entry_to_read) 
+    assert(new_next_entry != queue.next_entry_to_read, "too many units of work enqueued") 
 
     entry := &queue.entries[old_next_entry] 
-    entry.data     = data
-    entry.callback = callback
+    entry ^= { callback, data }
     
-    ok, _ := atomic_compare_exchange(&queue.completion_goal, queue.completion_goal, queue.completion_goal+1)
-    assert(ok)
-    
-    ok, _ = atomic_compare_exchange(&queue.next_entry_to_write, old_next_entry, new_next_entry)
-    assert(ok)
+    atomic_compare_exchange_or_fail(&queue.completion_goal, queue.completion_goal, queue.completion_goal+1)
+    atomic_compare_exchange_or_fail(&queue.next_entry_to_write, old_next_entry, new_next_entry)
     
     win.ReleaseSemaphore(queue.semaphore_handle, 1, nil)
 }
 
-complete_all_work : PlatformCompleteAllWork : proc(queue: ^PlatformWorkQueue) {
+complete_all_work :: proc(queue: ^WorkQueue) {
     if queue == nil do return
     
     for queue.completion_count != queue.completion_goal {
         do_next_work_queue_entry(queue)
     }
     
-    ok, _ := atomic_compare_exchange(&queue.completion_goal, queue.completion_goal, 0)
-    assert(ok)
-    ok, _ = atomic_compare_exchange(&queue.completion_count, queue.completion_count, 0)
-    assert(ok)
+    atomic_compare_exchange_or_fail(&queue.completion_goal, queue.completion_goal, 0)
+    atomic_compare_exchange_or_fail(&queue.completion_count, queue.completion_count, 0)
 }
 
-do_next_work_queue_entry :: proc(queue: ^PlatformWorkQueue) -> (should_sleep: b32) {
+do_next_work_queue_entry :: proc(queue: ^WorkQueue) -> (should_sleep: b32) {
     old_next_entry := queue.next_entry_to_read
     
     if old_next_entry != queue.next_entry_to_write {
