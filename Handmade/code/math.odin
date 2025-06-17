@@ -13,6 +13,33 @@ v2 :: [2]f32
 v3 :: [3]f32
 v4 :: [4]f32
 
+LaneWidth :: 4
+
+when LaneWidth != 1 {
+    lane_f32 :: #simd [LaneWidth]f32
+    lane_u32 :: #simd [LaneWidth]u32
+    lane_i32 :: #simd [LaneWidth]i32
+
+    lane_v2 :: [2]lane_f32
+    lane_v3 :: [3]lane_f32
+    lane_v4 :: [4]lane_f32
+
+    lane_pmm :: #simd [LaneWidth]pmm
+    lane_umm :: #simd [LaneWidth]umm
+    lane_f64 :: #simd [LaneWidth]f64
+} else {
+    lane_f32 :: f32
+    lane_u32 :: u32
+    lane_i32 :: i32
+
+    lane_v2 :: [2]lane_f32
+    lane_v3 :: [3]lane_f32
+    lane_v4 :: [4]lane_f32
+
+    lane_pmm :: pmm
+    lane_umm :: umm
+    lane_f64 :: f64
+}
 
 m4 :: matrix[4,4]f32
 
@@ -282,13 +309,13 @@ project :: proc(v, axis: $V) -> V {
     return v - 1 * dot(v, axis) * axis
 }
 
-length :: proc(vec: $V) -> (result: f32) {
+length :: proc(vec: $V/[$N]$T) -> (result: T) {
     length_squared := length_squared(vec)
     result = square_root(length_squared)
     return result
 }
 
-length_squared :: proc(vec: $V) -> f32 {
+length_squared :: proc(vec: $V/[$N]$T) -> T {
     return dot(vec, vec)
 }
 
@@ -296,35 +323,106 @@ normalize :: proc(vec: $V) -> (result: V) {
     result = vec / length(vec)
     return result
 }
-normalize_or_zero :: proc(vec: $V) -> (result: V) {
+normalize_or_zero :: proc(vec: $V/[$N]$T) -> (result: V) {
     len_sq := length_squared(vec)
-    if len_sq > square(f32(0.0001)) {
-        result = vec / square_root(len_sq)
+    when intrinsics.type_is_simd_vector(T) {
+        len_mask := simd.lanes_gt(len_sq, 0.0000001)
+        conditional_assign(len_mask, &result, vec / square_root(len_sq))
+    } else {
+        if len_sq > 0.0000001 {
+            result = vec / square_root(len_sq)
+        }
     }
     return result
 }
 
+linear_to_srgb :: proc(l: v3) -> (s: v3) {
+    l := l
+    l = clamp_01(l)
+    #unroll for i in 0..<len(l) {
+        if l[i] <= 0.0031308 {
+            s[i] = 12.92 * l[i]
+        } else {
+            s[i] = 1.055 * power(l[i], 1./2.4) - 0.055
+        }
+    }
+    
+    return s
+}
 
-// ---------------------- ---------------------- ----------------------
-// ---------------------- Rectangle operations
-// ---------------------- ---------------------- ----------------------
+////////////////////////////////////////////////
+// Simd operations
 
-rectangle_min_max  :: proc(min, max: $T) -> Rectangle(T) {
-    return { min, max }
+when LaneWidth != 1 {
+    conditional_assign :: proc (mask: $M, dest: ^$D, value: D) {
+        when intrinsics.type_is_array(D) {
+            #unroll for i in 0..<len(D) {
+                conditional_assign(mask, &dest[i], value[i])
+            }
+        } else {
+            simd.masked_store(dest, value, mask)
+        }
+    }
+
+    greater_equal :: simd.lanes_ge
+    greater_than  :: simd.lanes_gt
+    less_than     :: simd.lanes_lt
+    shift_left    :: simd.shl
+    shift_right   :: simd.shr
+    horizontal_add :: simd.reduce_add_pairs
+    maximum :: simd.max
+    
+    extract_0 :: proc (a: $T/#simd[LaneWidth]$E) -> (result: E) {
+        when intrinsics.type_is_array(T) {
+            #unroll for i in 0..<len(D) {
+                result[i] = simd.extract(a, 0)
+            }
+        } else {
+            result = simd.extract(a, 0)
+        }
+        return result
+    }
+} else {
+    conditional_assign :: proc (mask: $M, dest: ^$D, value: D) {
+        mask := mask
+        mask = mask == 0 ? 0 : 0xffffffff
+        when intrinsics.type_is_array(D) {
+            #unroll for i in 0..<len(D) {
+                conditional_assign(mask, &dest[i], value[i])
+            }
+        } else {
+            dest ^= cast(D) (((cast(^M)dest)^ &~ mask) | (transmute(M) value & mask))
+        }
+    }
+    greater_equal  :: proc (a, b: $T) -> u32 { return a >= b ? 0xffffffff : 0}
+    greater_than   :: proc (a, b: $T) -> u32 { return a >  b ? 0xffffffff : 0}
+    less_than      :: proc (a, b: $T) -> u32 { return a <  b ? 0xffffffff : 0}
+    horizontal_add :: proc (a: $T) -> T { return a}
+    
+    shift_left    :: proc (a: $T, n: u32) -> T { return a << n }
+    shift_right   :: proc (a: $T, n: u32) -> T { return a >> n }
+    maximum :: max
+    extract_0 :: proc (a: $T) -> (result: T) { 
+        when intrinsics.type_is_array(T) {
+            #unroll for i in 0..<len(D) {
+                result[i] = a[i]
+            }
+        } else {
+            result = a
+        }
+        return result
+     }
 }
-rectangle_min_dimension  :: proc { rectangle_min_dimension_2, rectangle_min_dimension_v }
-rectangle_min_dimension_2  :: proc(x: $E, y, w, h: E) -> Rectangle([2]E) {
-    return rectangle_min_dimension_v([2]E{x, y}, [2]E{w, h})
-}
-rectangle_min_dimension_v  :: proc(min: $T, dimension: T) -> Rectangle(T) {
-    return { min, min + dimension }
-}
-rectangle_center_dimension :: proc(center: $T, dimension: T) -> Rectangle(T) {
-    return { center - (dimension / 2), center + (dimension / 2) }
-}
-rectangle_center_half_dimension :: proc(center: $T, half_dimension: T) -> Rectangle(T) {
-    return { center - half_dimension, center + half_dimension }
-}
+
+////////////////////////////////////////////////
+// Rectangle operations
+
+rectangle_min_dimension         :: proc { rectangle_min_dimension_2, rectangle_min_dimension_v }
+rectangle_min_dimension_2       :: proc(x: $E, y, w, h: E)             -> Rectangle([2]E) { return rectangle_min_dimension_v([2]E{x, y}, [2]E{w, h}) }
+rectangle_min_dimension_v       :: proc(min: $T, dimension: T)         -> Rectangle(T)    { return { min,                      min + dimension          } }
+rectangle_min_max               :: proc(min, max: $T)                  -> Rectangle(T)    { return { min,                      max                      } }
+rectangle_center_dimension      :: proc(center: $T, dimension: T)      -> Rectangle(T)    { return { center - (dimension / 2), center + (dimension / 2) } }
+rectangle_center_half_dimension :: proc(center: $T, half_dimension: T) -> Rectangle(T)    { return { center - half_dimension,  center + half_dimension  } }
 
 rectangle_inverted_infinity :: proc($R: typeid) -> (result: R) {
     T :: intrinsics.type_field_type(R, "min")

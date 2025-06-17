@@ -56,16 +56,11 @@ color_wheel :: [?]v4 {
     v4{0.9, 0.9, 0.92, 1},
 }
 
-
-f32x8 :: #simd[8]f32
-u32x8 :: #simd[8]u32
-i32x8 :: #simd[8]i32
-
-f32x4 :: #simd[4]f32
-i32x4 :: #simd[4]i32
-
 pmm :: rawptr
 umm :: uintptr
+
+f32x4 :: #simd [4]f32
+i32x4 :: #simd [4]i32
 
 ////////////////////////////////////////////////
 

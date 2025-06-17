@@ -6,7 +6,6 @@ import "core:fmt"
 import "core:log"
 import "core:os"
 import "core:os/os2"
-import "base:runtime"
 import "core:strings"
 import "core:time"
 

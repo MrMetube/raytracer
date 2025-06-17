@@ -1,0 +1,3 @@
+Configuration: 12 cores with 84 160x160 (100 kb/tile) tiles and lane width of 4 
+Quality: 2048 rays per pixel with a maximum of 8 bounces
+Raycasting time: 1m48.9413482s - total rays cast 12.83 G - time per ray 8ns
