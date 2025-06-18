@@ -98,7 +98,7 @@ FormatNumberFlags  :: bit_set[ enum u8 {
     LeadingZero, PrependBaseSpecifier, Uppercase,
 }; u8 ]
 FormatContextFlags :: bit_set[ enum u8 {
-    PrependTypes, Multiline, AppendNewlineToResult
+    PrependTypes, Multiline, AppendNewlineToResult,
 }; u8 ]
 
 ////////////////////////////////////////////////
@@ -627,7 +627,6 @@ format_unsigned_integer :: proc(dest: ^StringBuilder, integer: u64, element: ^Fo
     
     power :u64= 1
     for power < max_integer {
-        before := power
         power *= basis
         if max_integer / power < basis do break
     }
@@ -728,7 +727,7 @@ format_matrix :: proc (ctx: ^FormatContext, matrix_type: typeid, data: pmm, type
     at   := cast(umm) data
     size := stride * major
     end  := at + size
-    for maj in 0..<major {
+    for _ in 0..<major {
         defer at += stride
         
         append_format_multiline_formatting(ctx, .Linebreak)

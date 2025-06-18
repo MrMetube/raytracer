@@ -13,7 +13,7 @@ v2 :: [2]f32
 v3 :: [3]f32
 v4 :: [4]f32
 
-LaneWidth :: 4
+LaneWidth :: 8
 
 when LaneWidth != 1 {
     lane_f32 :: #simd [LaneWidth]f32
@@ -197,29 +197,12 @@ ceil_v :: proc($T: typeid, fs: [$N]f32) -> [N]T {
     return vec_cast(T, simd.to_array(simd.ceil(simd.from_array(fs))))
 }
 
-truncate :: proc { truncate_f32, truncate_f32s }
-truncate_f32 :: proc($T: typeid, f: f32) -> T {
+truncate :: proc { truncate_f, truncate_v }
+truncate_f :: proc($T: typeid, f: f32) -> T {
     return cast(T) f
 }
-truncate_f32s :: proc($T: typeid, fs: [$N]f32) -> [N]T where N > 1 {
+truncate_v :: proc($T: typeid, fs: [$N]f32) -> [N]T where N > 1 {
     return vec_cast(T, fs)
-}
-
-sin :: proc { sin_f }
-sin_f :: proc(angle: f32) -> f32 {
-    return math.sin(angle)
-}
-
-
-cos :: proc { cos_f }
-cos_f :: proc(angle: f32) -> f32 {
-    return math.cos(angle)
-}
-
-
-atan2 :: proc { atan2_f }
-atan2_f :: proc(y, x: f32) -> f32 {
-    return math.atan2(y, x)
 }
 
 fractional :: proc(x: $F) -> (fractional: F, integer: i32) {
@@ -227,6 +210,11 @@ fractional :: proc(x: $F) -> (fractional: F, integer: i32) {
     fractional = x - cast(F) integer
     return 
 }
+
+sin :: math.sin
+cos :: math.cos
+acos  :: math.acos
+atan2 :: math.atan2
 
 ////////////////////////////////////////////////
 // Vector operations
@@ -372,13 +360,19 @@ when LaneWidth != 1 {
     horizontal_add :: simd.reduce_add_pairs
     maximum :: simd.max
     
-    extract_0 :: proc (a: $T/#simd[LaneWidth]$E) -> (result: E) {
+    extract_v3 :: proc (a: lane_v3, #any_int n: u32) -> (result: v3) {
+        result.x = extract(a.x, n)
+        result.y = extract(a.y, n)
+        result.z = extract(a.z, n)
+        return result
+    }
+    extract :: proc (a: $T/#simd[$N]$E, #any_int n: u32) -> (result: E) {
         when intrinsics.type_is_array(T) {
-            #unroll for i in 0..<len(D) {
-                result[i] = simd.extract(a, 0)
+            #unroll for i in 0..<len(T) {
+                result[i] = simd.extract(a[i], n)
             }
         } else {
-            result = simd.extract(a, 0)
+            result = simd.extract(a, n)
         }
         return result
     }
@@ -402,7 +396,7 @@ when LaneWidth != 1 {
     shift_left    :: proc (a: $T, n: u32) -> T { return a << n }
     shift_right   :: proc (a: $T, n: u32) -> T { return a >> n }
     maximum :: max
-    extract_0 :: proc (a: $T) -> (result: T) { 
+    extract :: proc (a: $T, n: u32) -> (result: T) { 
         when intrinsics.type_is_array(T) {
             #unroll for i in 0..<len(D) {
                 result[i] = a[i]

@@ -1,6 +1,9 @@
+#+feature dynamic-literals
 package main
 
 import "base:intrinsics"
+import os "core:os/os2"
+import "core:simd"
 import "core:time"
 
 import img "vendor:stb/image"
@@ -12,28 +15,35 @@ Image:: struct {
     width, height: i32,
 }
 
+BrdfTable :: struct {
+    count:  [3]u32,
+    values: []v3,
+}
+
 Material :: struct {
     emit:    lane_v3,
     reflect: lane_v3,
     scatter: f32, // 0 = mirror like, 1 = chalk like
+    
+    brdf:    BrdfTable,
 }
 
 Plane :: struct {
-    n: lane_v3,
-    d: f32,
-    m: Material,
+    normal, tangent, binormal: lane_v3,
+    d: f32,    
+    material: u32,
 }
 
 Sphere :: struct {
-    p: lane_v3,
-    r: f32,
-    m: Material,
+    center:   lane_v3,
+    radius:   f32,
+    material: u32,
 }
 
 World :: struct {
-    no_hit:  Material,
-    spheres: [dynamic]Sphere,
-    planes:  [dynamic]Plane,
+    spheres:   [dynamic]Sphere,
+    planes:    [dynamic]Plane,
+    materials: [dynamic]Material,
     
     bounces_computed: u64,
     loops_computed:   u64,
@@ -54,20 +64,36 @@ Ray :: struct {
 
 main :: proc() {
     world: World
-    world.no_hit = { emit = {.3, .4, .8} }
-    world.ray_per_pixel = 512
+    world.ray_per_pixel = 1024
     world.max_bounce_count = 8
+
+    world.materials = {
+        { emit    = { .3 , .4 , .5 },               },
+        { reflect = { .5 , .5 , .5 }, scatter = 1.  },
+        { reflect = { .7 , .5 , .3 }, scatter = 1.  },
+        { emit    = {50. , 10 ,  5 }, scatter = 1.  },
+        { reflect = { .2 , .8 , .2 }, scatter = .3  },
+        { reflect = { .4 , .8 , .9 }, scatter = .15 },
+        { reflect = { .95, .95, .95}, scatter = .1  },
+    }
+    
+    load_brdf_merl("", &world.materials[0].brdf)
+    load_brdf_merl(`.\BRDFDatabase\brdfs\gray-plastic.binary`, &world.materials[1].brdf)
+    load_brdf_merl(`.\BRDFDatabase\brdfs\chrome.binary`,       &world.materials[2].brdf)
+    // load_brdf_merl(`.\BRDFDatabase\brdfs\`, &m[3].brdf)
+    // load_brdf_merl(`.\BRDFDatabase\brdfs\`, &m[4].brdf)
+    // load_brdf_merl(`.\BRDFDatabase\brdfs\`, &m[5].brdf)
+    // load_brdf_merl(`.\BRDFDatabase\brdfs\`, &m[6].brdf)
     
     core_count :: 12 // os.core_count or something
+    append(&world.planes,  Plane  { normal = {0,0,1},  d = 0, material = 1 })
+    // append(&world.planes,  Plane  { normal = {1,0,0},  d = 2, material = 1 })
     
-    append(&world.planes,  Plane  { n = {0,0,1},  d = 0, m = { reflect = {.2, .2, .2}, scatter = 1. } })
-    // append(&world.planes,  Plane  { n = {1,0,0},  d = 3, m = { reflect = {1., 1., 1.}, scatter = 1. } })
-    
-    append(&world.spheres, Sphere { p = {0,0,1},   r = 0.4, m = { emit    = {5., 5., .0}, scatter = 1. } })
-    append(&world.spheres, Sphere { p = {3,-2,0},  r = 1,   m = { reflect = {.9, .0, .0}, scatter = 1. } })
-    append(&world.spheres, Sphere { p = {-2,-3,1}, r = 1.3, m = { reflect = {.3, .7, .4}, scatter = .7 } })
-    append(&world.spheres, Sphere { p = {0,1,3},   r = 2,   m = { reflect = {.4, .7, .7}, scatter = .3 } })
-    append(&world.spheres, Sphere { p = {2,4,0},   r = 3,   m = { reflect = {.4, .7, .7}, scatter = .03 } })
+    append(&world.spheres, Sphere { center = {0,0,0},   radius = 1, material = 2 })
+    // append(&world.spheres, Sphere { center = {3,-2,0},  radius = 1, material = 3 })
+    // append(&world.spheres, Sphere { center = {-2,-1,2}, radius = 1, material = 4 })
+    // append(&world.spheres, Sphere { center = {1,-1,3},  radius = 1, material = 5 })
+    // append(&world.spheres, Sphere { center = {-2,3,0},  radius = 2, material = 6 })
     
     
     camera: Camera
@@ -142,6 +168,41 @@ main :: proc() {
     img.write_bmp("./render.bmp", image.width, image.height, 4, &image.data[0])
 }
 
+load_brdf_merl :: proc (filename: string, dest: ^BrdfTable) {
+    if filename == "" {
+        dest.count = 1
+        dest.values = make([]v3, 1)
+    } else {
+        data, err := os.read_entire_file(filename, context.temp_allocator)
+        all_data := data
+        defer delete(all_data, context.temp_allocator)
+        
+        if err != nil {
+            println("Unable to open MERL binary %", filename)
+            return
+        }
+        
+        dest.count = (cast(^[3]u32) &data[0])^
+        cursor := size_of(dest.count)
+        data = data[cursor:]
+        
+        total_count := dest.count[0] * dest.count[1] * dest.count[2]
+        temp_values := (cast([^]f64) &data[0])[:total_count*3]
+        
+        foo := len(data) * size_of(u8) / (size_of(f64) * 3)
+        file_size := cast(umm) &data[0] + auto_cast len(data)
+        read_size := cast(umm) &temp_values[0] + auto_cast len(temp_values) * size_of(f64)
+        assert(file_size == read_size)
+        
+        dest.values = make([]v3, total_count)
+        for i in 0..<total_count {
+            dest.values[i].x = cast(f32) temp_values[i + total_count * 0]
+            dest.values[i].y = cast(f32) temp_values[i + total_count * 1]
+            dest.values[i].z = cast(f32) temp_values[i + total_count * 2]
+        }
+    }
+}
+
 render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle2i, entropy: ^RandomSeries) {
     film_distance :: 1
     film_center := camera.p - film_distance * camera.z
@@ -212,49 +273,57 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
         for _ in 0..<max_bounce_count {
             closest_t: lane_f32 = PositiveInfinity
             
-            hit_emit:    lane_v3
-            hit_reflect: lane_v3
-            hit_scatter: lane_f32
-            
+            hit_mat_index: lane_u32
             did_hit: lane_u32
             
             next_o: lane_v3
-            next_d: lane_v3
-            next_normal: lane_v3
+            
+            normal:   lane_v3
+            tangent:  lane_v3
+            binormal: lane_v3
             
             bounces_computed_lanes += 1 & lane_mask
-            loops_computed_lanes += LaneWidth
+            loops_computed_lanes += 1
             
             for &plane in world.planes {
-                denom := dot(plane.n, ray_d)
-                
                 tolerance :: 0.00001
-                t := ( -plane.d - dot(plane.n, ray_o)) / denom
+                
+                denom := dot(plane.normal, ray_d)
                 denom_mask := less_than(denom, -tolerance) | greater_than(denom, tolerance)
+                
+                if denom_mask == 0 do continue
+                
+                t := ( -plane.d - dot(plane.normal, ray_o)) / denom
                 t_mask     := greater_than(t, min_t) & less_than(t, closest_t)
+                
+                if t_mask == 0 do continue
+                
                 hit_mask   := denom_mask & t_mask
                 
                 conditional_assign(hit_mask, &closest_t, t)
                 conditional_assign(hit_mask, &did_hit, 0xffffffff)
                 
-                conditional_assign(hit_mask, &hit_emit,    plane.m.emit)
-                conditional_assign(hit_mask, &hit_reflect, plane.m.reflect)
-                conditional_assign(hit_mask, &hit_scatter, plane.m.scatter)
+                conditional_assign(hit_mask, &hit_mat_index, plane.material)
                 
                 conditional_assign(hit_mask, &next_o, ray_o + t*ray_d)
-                conditional_assign(hit_mask, &next_normal, plane.n)
+                
+                conditional_assign(hit_mask, &normal,    plane.normal)
+                conditional_assign(hit_mask, &tangent,   plane.tangent)
+                conditional_assign(hit_mask, &binormal, plane.binormal)
             }
             
             for &sphere in world.spheres {
-                locale_origin := ray_o - sphere.p
+                locale_origin := ray_o - sphere.center
                 
                 a := dot(ray_d, ray_d)
                 b := 2 * dot(locale_origin, ray_d)
-                c := dot(locale_origin, locale_origin) - square(sphere.r) 
+                c := dot(locale_origin, locale_origin) - square(sphere.radius) 
                 
                 root := square_root(square(b) - 4*a*c)
                 tolerance :: 0.00001
                 root_mask := greater_equal(root, 0)
+                
+                if root_mask == 0 do continue
                 
                 t_pos := (-b + root) / 2 * a
                 t_neg := (-b - root) / 2 * a
@@ -264,46 +333,78 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 conditional_assign(pick_mask, &t, t_neg)
                 
                 t_mask   := greater_than(t, min_t) & less_than(t, closest_t)
+                
+                if t_mask == 0 do continue
+                
                 hit_mask := root_mask & t_mask
                 
                 conditional_assign(hit_mask, &closest_t, t)
                 conditional_assign(hit_mask, &did_hit, 0xffffffff)
                 
-                conditional_assign(hit_mask, &hit_emit,    sphere.m.emit)
-                conditional_assign(hit_mask, &hit_reflect, sphere.m.reflect)
-                conditional_assign(hit_mask, &hit_scatter, sphere.m.scatter)
+                conditional_assign(hit_mask, &hit_mat_index, sphere.material)
                 
                 // @todo(viktor): reuse the next_origin calculation
-                conditional_assign(hit_mask, &next_o, ray_o + t*ray_d)
-                conditional_assign(hit_mask, &next_normal, next_o - sphere.p)
+                conditional_assign(hit_mask, &next_o,  ray_o + t*ray_d)
+                
+                conditional_assign(hit_mask, &normal,    next_o - sphere.center)
+                
+                s_tangent   := cross(lane_v3{0,0,1}, normal)
+                s_binormal := cross(normal, tangent)
+                
+                s_tangent   = normalize_or_zero(s_tangent)
+                s_binormal = normalize_or_zero(s_binormal)
+                
+                conditional_assign(hit_mask, &tangent,   s_tangent)
+                conditional_assign(hit_mask, &binormal, s_binormal)
             }
             
             
-            // Color Accumulation
-            emit := world.no_hit.emit
+            gather :: proc (materials: []Material, index: lane_u32, $member: string, $T: typeid) -> (result: T) {
+                mask: lane_u32 = 0xffffffff
+                
+                array  := cast(lane_umm) &materials[0]
+                member := offset_of_by_string(Material, member)
+                index  := cast(lane_umm) index * size_of(Material)
+                when T == lane_v3 {
+                    channel :umm= size_of(lane_f32)
+                    result.r = simd.gather(cast(lane_pmm) (array + index + member + channel * 0), lane_f32(0), mask)
+                    result.g = simd.gather(cast(lane_pmm) (array + index + member + channel * 1), lane_f32(0), mask)
+                    result.b = simd.gather(cast(lane_pmm) (array + index + member + channel * 2), lane_f32(0), mask)
+                } else when T == lane_f32 {
+                    result   = simd.gather(cast(lane_pmm) (array + index + member), lane_f32(0), mask)
+                } else do #panic("unhandled")
+                
+                return result
+            }
+            
+            hit_emit    := gather(world.materials[:], hit_mat_index, "emit",    lane_v3)
+            hit_reflect := gather(world.materials[:], hit_mat_index, "reflect", lane_v3)
+            hit_scatter := gather(world.materials[:], hit_mat_index, "scatter", lane_f32)
             // only allow world.no_hit on the first time we didnt hit anything
-            (cast(^lane_u32) &emit.r)^ &= lane_mask
-            (cast(^lane_u32) &emit.g)^ &= lane_mask
-            (cast(^lane_u32) &emit.b)^ &= lane_mask
+            (cast(^lane_u32) &hit_emit.r)^ &= lane_mask
+            (cast(^lane_u32) &hit_emit.g)^ &= lane_mask
+            (cast(^lane_u32) &hit_emit.b)^ &= lane_mask
             
-            conditional_assign(did_hit, &emit, hit_emit)
-            
-            sample += attenuation * emit
-            
-            angle_attenuation := dot(-ray_d, next_normal)
-            angle_attenuation = maximum(angle_attenuation, 0)
-            conditional_assign(did_hit, &attenuation, attenuation * angle_attenuation * hit_reflect)
-            
-            // Bounce
-            pure_bounce   := reflect(ray_d, next_normal)
-            scatter       := random_bilateral(entropy, lane_v3)
-            random_bounce := normalize_or_zero(next_normal + scatter)
-            
-            ray_d = linear_blend(pure_bounce, random_bounce, hit_scatter)
-            ray_o = next_o
+            // Color Accumulation
+            sample += attenuation * hit_emit
             
             lane_mask &= did_hit
-            if lane_mask == 0 do break
+            if lane_mask == 0 {
+                break
+            } else {
+                // Bounce
+                pure_bounce   := reflect(ray_d, normal)
+                random_bounce := normalize_or_zero(normal + random_bilateral(entropy, lane_v3))
+                
+                next_d := linear_blend(pure_bounce, random_bounce, hit_scatter)
+                
+                reflectance := brdf_lookup(world.materials[:], hit_mat_index, -ray_d, normal, tangent, binormal, next_d)
+                conditional_assign(did_hit, &attenuation, attenuation * reflectance)
+                
+                ray_o = next_o
+                
+                ray_d = next_d
+            }
         }
         
         final_color_lanes += contribution_factor * sample
@@ -314,4 +415,59 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
     final_color.b = horizontal_add(final_color_lanes.b)
     
     return final_color, cast(u64) horizontal_add(bounces_computed_lanes), cast(u64) horizontal_add(loops_computed_lanes)
+}
+
+brdf_lookup :: proc (materials: []Material, index: lane_u32, view_direction, normal, tangent, binormal, light_direction: lane_v3) -> (result: lane_v3) {
+    index := index
+
+    half_vector := normalize_or_zero(.5 * (view_direction + light_direction))
+    
+    lw := lane_v3 {
+        dot(light_direction, tangent),
+        dot(light_direction, binormal),
+        dot(light_direction, normal),
+    }
+    
+    hw := lane_v3 {
+        dot(half_vector, tangent),
+        dot(half_vector, binormal),
+        dot(half_vector, normal),
+    }
+    
+    diff_y := normalize_or_zero(cross(hw, tangent))
+    diff_x := normalize_or_zero(cross(diff_y, hw))
+    
+    diff_x_inner := dot(diff_x, lw)
+    diff_y_inner := dot(diff_y, lw)
+    diff_z_inner := dot(hw, lw)
+    
+    for lane in 0..<LaneWidth {
+        theta_half := acos(extract(hw.z, lane))
+        
+        theta_diff := acos(extract(diff_z_inner, lane))
+        phi_diff   := atan2(extract(diff_y_inner, lane), extract(diff_x_inner, lane))
+
+        if phi_diff < 0 do phi_diff += Pi
+        
+        table := materials[(cast(^[LaneWidth]u32) &index)[lane]].brdf
+        
+        f0 := square_root(clamp_01(theta_half / (.5 * Pi)))
+        i0 := round(u32, cast(f32) (table.count[0]-1) * f0)
+        
+        f1 := clamp_01(theta_diff / (.5 * Pi))
+        i1 := round(u32, cast(f32) (table.count[1]-1) * f1)
+        
+        f2 := clamp_01(phi_diff / Pi)
+        i2 := round(u32, cast(f32) (table.count[2]-1) * f2)
+        
+        brdf_index := i2 + i1 * table.count[2] + i0 * table.count[2] * table.count[1]
+        
+        color := table.values[brdf_index]
+        
+        (cast(^[LaneWidth]f32) &result.r)[lane] = color.r
+        (cast(^[LaneWidth]f32) &result.g)[lane] = color.g
+        (cast(^[LaneWidth]f32) &result.b)[lane] = color.b
+    }
+    
+    return result
 }

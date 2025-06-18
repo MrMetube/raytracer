@@ -20,7 +20,7 @@ seed_random_series :: proc(#any_int seed: u32) -> (result: RandomSeries) {
 next_random_lane_u32 :: xor_shift
 next_random_u32 :: proc (series: ^RandomSeries) ->  (result: u32) {
     next_random_lane_u32(series)
-    return extract_0(series.state)
+    return extract(series.state, 0)
 }
 xor_shift :: proc (series: ^RandomSeries) ->  (x: lane_u32) {
     // @note(viktor): Reference xor_shift from https://en.wikipedia.org/wiki/Xorshift
@@ -46,7 +46,7 @@ random_unilateral :: proc(series: ^RandomSeries, $T: typeid) -> (result: T) #no_
         when intrinsics.type_is_simd_vector(T) {
             result = cast(T) unilateral
         } else {
-            result = cast(T) extract_0(unilateral)
+            result = cast(T) extract(unilateral, 0)
         }
     }
     
