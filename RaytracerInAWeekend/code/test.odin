@@ -1,6 +1,5 @@
 package main
 
-import "core:fmt"
 import "core:testing"
 // TODO - aabb contains and intersects
 // TODO - binary tree append

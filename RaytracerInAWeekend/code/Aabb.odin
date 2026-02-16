@@ -1,7 +1,5 @@
 package main 
 
-import "core:fmt"
-
 Aabb :: struct($Dimension: u8) {
 	origin: [Dimension]f32,
 	extent: [Dimension]f32,
@@ -18,12 +16,12 @@ aabb_intersects :: proc{
 }
 
 
-aabb_min_max :: proc "contextless" (a:Aabb($D)) -> (min,max:[D]f32){
+aabb_min_max :: proc "contextless" (a: Aabb($D)) -> (min,max:[D]f32){
 	return a.origin - a.extent, a.origin + a.extent
 }
 
 // Note: as rays are a 3d construct, only accept 3d aabbs
-aabb_intersects_ray :: proc "contextless" (b:Aabb(3), r:Ray) -> b8 {
+aabb_intersects_ray :: proc "contextless" (b: Aabb(3), r: Ray) -> b8 {
 	// TODO check correctness
 	bmin,bmax := b.origin - b.extent, b.origin + b.extent
 	inv_dir := 1/r.direction
@@ -69,7 +67,7 @@ aabb_contains_point :: proc "contextless" (a: Aabb($D), position: [D]f32) -> b8 
 	return true
 }
 
-aabb_contains_aabb :: proc "contextless" (outer,inner:Aabb($D)) -> b8 {
+aabb_contains_aabb :: proc "contextless" (outer,inner: Aabb($D)) -> b8 {
 	smaller := true
 	for _, dim in outer.extent {
 		smaller &= outer.extent[dim] >= inner.extent[dim]

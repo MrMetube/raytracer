@@ -1,8 +1,5 @@
 package main
 
-import "core:fmt"
-import "core:math"
-
 BiTree :: proc($T: typeid, origin: [1]f32, extent: [1]f32) -> BinaryTree(T, 1) {
 	return BinaryTree(T, 1){origin = origin, extent = extent}
 }
@@ -17,8 +14,8 @@ OctTree :: proc($T: typeid, origin: [3]f32, extent: [3]f32) -> BinaryTree(T, 3) 
 // TODO store root / parent - to go back up
 BinaryTree :: struct($Type: typeid, $Dimensions: u8) where Dimensions > 0 {
 	using bounds: Aabb(Dimensions),
-	values:       [dynamic]BinaryTreeItem(Type, Dimensions),
-	subnodes:     [1 << Dimensions]^BinaryTree(Type, Dimensions),
+	values:       [dynamic] BinaryTreeItem(Type, Dimensions),
+	subnodes:     [1 << Dimensions] ^BinaryTree(Type, Dimensions),
 }
 
 BinaryTreeItem :: struct($Type: typeid, $Dimensions: u8) {
