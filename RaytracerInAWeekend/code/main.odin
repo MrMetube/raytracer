@@ -3,48 +3,58 @@ package main
 import "core:fmt"
 import "core:math"
 import "core:math/linalg"
-import "core:math/rand"
 import "core:os"
 import "core:thread"
 import "core:time"
 import rl "vendor:raylib"
 
-Infinity :: math.INF_F32
+////////////////////////////////////////////////
+
+samples_per_pixel :: 8
+max_depth :: 20
+
+////////////////////////////////////////////////
 
 main :: proc() {
     init_spall()
     
-    gen := rand.create_u64(123)
-    context.random_generator = rand.default_random_generator(&gen)
+    context.random_generator = seed_random_generator(123)
     
 	rl.SetTraceLogLevel(.WARNING)
 	
-	thread_count := i32(os.processor_core_count())
-	width: i32 = 80 * thread_count when !ODIN_DEBUG else 10 * thread_count
+	thread_count := cast(i32) os.processor_core_count()
+	width: i32 = 20 * thread_count
 	height := i32(f32(width) / (16. / 9.))
 
-	world: Hitable
 	camera: Camera
-	// world, camera = blur_scene()
-	world, camera = random_scene(11)
-
-	ot: HitableOctTree
-	binary_tree_init(&ot, 0, 2000)
-	for &h in world.(Hitables) {
-		switch &v in h {
-		case Sphere:
-			inserted := binary_tree_append_by_aabb(&ot, &h, Aabb(3){v.center, v.radius})
-			// inserted := binary_tree_append_by_position(&ot, &h, v.center)
-			assert(auto_cast inserted, "couldnt insert sphere")
-		case Hitables, HitableOctTree:
-			assert(false, "please no nesting for now")
+    hh := make([dynamic] Hitable, 0, 4096, context.allocator)
+    hh.allocator = {}
+    append_nothing(&hh) // nil
+    append_nothing(&hh) // world
+    
+    world := &hh[Root_Index]
+    world.origin = 0
+    world.extent = 2000
+    
+	// camera = blur_scene(&hh)
+	camera = random_scene(&hh, 11)
+    
+    sphere_end := len(hh)
+	for &it, i in hh[2:sphere_end] {
+        it_index := cast(Hitable_Index) i + 2
+        
+        if it.is_sphere {
+            if !tree_append(&hh, Root_Index, it_index) {
+                assert(false, "couldnt insert sphere")
+            }
+        } else {
+			assert(false, "nesting not allowed")
 		}
     } 
     
-    world = ot
-    image := render_image(width, height, thread_count, world, camera)
+    image := render_image(hh[:], width, height, thread_count, camera)
     defer delete(image)
-
+    
     for y in 0..<height/2 {
         top := y
         bot := height-1-y
@@ -68,8 +78,6 @@ main :: proc() {
     
     texture := rl.LoadTextureFromImage(rl_image)
     for !rl.WindowShouldClose() {
-        if rl.IsKeyDown(.SPACE) do break
-        
         rl.BeginDrawing()
         
         rl.ClearBackground({0, 0, 0, 0})
@@ -81,23 +89,101 @@ main :: proc() {
 
 ////////////////////////////////////////////////
 
-ray_color :: proc(ray: Ray, world: Hitable, depth: i32) -> Color {
-    as: [128] Color
-    as_length: int
-    assert(depth < len(as))
+render_image :: proc(hh: [] Hitable, width, height, thread_count: i32, camera: Camera) -> []rl.Color {
+    spall_proc()
+	image := make([]v3, height * width)
+    
+    args := make([]Args, thread_count)
+    threads := make([]^thread.Thread, thread_count)
+    fmt.println("Start render")
+    spall_begin("render")
+    start_time := time.now()
+    
+    length := height / thread_count
+    for i in 0 ..< thread_count {
+        start := i32(i) * length
+        
+        args[i].hh    = hh[:]
+        args[i].image = image
+        args[i].total = {width, height}
+        args[i].offset = start
+        args[i].extent = length
+        args[i].camera = camera
+        args[i].thread_index = i+1
+        threads[i] = thread.create_and_start_with_poly_data(&args[i], render_into_image)
+    }
+    thread.join_multiple(..threads)
+    
+    spall_end()
+    fmt.println("Finish render:", time.since(start_time))
+    
+    spall_scope("copy image")
+	rl_image := make([] rl.Color, height * width)
+    for i in 0..<len(rl_image) {
+        rl_image[i] = to_rl_color(image[i], 1)
+    }
+    delete(image)
+    
+	return rl_image
+}
+
+Args :: struct {
+    hh:             [] Hitable,
+    image:          [] v3,
+    total:          [2] i32,
+    offset, extent: i32,
+    camera:         Camera,
+    thread_index:   i32,
+}
+
+render_into_image :: proc(args: ^Args) {
+    context.user_index = auto_cast args.thread_index
+    init_spall_thread()
+    
+    hitable_stack := make([dynamic] Hitable_Index, context.temp_allocator)
+    color_stack   := make([dynamic] v3, 0, max_depth, context.temp_allocator)
+    
+    dx := 1.0 / (cast(f32) args.total.x - 1)
+    dy := 1.0 / (cast(f32) args.total.y - 1)
+    
+    
+    for y in args.offset ..< args.offset + args.extent {
+        for x in 0 ..< args.total.x {
+            color: v3
+            
+            rays: [samples_per_pixel] Ray
+            for &ray in rays {
+                u := (cast(f32) x + random_unilateral()) * dx
+                v := (cast(f32) y + random_unilateral()) * dy
+                
+                ray = camera_get_ray(args.camera, u, v)
+            }
+            
+            for ray in rays {
+                ray_color := trace_ray(&hitable_stack, &color_stack, args.hh, ray, max_depth)
+                color += ray_color
+            }
+            
+            args.image[y * args.total.x + x] = (color / samples_per_pixel)
+        }
+    }
+    fmt.println("Done", args.thread_index)
+}
+
+trace_ray :: proc(hitable_stack: ^[dynamic] Hitable_Index, color_stack: ^[dynamic] v3, hh: [] Hitable, ray: Ray, depth: i32) -> v3 {
+    spall_proc()
     
     ended_in_sky := true
+    clear(color_stack)
     
     ray := ray
     depth := depth
     for depth > 0 {
-        hit_record: HitRecord
-        
-        if hit_any(world, ray, 0.001, +Infinity, &hit_record) {
-            attenuation, scattered, ok := scatter(hit_record.material, ray, hit_record)
+        record, did_hit := hit_any(hitable_stack, hh, Root_Index, ray, 0.001, +Infinity)
+        if did_hit {
+            attenuation, scattered, ok := scatter(record.material, ray, record)
             if ok {
-                as[as_length] = attenuation
-                as_length += 1
+                append(color_stack, attenuation)
                 
                 ray = scattered
                 depth -= 1
@@ -111,91 +197,25 @@ ray_color :: proc(ray: Ray, world: Hitable, depth: i32) -> Color {
         break
     }
     
-    result: Color
+    result: v3
     if ended_in_sky {
+        spall_scope("hit_sky")
         direction_normal := linalg.normalize(ray.direction)
         t := .5 * (direction_normal.y + 1)
-        sky :=  (1 - t) * Color{1, 1, 1} + t * Color{.5, .7, 1}
+        sky :=  (1 - t) * v3{1, 1, 1} + t * v3{.5, .7, 1}
         result = sky
     }
     
-    #reverse for &a, i in as[:as_length] {
+    #reverse for &a in color_stack {
         result *= a
     }
     
     return result
 }
 
-samples_per_pixel :: 6
-max_depth :: 10
-
-render_image :: proc(width, height, thread_count: i32, world: Hitable, camera: Camera) -> []rl.Color {
-	image := make([]v3, height * width)
-    
-    args := make([]Args, thread_count)
-    threads := make([]^thread.Thread, thread_count)
-    fmt.println("Start render")
-    start_time := time.now()
-    
-    length := height / thread_count
-    for i in 0 ..< thread_count {
-        start := i32(i) * length
-        
-        args[i].image = image
-        args[i].total = {width, height}
-        args[i].offset = start
-        args[i].extent = length
-        args[i].camera = camera
-        args[i].world = world
-        args[i].thread_index = i+1
-        threads[i] = thread.create_and_start_with_poly_data(&args[i], render_into_image)
-    }
-    thread.join_multiple(..threads)
-    
-    fmt.println("Finish render:", time.since(start_time))
-    
-	rl_image := make([] rl.Color, height * width)
-    for i in 0..<len(rl_image) {
-        rl_image[i] = get_pixel_color(image[i], 1)
-    }
-    delete(image)
-    
-	return rl_image
-}
-
-Args :: struct {
-    image:          [] v3,
-    total:          [2] i32,
-    offset, extent: i32,
-    camera:         Camera,
-    world:          Hitable,
-    thread_index:   i32,
-}
-
-render_into_image :: proc(args: ^Args) {
-    context.user_index = auto_cast args.thread_index
-    init_spall_thread()
-    
-    for y in args.offset ..< args.offset + args.extent {
-        for x in 0 ..< args.total.x {
-            color: Color
-            
-            for s in 0 ..< samples_per_pixel {
-                u := (f32(x) + random_unilateral()) / f32(args.total.x - 1)
-                v := (f32(y) + random_unilateral()) / f32(args.total.y - 1)
-                r := camera_get_ray(args.camera, u, v)
-                color += ray_color(r, args.world, max_depth)
-            }
-            
-            args.image[y * args.total.x + x] = (color / samples_per_pixel)
-        }
-    }
-    fmt.println("Done", args.thread_index)
-}
-
 ////////////////////////////////////////////////
 
-get_pixel_color :: proc(pixel_color: Color, samples_per_pixel: u32) -> rl.Color {
+to_rl_color :: proc(pixel_color: v3, samples_per_pixel: u32) -> rl.Color {
 	result := rl.Color {
         cast(u8) (math.sqrt(clamp(pixel_color.r, 0, 1)) * 255),
         cast(u8) (math.sqrt(clamp(pixel_color.g, 0, 1)) * 255),
@@ -206,80 +226,82 @@ get_pixel_color :: proc(pixel_color: Color, samples_per_pixel: u32) -> rl.Color 
     return result
 }
 
-blur_scene :: proc() -> (world: Hitables, camera: Camera) {
-	material_ground := Lambertian{Color{.0, .5, .2}}
-	material_center := Lambertian{Color{.1, .2, .5}}
-	material_left := Dielectric{1.5}
-	material_right := Metal{Color{.8, .6, .2}, 0}
+////////////////////////////////////////////////
 
-	append(&world, Sphere{{0.0, -100.5, -1.0}, 100.0, material_ground})
-	append(&world, Sphere{{0.0, 0.0, -1.0}, 0.5, material_center})
-	append(&world, Sphere{{-1.0, 0.0, -1.0}, 0.5, material_left})
-	append(&world, Sphere{{-1.0, 0.0, -1.0}, -0.45, material_left})
-	append(&world, Sphere{{1.0, 0.0, -1.0}, 0.5, material_right})
-
-	look_from, look_at: Point : {3, 3, 2}, {0, 0, -1}
-	focus_distance := linalg.length(look_from - look_at)
-
-	aspect_ratio: f32 : 16.0 / 9.0
-	vertical_fov: f32 : 20
-	aperture :: 2
-
-	camera_init(
-		&camera,
-		look_from,
-		look_at,
-		{0, 1, 0},
-		vertical_fov,
-		aspect_ratio,
-		aperture,
-		focus_distance,
-	)
-	return
+blur_scene :: proc(hh: ^[dynamic] Hitable) -> (camera: Camera) {
+    material_ground := Lambertian{v3{.0, .5, .2}}
+    material_center := Lambertian{v3{.1, .2, .5}}
+    material_left   := Dielectric{1.5}
+    material_right  := Metal{v3{.8, .6, .2}, 0}
+    
+    append_sphere(hh, Sphere{{0.0, -100.5, -1.0}, 100.0, material_ground})
+    append_sphere(hh, Sphere{{0.0, 0.0, -1.0}, 0.5, material_center})
+    append_sphere(hh, Sphere{{-1.0, 0.0, -1.0}, 0.5, material_left})
+    append_sphere(hh, Sphere{{-1.0, 0.0, -1.0}, -0.45, material_left})
+    append_sphere(hh, Sphere{{1.0, 0.0, -1.0}, 0.5, material_right})
+    
+    look_from, look_at: v3 : {3, 3, 2}, {0, 0, -1}
+    focus_distance := linalg.length(look_from - look_at)
+    
+    aspect_ratio: f32 : 16.0 / 9.0
+    vertical_fov: f32 : 20
+    aperture :: 2
+    
+    camera_init(
+        &camera,
+        look_from,
+        look_at,
+        {0, 1, 0},
+        vertical_fov,
+        aspect_ratio,
+        aperture,
+        focus_distance,
+    )
+    
+    return camera
 }
 
-random_scene :: proc(max_distance: f32) -> (world: Hitables, camera: Camera) {
+random_scene :: proc(hh: ^[dynamic] Hitable, max_distance: f32) -> (camera: Camera) {
 	ground_material := Lambertian{.5}
-	append(&world, Sphere{Point{0, -1000, 0}, 1000, ground_material})
+	append_sphere(hh, Sphere{v3{0, -1000, 0}, 1000, ground_material})
 
 	for a in -max_distance ..< max_distance {
 		for b in -max_distance ..< max_distance {
-			center := Point{f32(a) + 0.9 * random_unilateral(), 0.2, f32(b) + 0.9 * random_unilateral()}
+			center := v3{f32(a) + 0.9 * random_unilateral(), 0.2, f32(b) + 0.9 * random_unilateral()}
 
-			if linalg.length(center - Point{4, 0.2, 0}) > 0.9 {
+			if linalg.length(center - v3{4, 0.2, 0}) > 0.9 {
 				sphere_material: Material
 				choose_mat := random_unilateral()
 				switch {
-				case choose_mat < .8:
-					// diffuse
+				case choose_mat < .8: // diffuse
 					albedo := random_vector() * random_vector()
 					sphere_material := Lambertian{albedo}
-					append(&world, Sphere{center, 0.2, sphere_material})
-				case choose_mat < .95:
-					// metal
+					append_sphere(hh, Sphere{center, 0.2, sphere_material})
+                    
+				case choose_mat < .95: // metal
 					albedo := random_vector(.5, 1)
 					fuzz := random_range(0, 0.5)
 					sphere_material = Metal{albedo, fuzz}
-					append(&world, Sphere{center, 0.2, sphere_material})
-				case:
-					// glass
+					append_sphere(hh, Sphere{center, 0.2, sphere_material})
+                    
+				case: // glass
 					sphere_material := Dielectric{1.5}
-					append(&world, Sphere{center, 0.2, sphere_material})
+					append_sphere(hh, Sphere{center, 0.2, sphere_material})
 				}
 			}
 		}
 	}
 
 	material1 := Dielectric{1.5}
-	append(&world, Sphere{Point{0, 1, 0}, 1.0, material1})
+	append_sphere(hh, Sphere{v3{0, 1, 0}, 1.0, material1})
 
 	material2 := Lambertian{{0.4, 0.2, 0.1}}
-	append(&world, Sphere{Point{-4, 1, 0}, 1.0, material2})
+	append_sphere(hh, Sphere{v3{-4, 1, 0}, 1.0, material2})
 
-	material3 := Metal{Color{0.7, 0.6, 0.5}, 0.0}
-	append(&world, Sphere{Point{4, 1, 0}, 1.0, material3})
+	material3 := Metal{v3{0.7, 0.6, 0.5}, 0.0}
+	append_sphere(hh, Sphere{v3{4, 1, 0}, 1.0, material3})
 
-	look_from, look_at: Point : {13, 2, 3}, {0, 0, 0}
+	look_from, look_at: v3 : {13, 2, 3}, {0, 0, 0}
 	focus_distance :: 10
 
 	aspect_ratio: f32 : 3.0 / 2.0
@@ -296,5 +318,6 @@ random_scene :: proc(max_distance: f32) -> (world: Hitables, camera: Camera) {
 		aperture,
 		focus_distance,
 	)
-	return
+    
+	return camera
 }

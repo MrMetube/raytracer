@@ -33,13 +33,13 @@ spall_exit :: proc "contextless" (proc_address, call_site_return_address: rawptr
 @(disabled=!SpallEnabled)
 init_spall :: proc (thread_index: u32 = 0, location := #caller_location) {
     spall_ctx = spall.context_create("trace.spall", 10 * time.Millisecond)
-    make(&backing_buffer, 10 * Megabyte)
+    make(&backing_buffer, 64 * Megabyte)
     spall_buffer = spall.buffer_create(backing_buffer, thread_index)
 }
 @(deferred_none = delete_spall_thread)
 @(disabled=!SpallEnabled)
 init_spall_thread :: proc (thread_index := cast(u32) context.user_index, location := #caller_location) {
-    make(&backing_buffer, 10 * Megabyte)
+    make(&backing_buffer, 64 * Megabyte)
     spall_buffer = spall.buffer_create(backing_buffer, thread_index)
     spall_begin(location.procedure)
 }

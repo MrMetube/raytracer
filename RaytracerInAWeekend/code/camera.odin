@@ -4,14 +4,14 @@ import "core:math"
 import "core:math/linalg"
 
 Camera :: struct {
-	origin:               Point,
-	horizontal, vertical: Vec3,
-	lower_left_corner:    Vec3,
-	u, v, w:              Vec3,
+	origin:               v3,
+	horizontal, vertical: v3,
+	lower_left_corner:    v3,
+	u, v, w:              v3,
 	lens_radius:          f32,
 }
 
-camera_init :: proc(c: ^Camera, look_from, look_at: Point, vup: Vec3, vertical_fov, aspect_ratio, aperture, focus_distance: f32) {
+camera_init :: proc(c: ^Camera, look_from, look_at: v3, vup: v3, vertical_fov, aspect_ratio, aperture, focus_distance: f32) {
 	θ := math.to_radians(vertical_fov)
 	h := math.tan(θ / 2)
 	viewport_height: f32 = 2 * h
@@ -30,6 +30,7 @@ camera_init :: proc(c: ^Camera, look_from, look_at: Point, vup: Vec3, vertical_f
 }
 
 camera_get_ray :: proc(c: Camera, s, t: f32) -> Ray {
+    spall_proc()
 	rd := c.lens_radius * random_in_unit_disk()
 	offset := c.u * rd.x + c.v * rd.y
 	result := Ray {

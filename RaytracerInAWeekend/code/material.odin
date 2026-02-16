@@ -4,11 +4,11 @@ import "core:math"
 import "core:math/linalg"
 
 Lambertian :: struct {
-	albedo: Color,
+	albedo: v3,
 }
 
 Metal :: struct {
-	albedo: Color,
+	albedo: v3,
 	fuzz:   f32,
 }
 
@@ -22,9 +22,10 @@ Material :: union {
 	Dielectric,
 }
 
-scatter :: proc(material: Material, ray: Ray, hit_record: HitRecord) -> (Color, Ray, bool) {
+scatter :: proc(material: Material, ray: Ray, hit_record: HitRecord) -> (v3, Ray, bool) {
+    spall_proc()
     scattered: Ray
-    attenuation: Color
+    attenuation: v3
     ok: bool // @todo(viktor): what exactly was this bool?
     
 	switch m in material {
@@ -41,17 +42,17 @@ scatter :: proc(material: Material, ray: Ray, hit_record: HitRecord) -> (Color, 
 		reflected := linalg.reflect(linalg.normalize(ray.direction), hit_record.normal)
 		scattered = Ray{hit_record.p, reflected + m.fuzz * random_in_unit_sphere()}
 		attenuation = m.albedo
-		ok = linalg.dot(scattered.direction, hit_record.normal) > 0
+		ok = dot(scattered.direction, hit_record.normal) > 0
         
 	case Dielectric:
 		attenuation = 1
 		refraction_ratio := hit_record.front_face ? 1 / m.index_of_refraction : m.index_of_refraction
 		unit_direction := linalg.normalize(ray.direction)
-		cos_theta := min(linalg.dot(-unit_direction, hit_record.normal), 1)
+		cos_theta := min(dot(-unit_direction, hit_record.normal), 1)
 		sin_theta := math.sqrt(1 - cos_theta * cos_theta)
 
 		cannot_refract := refraction_ratio * sin_theta > 1
-		direction: Vec3 = ---
+		direction: v3 = ---
 		if cannot_refract || reflectance(cos_theta, refraction_ratio) > random_unilateral() {
 			direction = linalg.reflect(unit_direction, hit_record.normal)
 		} else {

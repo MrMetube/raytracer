@@ -62,42 +62,40 @@ binary_tree_select :: proc(t: ^BinaryTree($T, $D), selection: Sector) -> BinaryT
 }
 
 binary_tree_subdivide :: proc(t: ^BinaryTree($T, $D), allocator := context.allocator) {
-	half := t.extent * .5
-	for sector_index in 0 ..< (1 << D) {
-		offset: [D]f32 = ---
-		for axis in 0 ..< D {
-			mask := 1 << axis
-			is_positive := sector_index & mask == 0
-
-			// for the x-axis we iterate: - -> + (W -> E)
-			// for the y- and z-axis (and further) we iterate: + -> - (N->S, T->B)
-			if axis == 0 {
-				offset[axis] = half[axis] if !is_positive else -half[axis]
-			} else {
-				offset[axis] = half[axis] if is_positive else -half[axis]
-			}
-		}
-		t.subnodes[sector_index] = new(BinaryTree(T, D), allocator)
-		binary_tree_init(t.subnodes[sector_index], t.origin + offset, half)
-	}
+    half := t.extent * .5
+    for sector_index in 0 ..< (1 << D) {
+        offset: [D]f32 = ---
+        for axis in 0 ..< D {
+            mask := 1 << axis
+            is_positive := sector_index & mask == 0
+            
+            // for the x-axis we iterate: - -> + (W -> E)
+            // for the y- and z-axis (and further) we iterate: + -> - (N->S, T->B)
+            if axis == 0 {
+                offset[axis] = half[axis] if !is_positive else -half[axis]
+            } else {
+                offset[axis] = half[axis] if is_positive else -half[axis]
+            }
+        }
+        node, err := new(BinaryTree(T, D), allocator)
+        assert(err == nil)
+        t.subnodes[sector_index] = node
+        binary_tree_init(t.subnodes[sector_index], t.origin + offset, half)
+    }
 }
 
-binary_tree_query_range :: proc(
-	t: ^BinaryTree($T, $D),
-	range: Aabb(D),
-	result: ^[dynamic]BinaryTreeItem(T, D),
-) {
-	if !aabb_intersects(t.bounds, range) do return
-
-	if value, ok := t.value.?; ok {
-		if aabb_contains(range, value.position) {
-			append(result, value)
-		}
-	} else if t.subnodes != nil {
-		for sub in subnodes {
-			binary_tree_query_range(sub, range, result)
-		}
-	}
+binary_tree_query_range :: proc(t: ^BinaryTree($T, $D), range: Aabb(D), result: ^[dynamic]BinaryTreeItem(T, D)) {
+    if !aabb_intersects(t.bounds, range) do return
+    
+    if value, ok := t.value.?; ok {
+        if aabb_contains(range, value.position) {
+            append(result, value)
+        }
+    } else if t.subnodes != nil {
+        for sub in subnodes {
+            binary_tree_query_range(sub, range, result)
+        }
+    }
 }
 
 binary_tree_append :: proc {
@@ -106,49 +104,56 @@ binary_tree_append :: proc {
 }
 
 // TODO no recursion
-binary_tree_append_by_position :: proc(t: ^BinaryTree($T, $D), value: T, position: [D]f32) -> b8 {
-	if !aabb_contains(t.bounds, position) do return false
-
-	if len(t.values) < len(t.subnodes) {
-		item := BinaryTreeItem(T, D) {
-			value = value,
-			bounds = {origin = position, extent = 1},
-		}
-		append(&t.values, item)
-	} else if t.subnodes == nil {
-		binary_tree_subdivide(t)
-		return binary_tree_append(t, value, position)
-	} else {
-		for sub in t.subnodes {
-			if binary_tree_append(sub, value, position) do return true
-		}
-	}
-	return true
+binary_tree_append_by_position :: proc(t: ^BinaryTree($T, $D), value: T, position: [D]f32) -> bool {
+    if !aabb_contains(t.bounds, position) do return false
+    
+    if len(t.values) < len(t.subnodes) {
+        item := BinaryTreeItem(T, D) {
+            value = value,
+            bounds = {origin = position, extent = 1},
+        }
+        append(&t.values, item)
+    } else if t.subnodes == nil {
+        binary_tree_subdivide(t)
+        return binary_tree_append_by_position(t, value, position)
+    } else {
+        for sub in t.subnodes {
+            if binary_tree_append_by_position(sub, value, position) do return true
+        }
+    }
+    return true
 }
 
-binary_tree_append_by_aabb :: proc(t: ^BinaryTree($T, $D), value: T, bounds: Aabb(D)) -> b8 {
-	if !aabb_contains_aabb(t.bounds, bounds) do return false
-	todo: [dynamic]^BinaryTree(T, D)
+binary_tree_append_by_aabb :: proc(t: ^BinaryTree($T, $D), value: T, bounds: Aabb(D)) -> bool {
+    if !aabb_contains_aabb(t.bounds, bounds) do return false
+    
+    todo := make([dynamic] ^BinaryTree(T, D))
+    defer delete(todo)
     append(&todo, t)
-	for len(todo) > 0 {
-		t := pop(&todo)
-		if len(t.values) < (1<<D) {
-			append(&t.values, BinaryTreeItem(T, D){value = value, bounds = bounds})
-			return true
-		}
-		if t.subnodes == nil do binary_tree_subdivide(t)
-		sub_could_contain: b8
-		for sub in t.subnodes {
-			could_contain := aabb_contains_aabb(sub.bounds, bounds)
-			sub_could_contain |= could_contain
-			if could_contain {
-				append(&todo, sub)
-			}
-		}
-		if !sub_could_contain {
-			append(&t.values, BinaryTreeItem(T, D){value = value, bounds = bounds})
-			return true
-		}
-	}
-	return false
+    
+    for len(todo) > 0 {
+        t := pop(&todo)
+        if len(t.values) < (1<<D) {
+            append(&t.values, BinaryTreeItem(T, D){value = value, bounds = bounds})
+            return true
+        }
+        if t.subnodes == nil do binary_tree_subdivide(t)
+        
+        sub_could_contain: bool
+        for sub in t.subnodes {
+            could_contain := aabb_contains_aabb(sub.bounds, bounds)
+            sub_could_contain ||= could_contain
+            if could_contain {
+                append(&todo, sub)
+                break
+            }
+        }
+        
+        if !sub_could_contain {
+            append(&t.values, BinaryTreeItem(T, D){value = value, bounds = bounds})
+            return true
+        }
+    }
+    
+    return false
 }
