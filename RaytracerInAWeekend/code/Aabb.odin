@@ -12,6 +12,7 @@ aabb_of :: proc (min, max: [$D]f32) -> Aabb(D) {
 
 aabb_intersects :: proc{
 	aabb_intersects_ray,
+	aabb_intersects_ray_min_max,
 	aabb_intersects_aabb,
 }
 
@@ -20,8 +21,23 @@ aabb_min_max :: proc (a: Aabb($D)) -> (min,max:[D]f32){
 	return a.origin - a.extent, a.origin + a.extent
 }
 
-aabb_intersects_ray :: proc (b: Aabb(3), r: Ray, t_min, t_max: f32) -> bool {
-    // @todo(viktor): check correctness
+aabb_intersects_ray :: proc (b: Aabb(3), r: Ray) -> bool {
+    b_min := b.origin - b.extent
+    b_max := b.origin + b.extent
+    
+    inv_dir := 1/r.direction
+    
+    t1 := (b_min - r.origin) * inv_dir
+    t2 := (b_max - r.origin) * inv_dir
+    
+    t_enter := max(min(t1.x, t2.x), min(t1.y, t2.y), min(t1.z, t2.z))
+    t_exit  := min(max(t1.x, t2.x), max(t1.y, t2.y), max(t1.z, t2.z))
+    
+    result := t_exit > t_enter
+    return result
+}
+
+aabb_intersects_ray_min_max :: proc (b: Aabb(3), r: Ray, t_min, t_max: f32) -> bool {
     b_min := b.origin - b.extent
     b_max := b.origin + b.extent
     

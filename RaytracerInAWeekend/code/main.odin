@@ -8,7 +8,11 @@ import "core:thread"
 import "core:time"
 import rl "vendor:raylib"
 
+
 ////////////////////////////////////////////////
+// @todo(viktor): 
+// smarted threading with smaller regions and work stealing
+// SIMD (again?)
 
 samples_per_pixel :: 8
 max_depth :: 20
@@ -23,7 +27,7 @@ main :: proc() {
 	rl.SetTraceLogLevel(.WARNING)
 	
 	thread_count := cast(i32) os.processor_core_count()
-	width: i32 = 20 * thread_count
+	width: i32 = 80 * thread_count
 	height := i32(f32(width) / (16. / 9.))
 
 	camera: Camera
@@ -39,12 +43,15 @@ main :: proc() {
 	// camera = blur_scene(&hh)
 	camera = random_scene(&hh, 11)
     
+    stack := make([dynamic] Hitable_Index, context.temp_allocator)
+    
     sphere_end := len(hh)
-	for &it, i in hh[2:sphere_end] {
+    // @note(viktor): reverse here, so that the value linked lists are in ascending order
+	#reverse for &it, i in hh[2:sphere_end] {
         it_index := cast(Hitable_Index) i + 2
         
         if it.is_sphere {
-            if !tree_append(&hh, Root_Index, it_index) {
+            if !tree_append(&stack, &hh, it_index) {
                 assert(false, "couldnt insert sphere")
             }
         } else {
@@ -74,7 +81,7 @@ main :: proc() {
     rl.InitWindow(width, height, "Raytracer in a Weekend")
     defer rl.CloseWindow()
     
-    rl.SetTargetFPS(60)
+    rl.SetTargetFPS(15)
     
     texture := rl.LoadTextureFromImage(rl_image)
     for !rl.WindowShouldClose() {
@@ -140,8 +147,9 @@ render_into_image :: proc(args: ^Args) {
     context.user_index = auto_cast args.thread_index
     init_spall_thread()
     
-    hitable_stack := make([dynamic] Hitable_Index, context.temp_allocator)
-    color_stack   := make([dynamic] v3, 0, max_depth, context.temp_allocator)
+    hitable_stack_1 := make([dynamic] Hitable_Index, 0, 100, context.temp_allocator)
+    hitable_stack_2 := make([dynamic] Hitable_Index, 0, 100, context.temp_allocator)
+    color_stack     := make([dynamic] v3, 0, max_depth, context.temp_allocator)
     
     dx := 1.0 / (cast(f32) args.total.x - 1)
     dy := 1.0 / (cast(f32) args.total.y - 1)
@@ -160,7 +168,7 @@ render_into_image :: proc(args: ^Args) {
             }
             
             for ray in rays {
-                ray_color := trace_ray(&hitable_stack, &color_stack, args.hh, ray, max_depth)
+                ray_color := trace_ray(&hitable_stack_1, &hitable_stack_2, &color_stack, args.hh, ray, max_depth)
                 color += ray_color
             }
             
@@ -170,7 +178,7 @@ render_into_image :: proc(args: ^Args) {
     fmt.println("Done", args.thread_index)
 }
 
-trace_ray :: proc(hitable_stack: ^[dynamic] Hitable_Index, color_stack: ^[dynamic] v3, hh: [] Hitable, ray: Ray, depth: i32) -> v3 {
+trace_ray :: proc(stack1, stack2: ^[dynamic] Hitable_Index, color_stack: ^[dynamic] v3, hh: [] Hitable, ray: Ray, depth: i32) -> v3 {
     spall_proc()
     
     ended_in_sky := true
@@ -179,7 +187,7 @@ trace_ray :: proc(hitable_stack: ^[dynamic] Hitable_Index, color_stack: ^[dynami
     ray := ray
     depth := depth
     for depth > 0 {
-        record, did_hit := hit_any(hitable_stack, hh, Root_Index, ray, 0.001, +Infinity)
+        record, did_hit := hit_any(stack1, stack2, hh, Root_Index, ray, 0.001, +Infinity)
         if did_hit {
             attenuation, scattered, ok := scatter(record.material, ray, record)
             if ok {
