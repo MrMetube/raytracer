@@ -112,9 +112,9 @@ build_native :: proc (native: bool, target := "-target:windows_amd64", microarch
     }
 }
 
-build_pedantic :: proc (pedantic: bool, imports := "-vet-unused-imports", semicolon := "-vet-semicolon", variables := "-vet-unused-variables", style := "-vet-style", procedures := "-vet-unused-procedures") {
+build_pedantic :: proc (pedantic: bool, imports := "-vet-unused-imports", semicolon := "-vet-semicolon", variables := "-vet-unused-variables", style := "-vet-style") {
     if pedantic {
-        append(cmd, imports, semicolon, variables, style, procedures)
+        append(cmd, imports, semicolon, variables, style)
     }
 }
 

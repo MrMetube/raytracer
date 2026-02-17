@@ -12,7 +12,6 @@ main :: proc () {
         
         build_optimizations(optimize)
         build_native(native)
-        append(cmd, "-vet-packages:main")
         build_pedantic(pedantic)
         
         end_build(cmd)
