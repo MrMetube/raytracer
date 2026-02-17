@@ -1,28 +1,30 @@
 package build
 
+import "base:intrinsics"
+
 import "core:fmt"
 import os "core:os/os2"
+import "core:text/regex"
 import "core:strings"
 import win "core:sys/windows"
 
 ////////////////////////////////////////////////
 
 // @todo(viktor): 
-// think about command line beyond just running "name.exe" (run:xx debug:xx)
-// readd metaprogram stuff
-//     improve custom attributes flags "-custom-attribute:printlike"
-// readd raddbg: find the newest version that can just stop with -ipc instead of killing
-//               actually set the desired program to be run and not just the last active
+// integrate with vscode shortcuts
 // readd renderdoc, and maybe simplify it
 // windows subsystem: "-subsystem:windows", "-subsystem:console"
 
 
 
-cmd := &the_state.cmd
+cmd   := &the_state.cmd
 procs := &the_state.procs
 
 ////////////////////////////////////////////////
 // Internal state
+
+raddbg      :: `raddbg.exe`
+raddbg_path :: `C:\tools\raddbg\`+ raddbg
 
 Procs :: [dynamic] os.Process
 Cmd   :: [dynamic] string
@@ -110,9 +112,9 @@ build_native :: proc (native: bool, target := "-target:windows_amd64", microarch
     }
 }
 
-build_pedantic :: proc (pedantic: bool, imports := "-vet-unused-imports", semicolon := "-vet-semicolon", variables := "-vet-unused-variables", style := "-vet-style") {
+build_pedantic :: proc (pedantic: bool, imports := "-vet-unused-imports", semicolon := "-vet-semicolon", variables := "-vet-unused-variables", style := "-vet-style", procedures := "-vet-unused-procedures") {
     if pedantic {
-        append(cmd, imports, semicolon, variables, style)
+        append(cmd, imports, semicolon, variables, style, procedures)
     }
 }
 
@@ -127,21 +129,45 @@ end_build :: proc (cmd: ^Cmd) {
     the_state.current_output = ""
 }
 
-run_build_according_to_args :: proc () {
-    for arg in os.args[1:] {
-        if success, found := the_state.outputs[arg]; found {
-            if success {
-                if the_state.run_from_data {
-                    os.change_directory("./data")
-                }
+// @api just do this parsing and make arrays for each kind of command and its targets. 
+// then let the user check this data, so we can conditionally build, run and debug 
+// when nothing in build is passed, build everything
+// when nothing in run / debug / renderdoc is passed 
+// @todo(viktor): if needed make this user controlled and just handle the prefix and checking output steps
+run_or_debug_according_to_args :: proc () {
+    run_prefix := "run:"
+    debug_prefix := "debug:"
+    
+    for argument in os.args[1:] {
+        if strings.starts_with(argument, run_prefix) {
+            rest := argument[len(run_prefix):]
             
-                append(cmd, fmt.tprintf("../build/%v", arg))
-                run_command(cmd, async = procs)
+            if success, found := the_state.outputs[rest]; found {
+                if success {
+                    if the_state.run_from_data {
+                        os.change_directory("./data")
+                    }
+                
+                    append(cmd, fmt.tprintf("../build/%v", rest))
+                    run_command(cmd, async = procs)
+                } else {
+                    // @todo(viktor): notify user?
+                }
             } else {
                 // @todo(viktor): notify user?
             }
-        } else {
-            // @todo(viktor): notify user?
+        } else if strings.starts_with(argument, debug_prefix) {
+            rest := argument[len(debug_prefix):]
+            append(cmd, raddbg_path)
+            append(cmd, "--ipc")
+            append(cmd, "select_target")
+            append(cmd, rest)
+            run_command(cmd)
+            
+            append(cmd, raddbg_path)
+            append(cmd, "--ipc")
+            append(cmd, "restart")
+            run_command(cmd)
         }
     }
 }
@@ -188,6 +214,7 @@ handle_running_exe_gracefully :: proc (exe_name: string, handling: Handle_Runnin
             case .Kill: 
                 fmt.printf("  Killing running instance.\n")
                 
+                // @cleanup
                 process, err := os.process_open(auto_cast pid)
                 if err != nil {
                     fmt.printf("  Failed to open '%v': %v\n", exe_name, err)
@@ -197,6 +224,12 @@ handle_running_exe_gracefully :: proc (exe_name: string, handling: Handle_Runnin
                     if err != nil {
                         fmt.printf("  Failed to kill '%v': %v\n", exe_name, err)
                         ok = false
+                    } else {
+                        err = os.process_close(process)
+                        if err != nil {
+                            fmt.printf("  Failed to close '%v': %v\n", exe_name, err)
+                            ok = false
+                        }
                     }
                 }
             }
@@ -206,32 +239,6 @@ handle_running_exe_gracefully :: proc (exe_name: string, handling: Handle_Runnin
     }
     
     return true
-}
-
-procs_flush :: proc (procs: ^Procs) {
-    for &p in procs {
-        _, _ = os.process_wait(p)
-    }
-    
-    clear(procs)
-}
-
-procs_close :: proc (procs: ^Procs) {
-    for &p in procs {
-        _ = os.process_close(p)
-    }
-    
-    clear(procs)
-}
-
-////////////////////////////////////////////////
-
-make_directory_if_not_exists :: proc (path: string) -> (result: b32) {
-    if !os.exists(path) {
-        os.make_directory(path)
-        result = true
-    }
-    return result
 }
 
 ////////////////////////////////////////////////
@@ -281,4 +288,63 @@ run_command :: proc (cmd: ^Cmd, or_exit := true, keep := false, stdout: ^string 
     if !keep do clear(cmd)
     
     return success
+}
+
+procs_flush :: proc (procs: ^Procs) {
+    for &p in procs {
+        _, _ = os.process_wait(p)
+    }
+    
+    clear(procs)
+}
+
+procs_close :: proc (procs: ^Procs) {
+    for &p in procs {
+        _ = os.process_close(p)
+    }
+    
+    clear(procs)
+}
+
+////////////////////////////////////////////////
+
+make_directory_if_not_exists :: proc (path: string) -> bool {
+    result: bool
+    if !os.exists(path) {
+        os.make_directory(path)
+        result = true
+    }
+    return result
+}
+
+remove_if_exists :: proc (path: string) {
+    if os.exists(path) do os.remove(path)
+}
+
+delete_all_like :: proc (path, pattern: string) {
+    files := all_like(path, pattern)
+    for file in files {
+        os.remove(file)
+    }
+}
+
+all_like :: proc (path, pattern: string, allocator := context.temp_allocator) -> [] string {
+    dir, _ := os.read_all_directory_by_path(path, allocator)
+    reg, _ := regex.create(pattern)
+    
+    result := make([dynamic] string, allocator)
+    for file in dir {
+        _, ok := regex.match(reg, file.name)
+        if ok {
+            append(&result, file.fullpath)
+        }
+    }
+    
+    return result[:]
+}
+
+////////////////////////////////////////////////
+
+random_number :: proc () -> u8 {
+    return cast(u8) intrinsics.read_cycle_counter()
 }

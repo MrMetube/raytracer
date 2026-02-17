@@ -17,5 +17,5 @@ main :: proc () {
         end_build(cmd)
     }
     
-    run_build_according_to_args()
+    run_or_debug_according_to_args()
 }
