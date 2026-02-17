@@ -72,7 +72,7 @@ subdivide_tree_node :: proc (hh: ^[dynamic] Hitable, it_index: Hitable_Index, $D
     }
     
     it := &hh[it_index]
-    half := it.extent * 0.5
+    half := get_dimension(it.bounds) * 0.5
     
     for sector_index in 0 ..< count {
         offset: [Dimensions] f32
@@ -85,8 +85,7 @@ subdivide_tree_node :: proc (hh: ^[dynamic] Hitable, it_index: Hitable_Index, $D
         // @note(viktor): reverse the indices so that they appear in order in the linked list
         subnode_index := first_subnode_index + cast(Hitable_Index) (count - 1 - sector_index)
         subnode := &hh[subnode_index]
-        subnode.origin = it.origin + offset
-        subnode.extent = half
+        subnode.bounds = center_dimension(get_center(it.bounds) + offset, half)
         
         append_child(it, subnode, subnode_index)
     }

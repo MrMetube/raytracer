@@ -1,13 +1,11 @@
 package main 
 
-Aabb :: struct($Dimension: u8) {
-	origin: [Dimension]f32,
-	extent: [Dimension]f32,
-}
+Aabb2 :: Rectangle(v2)
+Aabb3 :: Rectangle(v3)
 
-aabb_of :: proc (min, max: [$D]f32) -> Aabb(D) {
+aabb_of :: proc (min, max: $T) -> Rectangle(T) {
 	extent := max - min
-	return {origin = min + extent / 2, extent = extent / 2}
+	return rectangle_center_dimension(min + extent / 2,extent / 2)
 }
 
 aabb_intersects :: proc{
@@ -16,14 +14,16 @@ aabb_intersects :: proc{
 	aabb_intersects_aabb,
 }
 
-
-aabb_min_max :: proc (a: Aabb($D)) -> (min,max:[D]f32){
-	return a.origin - a.extent, a.origin + a.extent
+center_dimension :: proc (center: v3, dimension: v3) -> Rectangle3 {
+    return rectangle_center_dimension(center, dimension)
+}
+    
+aabb_min_max :: proc (a: $R/Rectangle($T)) -> (min, max: T){
+	return a.min, a.max
 }
 
-aabb_intersects_ray :: proc (b: Aabb(3), r: Ray) -> bool {
-    b_min := b.origin - b.extent
-    b_max := b.origin + b.extent
+aabb_intersects_ray :: proc (b: Rectangle(v3), r: Ray) -> bool {
+    b_min, b_max := aabb_min_max(b)
     
     inv_dir := 1/r.direction
     
@@ -37,9 +37,8 @@ aabb_intersects_ray :: proc (b: Aabb(3), r: Ray) -> bool {
     return result
 }
 
-aabb_intersects_ray_min_max :: proc (b: Aabb(3), r: Ray, t_min, t_max: f32) -> bool {
-    b_min := b.origin - b.extent
-    b_max := b.origin + b.extent
+aabb_intersects_ray_min_max :: proc (b: Rectangle(v3), r: Ray, t_min, t_max: f32) -> bool {
+    b_min, b_max := aabb_min_max(b)
     
     inv_dir := 1/r.direction
     
@@ -53,7 +52,7 @@ aabb_intersects_ray_min_max :: proc (b: Aabb(3), r: Ray, t_min, t_max: f32) -> b
     return result
 }
 
-aabb_intersects_aabb :: proc (a, b: Aabb($D)) -> bool {
+aabb_intersects_aabb :: proc (a, b: $R/Rectangle($T)) -> bool {
     amin, amax := aabb_min_max(a)
     bmin, bmax := aabb_min_max(b)
 	result := true
@@ -68,21 +67,23 @@ aabb_contains :: proc{
 	aabb_contains_aabb,
 }
 
-aabb_contains_point :: proc (a: Aabb($D), position: [D]f32) -> bool {
+aabb_contains_point :: proc (a: $R/Rectangle($T), position: T) -> bool {
 	EPSILON :: 0.000001
+    min, max := aabb_min_max(a)
 	for pos, dim in position {
-		min, max := a.origin[dim] - a.extent[dim], a.origin[dim] + a.extent[dim]
-		if pos + EPSILON < min || pos - EPSILON >= max {
+		if pos + EPSILON < min[dim] || pos - EPSILON >= max[dim] {
 			return false
 		}
 	}
 	return true
 }
 
-aabb_contains_aabb :: proc (outer,inner: Aabb($D)) -> bool {
+aabb_contains_aabb :: proc (outer,inner: $R/Rectangle($T)) -> bool {
 	smaller := true
-	for _, dim in outer.extent {
-		smaller &&= outer.extent[dim] >= inner.extent[dim]
+    outer_extent := get_dimension(outer)
+    inner_extent := get_dimension(inner)
+	for _, dim in outer_extent {
+		smaller &&= outer_extent[dim] >= inner_extent[dim]
 	}
 	if !smaller do return false
 

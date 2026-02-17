@@ -37,8 +37,7 @@ main :: proc() {
     append_nothing(&hh) // world
     
     world := &hh[Root_Index]
-    world.origin = 0
-    world.extent = 2000
+    world.bounds = center_dimension(0, 2000)
     
 	// camera = blur_scene(&hh)
 	camera = random_scene(&hh, 11)

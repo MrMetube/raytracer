@@ -11,7 +11,7 @@ Hitable :: struct {
     next_value:  Hitable_Index,
     value_count: i16,
     
-    using bounds: Aabb(3),
+    using bounds: Rectangle3,
     
     is_sphere: bool,
     sphere:    Sphere,

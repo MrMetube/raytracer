@@ -84,7 +84,7 @@ binary_tree_subdivide :: proc(t: ^BinaryTree($T, $D), allocator := context.alloc
     }
 }
 
-binary_tree_query_range :: proc(t: ^BinaryTree($T, $D), range: Aabb(D), result: ^[dynamic]BinaryTreeItem(T, D)) {
+binary_tree_query_range :: proc(t: ^BinaryTree($T, $D), range: Rectangle([D] f32), result: ^[dynamic]BinaryTreeItem(T, D)) {
     if !aabb_intersects(t.bounds, range) do return
     
     if value, ok := t.value.?; ok {
@@ -124,7 +124,7 @@ binary_tree_append_by_position :: proc(t: ^BinaryTree($T, $D), value: T, positio
     return true
 }
 
-binary_tree_append_by_aabb :: proc(t: ^BinaryTree($T, $D), value: T, bounds: Aabb(D)) -> bool {
+binary_tree_append_by_aabb :: proc(t: ^BinaryTree($T, $D), value: T, bounds: Rectangle([D] f32)) -> bool {
     if !aabb_contains_aabb(t.bounds, bounds) do return false
     
     todo := make([dynamic] ^BinaryTree(T, D))
