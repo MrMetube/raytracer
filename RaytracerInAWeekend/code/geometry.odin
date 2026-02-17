@@ -11,7 +11,7 @@ Hitable :: struct {
     next_value:  Hitable_Index,
     value_count: i16,
     
-    using bounds: Rectangle3,
+    bounds: Rectangle3,
     
     is_sphere: bool,
     sphere:    Sphere,
@@ -40,7 +40,7 @@ append_sphere :: proc (hh: ^[dynamic] Hitable, sphere: Sphere) {
     it: Hitable
     it.sphere = sphere
     it.is_sphere = true
-    it.bounds = {it.sphere.center, it.sphere.radius}
+    it.bounds = rectangle_center_half_dimension(it.sphere.center, it.sphere.radius)
     append(hh, it)
 }
 
@@ -62,7 +62,7 @@ hit_any :: proc(stack1, stack2: ^[dynamic] Hitable_Index, hh: [] Hitable, any_hi
         if it.next_subnode != 0 do append(stack1, it.next_subnode)
         if it.next_value   != 0 do append(stack1, it.next_value)
         
-        if aabb_intersects_ray_min_max(it.bounds, r, t_min, t_max) {
+        if ray_intersects_rectangle(it.bounds, r, t_min, t_max) {
             if it.is_sphere {
                 append(stack2, it_index)
             } else {

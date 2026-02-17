@@ -1,8 +1,6 @@
 package main
 
 import "core:fmt"
-import "core:math"
-import "core:math/linalg"
 import "core:os"
 import "core:thread"
 import "core:time"
@@ -37,8 +35,9 @@ main :: proc() {
     append_nothing(&hh) // world
     
     world := &hh[Root_Index]
-    world.bounds = center_dimension(0, 2000)
+    world.bounds = rectangle_center_dimension(cast(v3) 0, 2000)
     
+    unused(blur_scene)
 	// camera = blur_scene(&hh)
 	camera = random_scene(&hh, 11)
     
@@ -207,7 +206,7 @@ trace_ray :: proc(stack1, stack2: ^[dynamic] Hitable_Index, color_stack: ^[dynam
     result: v3
     if ended_in_sky {
         spall_scope("hit_sky")
-        direction_normal := linalg.normalize(ray.direction)
+        direction_normal := normalize(ray.direction)
         t := .5 * (direction_normal.y + 1)
         sky :=  (1 - t) * v3{1, 1, 1} + t * v3{.5, .7, 1}
         result = sky
@@ -224,10 +223,10 @@ trace_ray :: proc(stack1, stack2: ^[dynamic] Hitable_Index, color_stack: ^[dynam
 
 to_rl_color :: proc(pixel_color: v3, samples_per_pixel: u32) -> rl.Color {
 	result := rl.Color {
-        cast(u8) (math.sqrt(clamp(pixel_color.r, 0, 1)) * 255),
-        cast(u8) (math.sqrt(clamp(pixel_color.g, 0, 1)) * 255),
-        cast(u8) (math.sqrt(clamp(pixel_color.b, 0, 1)) * 255),
-        255
+        cast(u8) (square_root(clamp(pixel_color.r, 0, 1)) * 255),
+        cast(u8) (square_root(clamp(pixel_color.g, 0, 1)) * 255),
+        cast(u8) (square_root(clamp(pixel_color.b, 0, 1)) * 255),
+        255,
     }
     
     return result
@@ -248,7 +247,7 @@ blur_scene :: proc(hh: ^[dynamic] Hitable) -> (camera: Camera) {
     append_sphere(hh, Sphere{{1.0, 0.0, -1.0}, 0.5, material_right})
     
     look_from, look_at: v3 : {3, 3, 2}, {0, 0, -1}
-    focus_distance := linalg.length(look_from - look_at)
+    focus_distance := length(look_from - look_at)
     
     aspect_ratio: f32 : 16.0 / 9.0
     vertical_fov: f32 : 20
@@ -276,7 +275,7 @@ random_scene :: proc(hh: ^[dynamic] Hitable, max_distance: f32) -> (camera: Came
 		for b in -max_distance ..< max_distance {
 			center := v3{f32(a) + 0.9 * random_unilateral(), 0.2, f32(b) + 0.9 * random_unilateral()}
 
-			if linalg.length(center - v3{4, 0.2, 0}) > 0.9 {
+			if length(center - v3{4, 0.2, 0}) > 0.9 {
 				sphere_material: Material
 				choose_mat := random_unilateral()
 				switch {

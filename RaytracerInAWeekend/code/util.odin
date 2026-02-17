@@ -103,6 +103,8 @@ swap :: proc (a, b: ^$T) { a^, b^ = b^, a^ }
 //     }
 // }
 
+unused :: proc (_: $T) {}
+
 slice_from_parts :: proc { slice_from_parts_cast, slice_from_parts_direct }
 slice_from_parts_cast :: proc "contextless" ($T: typeid, data: pmm, #any_int count: i64) -> []T {
     // :PointerArithmetic

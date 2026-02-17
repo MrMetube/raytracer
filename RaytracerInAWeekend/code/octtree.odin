@@ -30,7 +30,7 @@ tree_append :: proc (stack: ^[dynamic] Hitable_Index, hh: ^[dynamic] Hitable, hi
     for len(stack) > 0 {
         it_index := pop(stack)
         it := &hh[it_index]
-        if !aabb_contains(it.bounds, hitable.bounds) do continue
+        if !contains_rect(it.bounds, hitable.bounds) do continue
         
         // @todo(viktor): its seems to not matter how large a node is at the current scale of value nodes
         if it.value_count <= 32 {
@@ -44,7 +44,7 @@ tree_append :: proc (stack: ^[dynamic] Hitable_Index, hh: ^[dynamic] Hitable, hi
             sub_could_contain: bool
             for sub_index := it.first_subnode; sub_index != 0; sub_index = hh[sub_index].next_subnode {
                 sub := &hh[sub_index]
-                could_contain := aabb_contains_aabb(sub.bounds, hitable.bounds)
+                could_contain := contains_rect(sub.bounds, hitable.bounds)
                 sub_could_contain ||= could_contain
                 if could_contain {
                     append(stack, sub_index)
@@ -85,7 +85,7 @@ subdivide_tree_node :: proc (hh: ^[dynamic] Hitable, it_index: Hitable_Index, $D
         // @note(viktor): reverse the indices so that they appear in order in the linked list
         subnode_index := first_subnode_index + cast(Hitable_Index) (count - 1 - sector_index)
         subnode := &hh[subnode_index]
-        subnode.bounds = center_dimension(get_center(it.bounds) + offset, half)
+        subnode.bounds = rectangle_center_dimension(get_center(it.bounds) + offset, half)
         
         append_child(it, subnode, subnode_index)
     }

@@ -2,7 +2,7 @@ package build
 
 native   :: true
 optimize :: false
-pedantic :: false
+pedantic :: !false
 
 main :: proc () {
     init_build(run_from_data = true)
@@ -12,6 +12,7 @@ main :: proc () {
         
         build_optimizations(optimize)
         build_native(native)
+        append(cmd, "-vet-packages:main")
         build_pedantic(pedantic)
         
         end_build(cmd)

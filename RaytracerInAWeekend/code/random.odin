@@ -1,7 +1,6 @@
 package main
 
 import "base:runtime"
-import "core:math/linalg"
 import "core:math/rand"
 
 GlobalRandomState: rand.Xoshiro256_Random_State
@@ -39,15 +38,9 @@ random_in_unit_sphere :: proc() -> (p: v3) {
 	}
 }
 
-random_unit_vector :: proc() -> v3 {
-    result := random_in_unit_sphere()
-    result = linalg.normalize(result)
-    return result
-}
-
 random_in_hemisphere :: proc (normal: v3) -> v3 {
 	in_unit_sphere := random_in_unit_sphere()
-    if linalg.dot(in_unit_sphere, normal) < 0 {
+    if dot(in_unit_sphere, normal) < 0 {
         in_unit_sphere = -in_unit_sphere
     }
     return in_unit_sphere

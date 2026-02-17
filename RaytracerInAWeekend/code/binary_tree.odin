@@ -1,3 +1,4 @@
+#+vet !unused-procedures
 package main
 
 BiTree :: proc($T: typeid, origin: [1]f32, extent: [1]f32) -> BinaryTree(T, 1) {
