@@ -114,8 +114,8 @@ main :: proc() {
     tile_rows := (image.height + tile_size.y - 1) / tile_size.y
     tile_count := tile_cols * tile_rows
     
-    println("Configuration: % cores with % %x% (% %/tile) tiles and lane width of % ", core_count, tile_count, tile_size.x, tile_size.y, format_memory_size(tile_size.x * tile_size.y * size_of(Color)), LaneWidth)
-    println("Quality: % rays per pixel with a maximum of % bounces", world.ray_per_pixel, world.max_bounce_count)
+    print("Configuration: % cores with % %x% (%/tile) tiles and lane width of % \n", core_count, tile_count, tile_size.x, tile_size.y, view_memory_size(tile_size.x * tile_size.y * size_of(Color)), LaneWidth)
+    print("Quality: % rays per pixel with a maximum of % bounces\n", world.ray_per_pixel, world.max_bounce_count)
     
     
     Work :: struct {
@@ -143,8 +143,8 @@ main :: proc() {
             work_index += 1
             work ^= { &world, camera, image, rect, seed_random_series(1842098778 + row * 984612097 + col * 237711 + cast(i32) work_index)}
             
-            enqueue_work_or_do_immediatly(&work_queue, proc(using work: ^Work) {
-                render_tile(world, camera, image, rect, &entropy)
+            enqueue_work_or_do_immediatly(&work_queue, proc(work: ^Work) {
+                render_tile(work.world, work.camera, work.image, work.rect, &work.entropy)
             }, work)
         }
     }
@@ -157,11 +157,11 @@ main :: proc() {
     loops_computed   := volatile_load(&world.loops_computed)
     wasted_bounces   := loops_computed - bounces_computed
     nanoseconds := time.duration_nanoseconds(total_time) / cast(i64) bounces_computed
-    println("Raycasting time: %\n  bounces % %\n  total bounces % %\n  wasted bounces % % (% %%)\n  time per ray %", 
+    print("Raycasting time: %\n  bounces %\n  total bounces %\n  wasted bounces % (% %%)\n  time per ray %\n", 
             total_time, 
-            format_order_of_magnitude(bounces_computed), 
-            format_order_of_magnitude(loops_computed), 
-            format_order_of_magnitude(wasted_bounces), format_percentage(cast(f32) wasted_bounces / cast(f32) loops_computed), 
+            view_magnitude(bounces_computed), 
+            view_magnitude(loops_computed), 
+            view_magnitude(wasted_bounces), view_percentage_ratio(cast(f32) wasted_bounces / cast(f32) loops_computed), 
             cast(time.Duration) nanoseconds)
     
     
@@ -178,7 +178,7 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable) {
         defer delete(all_data, context.temp_allocator)
         
         if err != nil {
-            println("Unable to open MERL binary %", filename)
+            print("Unable to open MERL binary %\n", filename)
             return
         }
         

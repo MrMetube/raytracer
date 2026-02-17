@@ -157,9 +157,12 @@ sign :: proc{ sign_i, sign_f }
 sign_i  :: proc(i: i32) -> i32 { return i >= 0 ? 1 : -1 }
 sign_f  :: proc(x: f32) -> f32 { return x >= 0 ? 1 : -1 }
 
-modulus :: proc { modulus_f, modulus_vf, modulus_v }
+modulus :: proc { modulus_i, modulus_f, modulus_vf, modulus_v }
 modulus_f :: proc(value: f32, divisor: f32) -> f32 {
     return math.mod(value, divisor)
+}
+modulus_i :: proc(value: $I, divisor: I) -> I where intrinsics.type_is_integer(I) {
+    return value % divisor
 }
 modulus_vf :: proc(value: [$N]f32, divisor: f32) -> (result: [N]f32) where N > 1 {
     #unroll for i in 0..<N do result[i] = math.mod(value[i], divisor) 

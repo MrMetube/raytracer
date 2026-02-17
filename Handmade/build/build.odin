@@ -40,8 +40,6 @@ main :: proc() {
     context.logger = log.create_console_logger(opt = {.Level, .Terminal_Color})
     context.logger.lowest_level = .Info
     
-    go_rebuild_yourself()
-
     make_directory_if_not_exists(data_dir)
     
     err := os.set_current_directory(build_dir)
@@ -49,7 +47,7 @@ main :: proc() {
     
     if !check_printlikes() do os.exit(1)
     
-    run_command_or_exit(`C:\Odin\odin.exe`, `odin build ..\code -out:.\`, "debug.exe", flags, debug, optimizations, commoner, (pedantic when Pedantic else ""))
+    run_command_or_exit(ODIN_ROOT+"odin.exe", `odin build ..\code -out:.\`, "debug.exe", flags, debug, optimizations, commoner, (pedantic when Pedantic else ""))
     
 }
 
