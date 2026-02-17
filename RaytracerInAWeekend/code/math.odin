@@ -99,13 +99,7 @@ square_root :: proc(x: $T) -> (result: T) where intrinsics.type_is_numeric(T) ||
  
  power :: math.pow
 
-linear_blend  :: proc{ linear_blend_v_e, linear_blend_e }
-linear_blend_v_e :: proc(from: $V/[$N]$E, to: V, t: E) -> V {
-    result := (1-t) * from + t * to
-    
-    return result
-}
-linear_blend_e :: proc(from: $T, to: T, t: T) -> T  {
+linear_blend :: proc(from: $V, to: V, t: $T) -> V {
     result := (1-t) * from + t * to
     
     return result
@@ -118,6 +112,16 @@ bilinear_blend :: proc(a, b, c, d: $V/[$N]$E, t: [2]E) -> (result: V) {
     ld :=    t.y  *    t.x
     
     result = la * a + lb * b + lc * c + ld * d
+    return result
+}
+
+linear_remap :: proc (v: $T, old_from, old_to: T, new_from, new_to: T) -> T {
+    result: T
+    old_range := old_to - old_from
+    if old_range != 0 {
+        old_t := (v - old_from) / old_range
+        result = linear_blend(new_from, new_to, old_t)
+    }
     return result
 }
 

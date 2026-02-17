@@ -1,7 +1,7 @@
 package build
 
 native   :: true
-optimize :: false
+optimize :: !false
 pedantic :: !false
 
 main :: proc () {

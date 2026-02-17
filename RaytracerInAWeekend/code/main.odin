@@ -12,7 +12,7 @@ import rl "vendor:raylib"
 // smarted threading with smaller regions and work stealing
 // SIMD (again?)
 
-samples_per_pixel :: 8
+samples_per_pixel :: 4
 max_depth :: 20
 
 ////////////////////////////////////////////////
@@ -147,7 +147,6 @@ render_into_image :: proc(args: ^Args) {
     
     hitable_stack_1 := make([dynamic] Hitable_Index, 0, 100, context.temp_allocator)
     hitable_stack_2 := make([dynamic] Hitable_Index, 0, 100, context.temp_allocator)
-    color_stack     := make([dynamic] v3, 0, max_depth, context.temp_allocator)
     
     dx := 1.0 / (cast(f32) args.total.x - 1)
     dy := 1.0 / (cast(f32) args.total.y - 1)
@@ -166,7 +165,7 @@ render_into_image :: proc(args: ^Args) {
             }
             
             for ray in rays {
-                ray_color := trace_ray(&hitable_stack_1, &hitable_stack_2, &color_stack, args.hh, ray, max_depth)
+                ray_color := trace_ray(&hitable_stack_1, &hitable_stack_2, args.hh, ray, max_depth)
                 color += ray_color
             }
             
@@ -176,44 +175,43 @@ render_into_image :: proc(args: ^Args) {
     fmt.println("Done", args.thread_index)
 }
 
-trace_ray :: proc(stack1, stack2: ^[dynamic] Hitable_Index, color_stack: ^[dynamic] v3, hh: [] Hitable, ray: Ray, depth: i32) -> v3 {
+trace_ray :: proc(stack1, stack2: ^[dynamic] Hitable_Index, hh: [] Hitable, ray: Ray, depth: i32) -> v3 {
     spall_proc()
     
     ended_in_sky := true
-    clear(color_stack)
     
+    result : v3 = 1
     ray := ray
     depth := depth
-    for depth > 0 {
+    // @todo(viktor): maybe add an explicit stack to allow for multiple scattered rays?
+    for {
+        if depth < 0 {
+            ended_in_sky = false
+            break
+        }
         record, did_hit := hit_any(stack1, stack2, hh, Root_Index, ray, 0.001, +Infinity)
         if did_hit {
             attenuation, scattered, ok := scatter(record.material, ray, record)
             if ok {
-                append(color_stack, attenuation)
+                result *= attenuation
                 
                 ray = scattered
                 depth -= 1
                 
                 continue
             }
-            
-            ended_in_sky = false
         }
-        
         break
     }
     
-    result: v3
     if ended_in_sky {
         spall_scope("hit_sky")
         direction_normal := normalize(ray.direction)
-        t := .5 * (direction_normal.y + 1)
-        sky :=  (1 - t) * v3{1, 1, 1} + t * v3{.5, .7, 1}
-        result = sky
-    }
-    
-    #reverse for &a in color_stack {
-        result *= a
+        
+        t := linear_remap(direction_normal.y, -1, 1, 0, 1)
+        sky := linear_blend(v3{1, 1, 1}, v3{.5, .7, 1}, t)
+        
+        result *= sky
     }
     
     return result
