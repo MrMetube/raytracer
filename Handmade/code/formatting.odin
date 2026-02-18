@@ -32,7 +32,7 @@ default_views :: proc "contextless" () {
 ////////////////////////////////////////////////
 
 // @todo(viktor): make precision and width parameters
-view_percentage :: proc (a, b: $N)  -> (result: Temp_Views) { return view_percentage(cast(f64) a / cast(f64) b) }
+view_percentage :: proc (a, b: $N)  -> (result: Temp_Views) { return view_percentage_ratio(cast(f64) a / cast(f64) b) }
 view_percentage_ratio :: proc (value: $F) -> (result: Temp_Views) {
     begin_temp_views()
     append_temp_view(view_float(value * 100, precision = 2, width = 2))

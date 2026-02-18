@@ -3,8 +3,6 @@ package main
 
 import "base:intrinsics"
 
-@(private="file") MaxRandomValue :lane_u32: max(u32)
-
 RandomSeries :: struct {
     state: lane_u32,
 }

@@ -334,10 +334,9 @@ linear_to_srgb :: proc(l: v3) -> (s: v3) {
     l := l
     l = clamp_01(l)
     #unroll for i in 0..<len(l) {
-        if l[i] <= 0.0031308 {
-            s[i] = 12.92 * l[i]
-        } else {
-            s[i] = 1.055 * power(l[i], 1./2.4) - 0.055
+        s[i] = 12.92 * l[i]
+        if l[i] > 0.0031308 {
+            s[i] = 1.055 * power(l[i], 1.0/2.4) - 0.055
         }
     }
     

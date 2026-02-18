@@ -1,0 +1,8 @@
+Configuration: 11 cores with 84 174x174 (118kb/tile) tiles and lane width of 8 
+Quality: 1024 rays per pixel with a maximum of 8 bounces
+Raycasting time: 40s
+  bounces 5G
+  total bounces 7G
+  wasted bounces 2G (30.33 %)
+  time per ray 7ns
+Wrote ouput to D:\Archiv\raytracer\Handmade\data/./render.bmp

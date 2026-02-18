@@ -1,4 +1,3 @@
-#+feature dynamic-literals
 package main
 
 import "base:intrinsics"
@@ -31,7 +30,8 @@ Material :: struct {
 
 Plane :: struct {
     normal, tangent, binormal: lane_v3,
-    d: f32,    
+    center: lane_v3,
+    radius: lane_f32,
     material: u32,
 }
 
@@ -44,11 +44,12 @@ Sphere :: struct {
 World :: struct {
     spheres:   [dynamic] Sphere,
     planes:    [dynamic] Plane,
-    materials: [dynamic] Material,
+    materials: [] Material,
     
     bounces_computed: u64,
     loops_computed:   u64,
     tiles_retired:    u32,
+    pixels_done:      u32,
     
     ray_per_pixel:    u32,
     max_bounce_count: u32,
@@ -71,35 +72,35 @@ main :: proc() {
     world.max_bounce_count = 8
 
     world.materials = {
-        { emit    = { .3 , .4 , .5 },               },
-        { reflect = { .5 , .5 , .5 }, scatter = 1.  },
-        { reflect = { .7 , .5 , .3 }, scatter = 1.  },
-        { emit    = {50. , 10 ,  5 }, scatter = 1.  },
-        { reflect = { .2 , .8 , .2 }, scatter = .3  },
-        { reflect = { .4 , .8 , .9 }, scatter = .15 },
-        { reflect = { .95, .95, .95}, scatter = .1  },
+        { emit    = { .3 , .4 , .5 },              },
+        { reflect = { .5 , .5 , .5 }, scatter = .1 },
+        { reflect = { .7 , .5 , .3 }, scatter = 1. },
+        { emit    = { 3.5 , 2.0 ,  .5 }, scatter = 1. },
+        { reflect = { .2 , .8 , .2 }, scatter = .3 },
+        { reflect = { .65, .1 , .7 }, scatter = .9 },
+        { reflect = { .9 , .9 , .8 }, scatter = .6 },
     }
     
     load_brdf_merl("", &world.materials[0].brdf)
-    load_brdf_merl(`.\BRDFDatabase\brdfs\gray-plastic.binary`, &world.materials[1].brdf)
-    load_brdf_merl(`.\BRDFDatabase\brdfs\chrome.binary`,       &world.materials[2].brdf)
-    // load_brdf_merl(`.\BRDFDatabase\brdfs\`, &m[3].brdf)
-    // load_brdf_merl(`.\BRDFDatabase\brdfs\`, &m[4].brdf)
-    // load_brdf_merl(`.\BRDFDatabase\brdfs\`, &m[5].brdf)
-    // load_brdf_merl(`.\BRDFDatabase\brdfs\`, &m[6].brdf)
+    load_brdf_merl("./BRDFDatabase/brdfs/gray-plastic.binary", &world.materials[1].brdf)
+    load_brdf_merl("./BRDFDatabase/brdfs/brass.binary",       &world.materials[2].brdf)
+    load_brdf_merl("./BRDFDatabase/brdfs/gold-paint.binary",   &world.materials[3].brdf)
+    load_brdf_merl("./BRDFDatabase/brdfs/green-latex.binary",  &world.materials[4].brdf)
+    load_brdf_merl("./BRDFDatabase/brdfs/purple-paint.binary", &world.materials[5].brdf)
+    load_brdf_merl("./BRDFDatabase/brdfs/white-marble.binary", &world.materials[6].brdf)
     
-    append(&world.planes,  Plane  { normal = {0,0,1},  d = 0, material = 1 })
-    // append(&world.planes,  Plane  { normal = {1,0,0},  d = 2, material = 1 })
+    append(&world.planes,  Plane  { normal = {0,0,1}, center = { 0, 0, 0}, radius = PositiveInfinity, material = 6 })
+    append(&world.planes,  Plane  { normal = {1,0,0}, center = {-2, 0, 0}, radius = 6, material = 4 })
     
-    append(&world.spheres, Sphere { center = {0,0,0},   radius = 1, material = 2 })
-    // append(&world.spheres, Sphere { center = {3,-2,0},  radius = 1, material = 3 })
-    // append(&world.spheres, Sphere { center = {-2,-1,2}, radius = 1, material = 4 })
-    // append(&world.spheres, Sphere { center = {1,-1,3},  radius = 1, material = 5 })
-    // append(&world.spheres, Sphere { center = {-2,3,0},  radius = 2, material = 6 })
+    append(&world.spheres, Sphere { center = { 0, 0, 0}, radius = 1, material = 2 })
+    append(&world.spheres, Sphere { center = { 3,-2, 0.4}, radius = .1, material = 3 })
+    append(&world.spheres, Sphere { center = {-2,-1, 2}, radius = 1, material = 1 })
+    append(&world.spheres, Sphere { center = { 1,-1, 3}, radius = 1, material = 5 })
+    append(&world.spheres, Sphere { center = {-2, 3, 0}, radius = 2, material = 6 })
     
     
     camera: Camera
-    camera.p = lane_v3{0, -10, 1}
+    camera.p = lane_v3{0, -7, 1}
     camera.z = normalize_or_zero(camera.p)
     camera.x = normalize_or_zero(cross(lane_v3{0, 0, 1}, camera.z))
     camera.y = normalize_or_zero(cross(camera.z, camera.x))
@@ -151,6 +152,13 @@ main :: proc() {
             }, work)
         }
     }
+    {
+        total_pixels := image.width * image.height
+        for work_queue.completion_count != work_queue.completion_goal {
+            print_to_console("                                 \r % %% done", view_percentage_ratio(cast(f32) world.pixels_done / cast(f32) (total_pixels)), console = os_old.stderr)
+        }
+        print_to_console("\n", console = os_old.stderr)
+    }
     complete_all_work(&work_queue)
     end := time.now()
     
@@ -168,40 +176,46 @@ main :: proc() {
             cast(time.Duration) nanoseconds)
     
     
-    img.write_bmp("./render.bmp", image.width, image.height, 4, &image.data[0])
+    output_path := "./render.bmp"
+    img.write_bmp(ctprint("%", output_path), image.width, image.height, 4, &image.data[0])
+    cwd, _ := os.get_working_directory(context.temp_allocator)
+    print("Wrote ouput to %/%", cwd, output_path)
 }
 
 load_brdf_merl :: proc (filename: string, dest: ^BrdfTable) {
+    invalid := false
+    data: [] u8
     if filename == "" {
-        dest.count = 1
-        dest.values = make([]v3, 1)
+        invalid = true
     } else {
-        data, err := os.read_entire_file(filename, context.temp_allocator)
-        all_data := data
-        defer delete(all_data, context.temp_allocator)
-        
+        err: os.Error
+        data, err = os.read_entire_file(filename, context.temp_allocator)
         if err != nil {
+            invalid = true
             print("Unable to open MERL binary %\n", filename)
-            return
         }
-        
-        dest.count = (cast(^[3]u32) &data[0])^
-        cursor := size_of(dest.count)
-        data = data[cursor:]
+    }
+    
+    if !invalid {
+        dest.count, data = (cast(^[3]u32) &data[0])^, data[size_of([3] u32):]
         
         total_count := dest.count[0] * dest.count[1] * dest.count[2]
-        temp_values := (cast([^]f64) &data[0])[:total_count*3]
+        temp_values := (cast([^]f64) &data[0])[:total_count * len(v3)]
+        // :BelowHorizon we currently check and handle negative values in the raytracer by defaulting to no color , but this could be handled here right?
         
         file_size := cast(umm) &data[0] + auto_cast len(data)
         read_size := cast(umm) &temp_values[0] + auto_cast len(temp_values) * size_of(f64)
         assert(file_size == read_size)
         
-        dest.values = make([]v3, total_count)
+        dest.values = make([] v3, total_count)
         for i in 0..<total_count {
-            dest.values[i].x = cast(f32) temp_values[i + total_count * 0]
-            dest.values[i].y = cast(f32) temp_values[i + total_count * 1]
-            dest.values[i].z = cast(f32) temp_values[i + total_count * 2]
+            dest.values[i].r = cast(f32) temp_values[i + total_count * 0]
+            dest.values[i].g = cast(f32) temp_values[i + total_count * 1]
+            dest.values[i].b = cast(f32) temp_values[i + total_count * 2]
         }
+    } else {
+        dest.count = 1
+        dest.values = make([] v3, 1)
     }
 }
 
@@ -232,7 +246,7 @@ render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle
             
             final_color, bounces_computed_now, loops_computed_now := cast_rays(world, film_x, film_y, entropy, pixel_size, half_film_w, half_film_h, film_center, camera)
             bounces_computed += bounces_computed_now
-            loops_computed += loops_computed_now
+            loops_computed   += loops_computed_now
             
             final_color = linear_to_srgb(final_color)
             final_color *= 255
@@ -240,7 +254,10 @@ render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle
             
             p := &image.data[(image.height - 1 - py) * image.width + px]
             p ^= round(u8, pixel)
+            
+            // atomic_add(&world.pixels_done, 1)
         }
+        atomic_add(&world.pixels_done, auto_cast get_dimension(rect).x)
     }
     
     atomic_add(&world.bounces_computed, bounces_computed)
@@ -257,8 +274,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
     rays_per_pixel   := world.ray_per_pixel
     
     lane_ray_count := rays_per_pixel / LaneWidth
-    // @todo(viktor): what is this supposed to be?
-    contribution_factor: f32 = 1.0 / cast(f32) rays_per_pixel
+    sample_contribution_factor := 1.0 / cast(f32) rays_per_pixel
     
     for _ in 0..<lane_ray_count {
         jitter := random_unilateral(entropy, lane_v2)
@@ -295,12 +311,16 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 
                 if denom_mask == 0 do continue
                 
-                t := ( -plane.d - dot(plane.normal, ray_o)) / denom
-                t_mask     := greater_than(t, min_t) & less_than(t, closest_t)
-                
+                t := dot(plane.normal, plane.center - ray_o) / denom
+                t_mask := greater_than(t, min_t) & less_than(t, closest_t)
                 if t_mask == 0 do continue
                 
-                hit_mask   := denom_mask & t_mask
+                hit_point := ray_o + t * ray_d
+                local_hit := hit_point - plane.center
+                t_mask &= less_than(simd.abs(local_hit.x), plane.radius) & less_than(simd.abs(local_hit.y), plane.radius)
+                if t_mask == 0 do continue
+                
+                hit_mask := denom_mask & t_mask
                 
                 conditional_assign(hit_mask, &closest_t, t)
                 conditional_assign(hit_mask, &did_hit, 0xffffffff)
@@ -309,8 +329,8 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 
                 conditional_assign(hit_mask, &next_o, ray_o + t*ray_d)
                 
-                conditional_assign(hit_mask, &normal,    plane.normal)
-                conditional_assign(hit_mask, &tangent,   plane.tangent)
+                conditional_assign(hit_mask, &normal,   plane.normal)
+                conditional_assign(hit_mask, &tangent,  plane.tangent)
                 conditional_assign(hit_mask, &binormal, plane.binormal)
             }
             
@@ -327,8 +347,8 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 
                 if root_mask == 0 do continue
                 
-                t_pos := (-b + root) / 2 * a
-                t_neg := (-b - root) / 2 * a
+                t_pos := (-b + root) / (2 * a)
+                t_neg := (-b - root) / (2 * a)
                 
                 t := t_pos
                 pick_mask := greater_than(t_neg, min_t) & less_than(t_neg, t)
@@ -350,11 +370,8 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 
                 conditional_assign(hit_mask, &normal,    next_o - sphere.center)
                 
-                s_tangent   := cross(lane_v3{0,0,1}, normal)
-                s_binormal := cross(normal, tangent)
-                
-                s_tangent   = normalize_or_zero(s_tangent)
-                s_binormal = normalize_or_zero(s_binormal)
+                s_tangent  := normalize_or_zero(cross(lane_v3{0, 0, 1}, normal))
+                s_binormal := cross(normal, s_tangent)
                 
                 conditional_assign(hit_mask, &tangent,   s_tangent)
                 conditional_assign(hit_mask, &binormal, s_binormal)
@@ -363,9 +380,10 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
             
             hit_emit    := gather(world.materials[:], hit_mat_index, "emit",    lane_v3)
             hit_reflect := gather(world.materials[:], hit_mat_index, "reflect", lane_v3)
-            _ = hit_reflect
             hit_scatter := gather(world.materials[:], hit_mat_index, "scatter", lane_f32)
+            
             // only allow world.no_hit on the first time we didnt hit anything
+            // @todo(viktor): make this a helper I guess
             (cast(^lane_u32) &hit_emit.r)^ &= lane_mask
             (cast(^lane_u32) &hit_emit.g)^ &= lane_mask
             (cast(^lane_u32) &hit_emit.b)^ &= lane_mask
@@ -376,30 +394,32 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
             lane_mask &= did_hit
             if lane_mask == 0 {
                 break
-            } else {
-                // Bounce
-                pure_bounce   := reflect(ray_d, normal)
-                random_bounce := normalize_or_zero(normal + random_bilateral(entropy, lane_v3))
-                
-                next_d := linear_blend(pure_bounce, random_bounce, hit_scatter)
-                
-                reflectance := brdf_lookup(world.materials[:], hit_mat_index, -ray_d, normal, tangent, binormal, next_d)
-                conditional_assign(did_hit, &attenuation, attenuation * reflectance)
-                
-                ray_o = next_o
-                
-                ray_d = next_d
             }
+            // Bounce
+            pure_bounce   := reflect(ray_d, normal)
+            random_bounce := normalize_or_zero(normal + random_bilateral(entropy, lane_v3))
+            
+            next_d := linear_blend(pure_bounce, random_bounce, hit_scatter)
+            
+            reflectance := brdf_lookup(world.materials[:], hit_mat_index, -ray_d, normal, tangent, binormal, next_d)
+            reflectance *= hit_reflect
+            conditional_assign(did_hit, &attenuation, attenuation * reflectance)
+            
+            ray_o = next_o
+            ray_d = next_d
         }
         
-        final_color_lanes += contribution_factor * sample
+        final_color_lanes += sample_contribution_factor * sample
     }
     
     final_color.r = horizontal_add(final_color_lanes.r)
     final_color.g = horizontal_add(final_color_lanes.g)
     final_color.b = horizontal_add(final_color_lanes.b)
     
-    return final_color, cast(u64) horizontal_add(bounces_computed_lanes), cast(u64) horizontal_add(loops_computed_lanes)
+    bounces_computed = cast(u64) horizontal_add(bounces_computed_lanes)
+    loops_computed   = cast(u64) horizontal_add(loops_computed_lanes)
+    
+    return final_color, bounces_computed, loops_computed
 }
 
 gather :: proc (materials: [] Material, index: lane_u32, $member: string, $T: typeid) -> (result: T) {
@@ -423,8 +443,6 @@ gather :: proc (materials: [] Material, index: lane_u32, $member: string, $T: ty
 }
 
 brdf_lookup :: proc (materials: [] Material, index: lane_u32, view_direction, normal, tangent, binormal, light_direction: lane_v3) -> (result: lane_v3) {
-    index := index
-
     half_vector := normalize_or_zero(.5 * (view_direction + light_direction))
     
     lw := lane_v3 {
@@ -440,7 +458,7 @@ brdf_lookup :: proc (materials: [] Material, index: lane_u32, view_direction, no
     }
     
     diff_y := normalize_or_zero(cross(hw, tangent))
-    diff_x := normalize_or_zero(cross(diff_y, hw))
+    diff_x := cross(diff_y, hw)
     
     diff_x_inner := dot(diff_x, lw)
     diff_y_inner := dot(diff_y, lw)
@@ -454,26 +472,32 @@ brdf_lookup :: proc (materials: [] Material, index: lane_u32, view_direction, no
 
         if phi_diff < 0 do phi_diff += Pi
         
-        table := materials[(cast(^[LaneWidth]u32) &index)[lane]].brdf
-        // table := materials[extract(index, lane)].brdf
+        table := materials[extract(index, lane)].brdf
         
         f0 := square_root(clamp_01(theta_half / (.5 * Pi)))
-        i0 := round(u32, cast(f32) (table.count[0]-1) * f0)
+        i0 := round(u32, f0 * cast(f32) (table.count[0]-1))
         
         f1 := clamp_01(theta_diff / (.5 * Pi))
-        i1 := round(u32, cast(f32) (table.count[1]-1) * f1)
+        i1 := round(u32, f1 * cast(f32) (table.count[1]-1))
         
         f2 := clamp_01(phi_diff / Pi)
-        i2 := round(u32, cast(f32) (table.count[2]-1) * f2)
+        i2 := round(u32, f2 * cast(f32) (table.count[2]-1))
         
-        brdf_index := i2 + i1 * table.count[2] + i0 * table.count[2] * table.count[1]
+        // @todo(viktor): build the indices then do a wide load
+        brdf_index := (i2) + (i1 * table.count[2]) + (i0 * table.count[2] * table.count[1])
         
-        color := table.values[brdf_index]
+        color := table.values[brdf_index/len(v3)]
+        // @note(viktor): a value of -1 indicates that the reflection would be below the horizon :BelowHorizon
+        color = max_vec(color, 0)
         
-        (cast(^[LaneWidth]f32) &result.r)[lane] = color.r
-        (cast(^[LaneWidth]f32) &result.g)[lane] = color.g
-        (cast(^[LaneWidth]f32) &result.b)[lane] = color.b
-        // replace_v3(&result, lane, color)
+        BRDF_Scale :: v3 {
+            1.00/1500.0, 
+            1.15/1500.0, 
+            1.66/1500.0
+        }
+        color *= BRDF_Scale
+        
+        replace_v3(&result, lane, color)
     }
     
     return result
