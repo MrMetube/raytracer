@@ -3,21 +3,22 @@ package main
 
 import "base:intrinsics"
 import os "core:os/os2"
+import os_old "core:os"
 import "core:simd"
 import "core:time"
 
 import img "vendor:stb/image"
 
-Color :: [4]u8
+Color :: [4] u8
 
 Image:: struct {
-    data:          []Color,
+    data:          [] Color,
     width, height: i32,
 }
 
 BrdfTable :: struct {
-    count:  [3]u32,
-    values: []v3,
+    count:  [3] u32,
+    values: [] v3,
 }
 
 Material :: struct {
@@ -41,9 +42,9 @@ Sphere :: struct {
 }
 
 World :: struct {
-    spheres:   [dynamic]Sphere,
-    planes:    [dynamic]Plane,
-    materials: [dynamic]Material,
+    spheres:   [dynamic] Sphere,
+    planes:    [dynamic] Plane,
+    materials: [dynamic] Material,
     
     bounces_computed: u64,
     loops_computed:   u64,
@@ -63,6 +64,8 @@ Ray :: struct {
 }
 
 main :: proc() {
+    core_count := cast(i32) os_old.processor_core_count() - 1
+    
     world: World
     world.ray_per_pixel = 1024
     world.max_bounce_count = 8
@@ -85,7 +88,6 @@ main :: proc() {
     // load_brdf_merl(`.\BRDFDatabase\brdfs\`, &m[5].brdf)
     // load_brdf_merl(`.\BRDFDatabase\brdfs\`, &m[6].brdf)
     
-    core_count :: 12 // os.core_count or something
     append(&world.planes,  Plane  { normal = {0,0,1},  d = 0, material = 1 })
     // append(&world.planes,  Plane  { normal = {1,0,0},  d = 2, material = 1 })
     
@@ -108,7 +110,7 @@ main :: proc() {
     image.height = 1080
     image.data = make([]Color, image.width * image.height)
     
-    tile_size: [2]i32 = image.width / core_count
+    tile_size: v2i = image.width / core_count
     
     tile_cols := (image.width  + tile_size.x - 1) / tile_size.x
     tile_rows := (image.height + tile_size.y - 1) / tile_size.y
@@ -127,7 +129,8 @@ main :: proc() {
     }
     
     work_queue: WorkQueue
-    create_infos: [core_count-1]CreateThreadInfo
+    
+    create_infos := make([] CreateThreadInfo, core_count)
     init_work_queue(&work_queue, create_infos[:])
     
     works := make([]Work, tile_count)
@@ -189,7 +192,6 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable) {
         total_count := dest.count[0] * dest.count[1] * dest.count[2]
         temp_values := (cast([^]f64) &data[0])[:total_count*3]
         
-        foo := len(data) * size_of(u8) / (size_of(f64) * 3)
         file_size := cast(umm) &data[0] + auto_cast len(data)
         read_size := cast(umm) &temp_values[0] + auto_cast len(temp_values) * size_of(f64)
         assert(file_size == read_size)
@@ -359,26 +361,9 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
             }
             
             
-            gather :: proc (materials: []Material, index: lane_u32, $member: string, $T: typeid) -> (result: T) {
-                mask: lane_u32 = 0xffffffff
-                
-                array  := cast(lane_umm) &materials[0]
-                member := offset_of_by_string(Material, member)
-                index  := cast(lane_umm) index * size_of(Material)
-                when T == lane_v3 {
-                    channel :umm= size_of(lane_f32)
-                    result.r = simd.gather(cast(lane_pmm) (array + index + member + channel * 0), lane_f32(0), mask)
-                    result.g = simd.gather(cast(lane_pmm) (array + index + member + channel * 1), lane_f32(0), mask)
-                    result.b = simd.gather(cast(lane_pmm) (array + index + member + channel * 2), lane_f32(0), mask)
-                } else when T == lane_f32 {
-                    result   = simd.gather(cast(lane_pmm) (array + index + member), lane_f32(0), mask)
-                } else do #panic("unhandled")
-                
-                return result
-            }
-            
             hit_emit    := gather(world.materials[:], hit_mat_index, "emit",    lane_v3)
             hit_reflect := gather(world.materials[:], hit_mat_index, "reflect", lane_v3)
+            _ = hit_reflect
             hit_scatter := gather(world.materials[:], hit_mat_index, "scatter", lane_f32)
             // only allow world.no_hit on the first time we didnt hit anything
             (cast(^lane_u32) &hit_emit.r)^ &= lane_mask
@@ -417,7 +402,27 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
     return final_color, cast(u64) horizontal_add(bounces_computed_lanes), cast(u64) horizontal_add(loops_computed_lanes)
 }
 
-brdf_lookup :: proc (materials: []Material, index: lane_u32, view_direction, normal, tangent, binormal, light_direction: lane_v3) -> (result: lane_v3) {
+gather :: proc (materials: [] Material, index: lane_u32, $member: string, $T: typeid) -> (result: T) {
+    mask: lane_u32 : 0xffffffff
+    
+    member_offset :: offset_of_by_string(Material, member)
+    
+    array  := cast(lane_umm) &materials[0]
+    index  := cast(lane_umm) index * size_of(Material)
+    
+    when T == lane_v3 {
+        channel :: size_of(lane_f32)
+        result.r = simd.gather(cast(lane_pmm) (array + index + member_offset + channel * 0), cast(lane_f32) 0, mask)
+        result.g = simd.gather(cast(lane_pmm) (array + index + member_offset + channel * 1), cast(lane_f32) 0, mask)
+        result.b = simd.gather(cast(lane_pmm) (array + index + member_offset + channel * 2), cast(lane_f32) 0, mask)
+    } else when T == lane_f32 {
+        result   = simd.gather(cast(lane_pmm) (array + index + member_offset), cast(lane_f32) 0, mask)
+    } else do #panic("unhandled")
+    
+    return result
+}
+
+brdf_lookup :: proc (materials: [] Material, index: lane_u32, view_direction, normal, tangent, binormal, light_direction: lane_v3) -> (result: lane_v3) {
     index := index
 
     half_vector := normalize_or_zero(.5 * (view_direction + light_direction))
@@ -450,6 +455,7 @@ brdf_lookup :: proc (materials: []Material, index: lane_u32, view_direction, nor
         if phi_diff < 0 do phi_diff += Pi
         
         table := materials[(cast(^[LaneWidth]u32) &index)[lane]].brdf
+        // table := materials[extract(index, lane)].brdf
         
         f0 := square_root(clamp_01(theta_half / (.5 * Pi)))
         i0 := round(u32, cast(f32) (table.count[0]-1) * f0)
@@ -467,6 +473,7 @@ brdf_lookup :: proc (materials: []Material, index: lane_u32, view_direction, nor
         (cast(^[LaneWidth]f32) &result.r)[lane] = color.r
         (cast(^[LaneWidth]f32) &result.g)[lane] = color.g
         (cast(^[LaneWidth]f32) &result.b)[lane] = color.b
+        // replace_v3(&result, lane, color)
     }
     
     return result

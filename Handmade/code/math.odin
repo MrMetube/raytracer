@@ -9,44 +9,47 @@ import "core:simd"
 ////////////////////////////////////////////////
 // Types
 
-v2 :: [2]f32
-v3 :: [3]f32
-v4 :: [4]f32
+v2  :: [2] f32
+v3  :: [3] f32
+v4  :: [4] f32
+v2i :: [2] i32
+v3i :: [3] i32
+v4i :: [4] i32
 
 LaneWidth :: 8
 
 when LaneWidth != 1 {
-    lane_f32 :: #simd [LaneWidth]f32
-    lane_u32 :: #simd [LaneWidth]u32
-    lane_i32 :: #simd [LaneWidth]i32
+    lane_f32 :: #simd [LaneWidth] f32
+    lane_u32 :: #simd [LaneWidth] u32
+    lane_i32 :: #simd [LaneWidth] i32
 
-    lane_v2 :: [2]lane_f32
-    lane_v3 :: [3]lane_f32
-    lane_v4 :: [4]lane_f32
+    lane_v2 :: [2] lane_f32
+    lane_v3 :: [3] lane_f32
+    lane_v4 :: [4] lane_f32
 
-    lane_pmm :: #simd [LaneWidth]pmm
-    lane_umm :: #simd [LaneWidth]umm
-    lane_f64 :: #simd [LaneWidth]f64
+    lane_pmm :: #simd [LaneWidth] pmm
+    lane_umm :: #simd [LaneWidth] umm
+    lane_f64 :: #simd [LaneWidth] f64
 } else {
     lane_f32 :: f32
     lane_u32 :: u32
     lane_i32 :: i32
 
-    lane_v2 :: [2]lane_f32
-    lane_v3 :: [3]lane_f32
-    lane_v4 :: [4]lane_f32
+    lane_v2 :: [2] lane_f32
+    lane_v3 :: [3] lane_f32
+    lane_v4 :: [4] lane_f32
 
     lane_pmm :: pmm
     lane_umm :: umm
     lane_f64 :: f64
 }
 
-m4 :: matrix[4,4]f32
+m4 :: matrix[4,4] f32
 
 Rectangle   :: struct($T: typeid) { min, max: T }
 Rectangle2  :: Rectangle(v2)
 Rectangle3  :: Rectangle(v3)
-Rectangle2i :: Rectangle([2]i32)
+Rectangle2i :: Rectangle(v2i)
 
 ////////////////////////////////////////////////
 // Constants
@@ -369,7 +372,8 @@ when LaneWidth != 1 {
         result.z = extract(a.z, n)
         return result
     }
-    extract :: proc (a: $T/#simd[$N]$E, #any_int n: u32) -> (result: E) {
+    
+    extract :: proc (a: $T/#simd[$N] $E, #any_int n: u32) -> (result: E) {
         when intrinsics.type_is_array(T) {
             #unroll for i in 0..<len(T) {
                 result[i] = simd.extract(a[i], n)
@@ -378,6 +382,24 @@ when LaneWidth != 1 {
             result = simd.extract(a, n)
         }
         return result
+    }
+    
+    // @naming
+    replace_v3 :: proc (a: ^lane_v3, #any_int n: u32, value: v3) {
+        replace(&a.x, n, value.x)
+        replace(&a.y, n, value.y)
+        replace(&a.z, n, value.z)
+    }
+    
+    // @naming
+    replace :: proc (a: ^$T/ #simd[$N] $E, #any_int n: u32, value: $X) {
+        when intrinsics.type_is_array(T) {
+            #unroll for i in 0..<len(T) {
+                a[i] = simd.replace(a[i], n, value[i])
+            }
+        } else {
+            a^ = simd.replace(a^, n, value)
+        }
     }
 } else {
     conditional_assign :: proc (mask: $M, dest: ^$D, value: D) {
@@ -398,7 +420,9 @@ when LaneWidth != 1 {
     
     shift_left    :: proc (a: $T, n: u32) -> T { return a << n }
     shift_right   :: proc (a: $T, n: u32) -> T { return a >> n }
+    
     maximum :: max
+    
     extract :: proc (a: $T, n: u32) -> (result: T) { 
         when intrinsics.type_is_array(T) {
             #unroll for i in 0..<len(D) {
@@ -408,7 +432,7 @@ when LaneWidth != 1 {
             result = a
         }
         return result
-     }
+    }
 }
 
 ////////////////////////////////////////////////
