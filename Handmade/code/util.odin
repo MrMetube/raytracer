@@ -117,12 +117,6 @@ vec_cast :: proc { vcast_2, vcast_3, vcast_4, vcast_vec }
     }
     return result
 }
-@(require_results) max_vec :: proc (a,b: [$N] $E) -> (result: [N] E) where intrinsics.type_is_numeric(E) {
-    #no_bounds_check #unroll for i in 0..<N {
-        result[i] = max(a[i], b[i])
-    }
-    return result
-}
 @(require_results) abs_vec :: proc (a: [$N] $E) -> (result: [N] E) where intrinsics.type_is_numeric(E) {
     #no_bounds_check #unroll for i in 0..<N {
         result[i] = abs(a[i])
@@ -133,6 +127,10 @@ vec_cast :: proc { vcast_2, vcast_3, vcast_4, vcast_vec }
 vec_max :: proc (a: $T, b: T) -> (result: T) {
     when intrinsics.type_is_simd_vector(T) {
         result = simd.max(a, b)
+    } else when intrinsics.type_is_array(T) {
+        #no_bounds_check #unroll for i in 0..<len(T) {
+            result[i] = vec_max(a[i], b[i])
+        }
     } else {
         result = max(a, b)
     }

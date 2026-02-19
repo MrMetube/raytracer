@@ -149,7 +149,11 @@ run_or_debug_according_to_args :: proc () {
                     }
                 
                     append(cmd, fmt.tprintf("../build/%v", rest))
-                    run_command(cmd, async = procs)
+                    if the_state.wait_on_procs {
+                        run_command(cmd, async = procs, stdout = os.stdout, stderr = os.stderr)
+                    } else {
+                        run_command(cmd, async = procs)
+                    }
                 } else {
                     // @todo(viktor): notify user?
                 }
@@ -198,44 +202,40 @@ is_running :: proc (exe_name: string) -> (running: bool, pid: u32) {
 }
 
 handle_running_exe_gracefully :: proc (exe_name: string, handling: Handle_Running_Exe) -> bool {
-    for {
-        ok, pid := is_running(exe_name)
-        if ok {
-            fmt.printf("INFO: Tried to build '%v', but the program is already running.\n", exe_name)
-            switch handling {
-            case .Skip:
-                fmt.printf("  Skipping build.\n", exe_name)
-                ok = false
-                
-            case .Abort: 
-                fmt.printf("  Aborting build!\n", exe_name)
-                os.exit(0)
-                
-            case .Kill: 
-                fmt.printf("  Killing running instance.\n")
-                
-                // @cleanup
-                process, err := os.process_open(auto_cast pid)
+    ok, pid := is_running(exe_name)
+    if ok {
+        fmt.printf("INFO: Tried to build '%v', but the program is already running.\n", exe_name)
+        switch handling {
+        case .Skip:
+            fmt.printf("  Skipping build.\n", exe_name)
+            ok = false
+            
+        case .Abort: 
+            fmt.printf("  Aborting build!\n", exe_name)
+            os.exit(0)
+            
+        case .Kill: 
+            fmt.printf("  Killing running instance.\n")
+            
+            // @cleanup
+            process, err := os.process_open(auto_cast pid)
+            if err != nil {
+                fmt.printf("  Failed to open '%v': %v\n", exe_name, err)
+                os.exit(1)
+            } else {
+                err = os.process_kill(process)
                 if err != nil {
-                    fmt.printf("  Failed to open '%v': %v\n", exe_name, err)
-                    ok = false
+                    fmt.printf("  Failed to kill '%v': %v\n", exe_name, err)
+                    os.exit(1)
                 } else {
-                    err = os.process_kill(process)
+                    err = os.process_close(process)
                     if err != nil {
-                        fmt.printf("  Failed to kill '%v': %v\n", exe_name, err)
-                        ok = false
-                    } else {
-                        err = os.process_close(process)
-                        if err != nil {
-                            fmt.printf("  Failed to close '%v': %v\n", exe_name, err)
-                            ok = false
-                        }
+                        fmt.printf("  Failed to close '%v': %v\n", exe_name, err)
+                        os.exit(1)
                     }
                 }
             }
         }
-        
-        if !ok do break
     }
     
     return true
@@ -244,7 +244,11 @@ handle_running_exe_gracefully :: proc (exe_name: string, handling: Handle_Runnin
 ////////////////////////////////////////////////
 
 // @todo(viktor): Find where the version where I could also pass os.stdin/stdout here
-run_command :: proc (cmd: ^Cmd, or_exit := true, keep := false, stdout: ^string = nil, stderr: ^string = nil, async: ^Procs = nil) -> (success: bool) {
+Command_Console :: union {
+    ^string,
+    ^os.File,
+}
+run_command :: proc (cmd: ^Cmd, or_exit := true, keep := false, stdout: Command_Console = nil, stderr: Command_Console = nil, async: ^Procs = nil) -> (success: bool) {
     fmt.printf("CMD: %v\n", strings.join(cmd[:], " "))
     
     process_description := os.Process_Desc { command = cmd[:] }
@@ -253,6 +257,9 @@ run_command :: proc (cmd: ^Cmd, or_exit := true, keep := false, stdout: ^string 
 	output:  [] byte
 	error:   [] byte
     err2:    os.Error
+    
+    if err, ok := stderr.(^os.File); ok do process_description.stderr = err
+    if out, ok := stdout.(^os.File); ok do process_description.stdout = out
     if async == nil {
         state, output, error, err2 = os.process_exec(process_description, context.allocator)
     } else {
@@ -267,15 +274,23 @@ run_command :: proc (cmd: ^Cmd, or_exit := true, keep := false, stdout: ^string 
     
     if async == nil {
         if output != nil {
-            if stdout != nil do stdout ^= cast(string) output
-            else do fmt.println(cast(string) output)
+            switch &out in stdout {
+            case nil: 
+                fmt.println(cast(string) output)
+            case ^string: 
+                out^ = cast(string) output
+            case ^os.File: // nothing, already passed on exec
+            }
         }
         
         if error != nil {
-            if stderr != nil do stderr ^= cast(string) error
-            else do fmt.println(cast(string) error)
-            
-            if or_exit do os.exit(state.exit_code)
+            switch &out in stderr {
+            case nil: 
+                fmt.eprintln(cast(string) output)
+            case ^string: 
+                out^ = cast(string) output
+            case ^os.File: // nothing, already passed on exec
+            }
         }
         
         if or_exit && !state.success do os.exit(state.exit_code)

@@ -16,6 +16,11 @@ WorkQueue :: struct {
     next_entry_to_read:  u32,
     
     entries: [4096]WorkQueueEntry,
+    
+    closed: bool,
+    thread_count: u32,
+    opened_thread_count: u32,
+    closed_thread_count: u32,
 }
 
 WorkQueueEntry :: struct {
@@ -30,6 +35,8 @@ CreateThreadInfo :: struct {
 
 @(private="file") created_thread_count: u32 = 1
 
+////////////////////////////////////////////////
+
 init_work_queue :: proc(queue: ^WorkQueue, infos: []CreateThreadInfo) {
     queue.semaphore_handle = win.CreateSemaphoreW(nil, 0, auto_cast len(infos), nil)
     
@@ -37,15 +44,26 @@ init_work_queue :: proc(queue: ^WorkQueue, infos: []CreateThreadInfo) {
         info.queue = queue
         info.index = created_thread_count
         created_thread_count += 1
-        
         // @note(viktor): When I use the windows call I can at most create 4 threads at once,
         // any more calls to create thread in this call of the init function fail silently
         // A further call for the low_priority_queue then is able to create 4 more threads.
         //     result := win.CreateThread(nil, 0, thread_proc, info, thread_index, nil)
         
         thread.create_and_start_with_data(&info, worker_thread)
+        queue.thread_count += 1
     }
 }
+
+close_work_queue_and_wait_for_threads :: proc (queue: ^WorkQueue) {
+    queue.closed = true
+    dummy: int // @todo(viktor): make a version of enqueue work without a data
+    for queue.closed_thread_count != queue.opened_thread_count {
+        // @note(viktor): wake the threads, is there an easier way?
+        enqueue_work(queue, proc (_: ^int) {}, &dummy)
+    }
+}
+
+////////////////////////////////////////////////
 
 enqueue_work_or_do_immediatly :: proc { enqueue_work_or_do_immediatly_t, enqueue_work_or_do_immediatly_any }
 enqueue_work_or_do_immediatly_t :: proc(queue: ^WorkQueue, callback: proc(data: ^$T), data: ^T) { enqueue_work_or_do_immediatly_any(queue, auto_cast callback, data) }
@@ -113,10 +131,18 @@ worker_thread :: proc (parameter: pmm) {
     queue := info.queue
     context.user_index = cast(int) info.index
     
+    init_spall_thread(auto_cast context.user_index, begin_deffered = false)
+    atomic_add(&queue.opened_thread_count, 1)
+    
     for {
-        if do_next_work_queue_entry(queue) { 
+        if do_next_work_queue_entry(queue) {
+            if queue.closed do break
+            spall_begin("thread idle")
             INFINITE :: transmute(win.DWORD) i32(-1)
             win.WaitForSingleObjectEx(queue.semaphore_handle, INFINITE, false)
+            spall_end()
         }
     }
+    
+    atomic_add(&queue.closed_thread_count, 1)
 }

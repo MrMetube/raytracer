@@ -4,10 +4,10 @@ import os "core:os/os2"
 
 native   :: true
 optimize :: !false
-pedantic :: false
+pedantic :: !false
 
 main :: proc () {
-    init_build(run_from_data = true)
+    init_build(run_from_data = true, wait = true)
     
     if !check_printlikes() do os.exit(1)
     

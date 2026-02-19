@@ -12,9 +12,14 @@ import "core:simd"
 v2  :: [2] f32
 v3  :: [3] f32
 v4  :: [4] f32
+
 v2i :: [2] i32
 v3i :: [3] i32
 v4i :: [4] i32
+
+uv2 :: [2] u32
+uv3 :: [3] u32
+uv4 :: [4] u32
 
 LaneWidth :: 8
 
@@ -22,11 +27,13 @@ when LaneWidth != 1 {
     lane_f32 :: #simd [LaneWidth] f32
     lane_u32 :: #simd [LaneWidth] u32
     lane_i32 :: #simd [LaneWidth] i32
-
+    
     lane_v2 :: [2] lane_f32
     lane_v3 :: [3] lane_f32
     lane_v4 :: [4] lane_f32
-
+    
+    lane_uv3 :: [3] lane_u32
+    
     lane_pmm :: #simd [LaneWidth] pmm
     lane_umm :: #simd [LaneWidth] umm
     lane_f64 :: #simd [LaneWidth] f64
@@ -34,11 +41,13 @@ when LaneWidth != 1 {
     lane_f32 :: f32
     lane_u32 :: u32
     lane_i32 :: i32
-
+    
     lane_v2 :: [2] lane_f32
     lane_v3 :: [3] lane_f32
     lane_v4 :: [4] lane_f32
-
+    
+    lane_uv3 :: [3] lane_u32
+    
     lane_pmm :: pmm
     lane_umm :: umm
     lane_f64 :: f64
@@ -57,11 +66,11 @@ Rectangle2i :: Rectangle(v2i)
 Tau :: 6.28318530717958647692528676655900576
 Pi  :: 3.14159265358979323846264338327950288
 
-E   :: 2.71828182845904523536
+Element   :: 2.71828182845904523536
 
 τ :: Tau
 π :: Pi
-e :: E
+e :: Element
 
 SqrtTwo   :: 1.41421356237309504880168872420969808
 SqrtThree :: 1.73205080756887729352744634150587236
@@ -99,7 +108,7 @@ square_root :: proc(x: $T) -> (result: T) where intrinsics.type_is_numeric(T) ||
  power :: math.pow
 
 linear_blend  :: proc{ linear_blend_v_e, linear_blend_e }
-linear_blend_v_e :: proc(from: $V/[$N]$E, to: V, t: E) -> V {
+linear_blend_v_e :: proc(from: $V/[$N]$Element, to: V, t: Element) -> V {
     result := (1-t) * from + t * to
     
     return result
@@ -110,7 +119,7 @@ linear_blend_e :: proc(from: $T, to: T, t: T) -> T  {
     return result
 }
 
-bilinear_blend :: proc(a, b, c, d: $V/[$N]$E, t: [2]E) -> (result: V) {
+bilinear_blend :: proc(a, b, c, d: $V/[$N]$Element, t: [2]Element) -> (result: V) {
     la := (1-t.y) * (1-t.x)
     lb := (1-t.y) *    t.x
     lc :=    t.y  * (1-t.x)
@@ -229,7 +238,7 @@ V3 :: proc { V3_x_yz, V3_xy_z }
 V3_x_yz :: proc(x: f32, yz: v2) -> v3 { return { x, yz.x, yz.y }}
 V3_xy_z :: proc(xy: v2, z: f32) -> v3 { return { xy.x, xy.y, z }}
 
-Rect3 :: proc(xy: $R/Rectangle([2]$E), z_min, z_max: E) -> Rectangle([3]E) { 
+Rect3 :: proc(xy: $R/Rectangle([2]$Element), z_min, z_max: Element) -> Rectangle([3]Element) { 
     return { V3(xy.min, z_min), V3(xy.max, z_max)}
 }
 
@@ -278,7 +287,7 @@ arm :: proc(angle: f32) -> (result: v2) {
     return result
 }
 
-dot :: proc(a, b: $V/[$N]$E) -> (result: E) {
+dot :: proc(a, b: $V/[$N]$Element) -> (result: Element) {
     #unroll for i in 0..<N {
         result += a[i] * b[i]
     }
@@ -286,7 +295,7 @@ dot :: proc(a, b: $V/[$N]$E) -> (result: E) {
     return result
 }
 
-cross :: proc(a, b: $V/[3]$E) -> (result: V) {
+cross :: proc(a, b: $V/[3]$Element) -> (result: V) {
     result = {
         a.y*b.z - a.z*b.y,
         a.z*b.x - a.x*b.z,
@@ -372,7 +381,7 @@ when LaneWidth != 1 {
         return result
     }
     
-    extract :: proc (a: $T/#simd[$N] $E, #any_int n: u32) -> (result: E) {
+    extract :: proc (a: $T/#simd[$N] $Element, #any_int n: u32) -> (result: Element) {
         when intrinsics.type_is_array(T) {
             #unroll for i in 0..<len(T) {
                 result[i] = simd.extract(a[i], n)
@@ -391,7 +400,7 @@ when LaneWidth != 1 {
     }
     
     // @naming
-    replace :: proc (a: ^$T/ #simd[$N] $E, #any_int n: u32, value: $X) {
+    replace :: proc (a: ^$T/ #simd[$N] $Element, #any_int n: u32, value: $X) {
         when intrinsics.type_is_array(T) {
             #unroll for i in 0..<len(T) {
                 a[i] = simd.replace(a[i], n, value[i])
@@ -438,7 +447,7 @@ when LaneWidth != 1 {
 // Rectangle operations
 
 rectangle_min_dimension         :: proc { rectangle_min_dimension_2, rectangle_min_dimension_v }
-rectangle_min_dimension_2       :: proc(x: $E, y, w, h: E)             -> Rectangle([2]E) { return rectangle_min_dimension_v([2]E{x, y}, [2]E{w, h}) }
+rectangle_min_dimension_2       :: proc(x: $Element, y, w, h: Element)             -> Rectangle([2]Element) { return rectangle_min_dimension_v([2]Element{x, y}, [2]Element{w, h}) }
 rectangle_min_dimension_v       :: proc(min: $T, dimension: T)         -> Rectangle(T)    { return { min,                      min + dimension          } }
 rectangle_min_max               :: proc(min, max: $T)                  -> Rectangle(T)    { return { min,                      max                      } }
 rectangle_center_dimension      :: proc(center: $T, dimension: T)      -> Rectangle(T)    { return { center - (dimension / 2), center + (dimension / 2) } }
