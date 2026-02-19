@@ -94,12 +94,16 @@ enqueue_work_any :: proc(queue: ^WorkQueue, callback: WorkQueueCallback, data: p
 complete_all_work :: proc(queue: ^WorkQueue) {
     if queue == nil do return
     
-    for queue.completion_count != queue.completion_goal {
+    for !work_is_completed(queue) {
         do_next_work_queue_entry(queue)
     }
     
     atomic_compare_exchange_or_fail(&queue.completion_goal, queue.completion_goal, 0)
     atomic_compare_exchange_or_fail(&queue.completion_count, queue.completion_count, 0)
+}
+
+work_is_completed :: proc (queue: ^WorkQueue) -> bool {
+    return queue.completion_count == queue.completion_goal
 }
 
 do_next_work_queue_entry :: proc(queue: ^WorkQueue) -> (should_sleep: b32) {

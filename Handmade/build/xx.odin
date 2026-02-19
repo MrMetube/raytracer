@@ -136,6 +136,8 @@ end_build :: proc (cmd: ^Cmd) {
     the_state.current_output = ""
 }
 
+////////////////////////////////////////////////
+
 parse_run_and_debug_arguments :: proc () {
     runs := &the_state.runs
     
@@ -264,18 +266,18 @@ handle_running_exe_gracefully :: proc (exe_name: string, handling: Handle_Runnin
             if err != nil {
                 fmt.printf("  Failed to open '%v': %v\n", exe_name, err)
                 os.exit(1)
-            } else {
-                err = os.process_kill(process)
-                if err != nil {
-                    fmt.printf("  Failed to kill '%v': %v\n", exe_name, err)
-                    os.exit(1)
-                } else {
-                    err = os.process_close(process)
-                    if err != nil {
-                        fmt.printf("  Failed to close '%v': %v\n", exe_name, err)
-                        os.exit(1)
-                    }
-                }
+            }
+            
+            err = os.process_kill(process)
+            if err != nil {
+                fmt.printf("  Failed to kill '%v': %v\n", exe_name, err)
+                os.exit(1)
+            }
+            
+            err = os.process_close(process)
+            if err != nil {
+                fmt.printf("  Failed to close '%v': %v\n", exe_name, err)
+                os.exit(1)
             }
         }
     }
@@ -300,11 +302,11 @@ run_command :: proc (cmd: ^Cmd, or_exit := true, keep := false, stdout: Command_
 	error:   [] byte
     err2:    os.Error
     
-    if err, ok := stderr.(^os.File); ok do process_description.stderr = err
-    if out, ok := stdout.(^os.File); ok do process_description.stdout = out
     if async == nil {
         state, output, error, err2 = os.process_exec(process_description, context.allocator)
     } else {
+        if err, ok := stderr.(^os.File); ok do process_description.stderr = err
+        if out, ok := stdout.(^os.File); ok do process_description.stdout = out
         process, err2 = os.process_start(process_description)
         append(async, process)
     }
@@ -328,14 +330,14 @@ run_command :: proc (cmd: ^Cmd, or_exit := true, keep := false, stdout: Command_
         if error != nil {
             switch &out in stderr {
             case nil: 
-                fmt.eprintln(cast(string) output)
+                fmt.eprintln(cast(string) error)
             case ^string: 
-                out^ = cast(string) output
+                out^ = cast(string) error
             case ^os.File: // nothing, already passed on exec
             }
         }
         
-        if or_exit && !state.success do os.exit(state.exit_code)
+        if or_exit && (!state.success || state.exit_code != 0) do os.exit(state.exit_code)
         
         success = state.success
     } else {

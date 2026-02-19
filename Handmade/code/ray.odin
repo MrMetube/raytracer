@@ -7,8 +7,6 @@ import "core:simd"
 import "core:time"
 import "core:math"
 
-import img "vendor:stb/image"
-
 Color :: [4] u8
 
 Image:: struct {
@@ -25,22 +23,22 @@ BrdfTable :: struct {
 }
 
 Material :: struct {
-    emit:    lane_v3,
-    reflect: lane_v3,
+    emit:    v3,
+    reflect: v3,
     scatter: f32, // 0 = mirror like, 1 = chalk like
     
     brdf:    BrdfTable,
 }
 
-Plane :: struct {
-    normal, tangent, binormal: lane_v3,
-    center: lane_v3,
-    radius: lane_f32,
+Plane :: struct #all_or_none {
+    normal, tangent, binormal: v3,
+    center:   v3,
+    radius:   f32,
     material: u32,
 }
 
 Sphere :: struct {
-    center:   lane_v3,
+    center:   v3,
     radius:   f32,
     material: u32,
 }
@@ -49,7 +47,7 @@ World :: struct {
     spheres:   [dynamic] Sphere,
     planes:    [dynamic] Plane,
     all_brdf_values: [dynamic] v3,
-    materials: [] Material,
+    materials: [dynamic] Material,
     
     bounces_computed: u64,
     loops_computed:   u64,
@@ -69,65 +67,28 @@ Ray :: struct {
     o, d: v3,
 }
 
-main :: proc() {
-    init_spall()
-    
-    core_count := cast(i32) os_old.processor_core_count() - 1
-    
-    world: World
-    world.ray_per_pixel = 2048
-    world.max_bounce_count = 8
+////////////////////////////////////////////////
 
-    world.materials = {
-        { emit    = { .3 , .4 , .5 },              },
-        { reflect = { .5 , .5 , .5 }, scatter = .1 },
-        { reflect = { .7 , .5 , .3 }, scatter = 1. },
-        { emit    = { 3.5 , 2.0 ,  .5 }, scatter = 1. },
-        { reflect = { .2 , .8 , .2 }, scatter = .3 },
-        { reflect = { .65, .1 , .7 }, scatter = .9 },
-        { reflect = { .9 , .9 , .8 }, scatter = .6 },
+do_one_render :: proc (image: Image, core_count: i32, world: ^World, camera: Camera, work_queue: ^WorkQueue, create_infos: [] CreateThreadInfo) {
+    init_work_queue(work_queue, create_infos[:])
+
+    start := begin_one_render(image, core_count, world, camera, work_queue)
+    end := wait_for_one_render_to_end(image, world, work_queue)
     
-    }
+    close_work_queue_and_wait_for_threads(work_queue)
     
-    load_brdf_merl("",                                         &world.materials[0].brdf, &world.all_brdf_values)
-    load_brdf_merl("./BRDFDatabase/brdfs/gray-plastic.binary", &world.materials[1].brdf, &world.all_brdf_values)
-    load_brdf_merl("./BRDFDatabase/brdfs/brass.binary",        &world.materials[2].brdf, &world.all_brdf_values)
-    load_brdf_merl("./BRDFDatabase/brdfs/gold-paint.binary",   &world.materials[3].brdf, &world.all_brdf_values)
-    load_brdf_merl("./BRDFDatabase/brdfs/green-latex.binary",  &world.materials[4].brdf, &world.all_brdf_values)
-    load_brdf_merl("./BRDFDatabase/brdfs/purple-paint.binary", &world.materials[5].brdf, &world.all_brdf_values)
-    load_brdf_merl("./BRDFDatabase/brdfs/white-marble.binary", &world.materials[6].brdf, &world.all_brdf_values)
-    
-    append(&world.planes,  Plane  { normal = {0,0,1}, center = { 0, 0, 0}, radius = PositiveInfinity, material = 6 })
-    append(&world.planes,  Plane  { normal = {1,0,0}, center = {-2, 0, 0}, radius = 6, material = 4 })
-    
-    append(&world.spheres, Sphere { center = { 0, 0, 0}, radius = 1, material = 2 })
-    append(&world.spheres, Sphere { center = { 3,-2, 0.4}, radius = .1, material = 3 })
-    append(&world.spheres, Sphere { center = {-2,-1, 2}, radius = 1, material = 1 })
-    append(&world.spheres, Sphere { center = { 1,-1, 3}, radius = 1, material = 5 })
-    append(&world.spheres, Sphere { center = {-2, 3, 0}, radius = 2, material = 6 })
-    
-    
-    camera: Camera
-    camera.p = lane_v3{0, -7, 1}
-    camera.z = normalize_or_zero(camera.p)
-    camera.x = normalize_or_zero(cross(lane_v3{0, 0, 1}, camera.z))
-    camera.y = normalize_or_zero(cross(camera.z, camera.x))
-    
-    
-    image: Image
-    image.width  = 1920
-    image.height = 1080
-    image.data = make([]Color, image.width * image.height)
-    
+    print_render_results(world, start, end)
+}
+
+begin_one_render :: proc (image: Image, core_count: i32, world: ^World, camera: Camera, work_queue: ^WorkQueue) -> time.Time {
     tile_size: v2i = image.width / core_count
     
     tile_cols := (image.width  + tile_size.x - 1) / tile_size.x
     tile_rows := (image.height + tile_size.y - 1) / tile_size.y
     tile_count := tile_cols * tile_rows
     
-    print("Configuration: % cores with % %x% (%/tile) tiles and lane width of % \n", core_count, tile_count, tile_size.x, tile_size.y, view_memory_size(tile_size.x * tile_size.y * size_of(Color)), LaneWidth)
+    print("Configuration: %x% with % cores and % %x% (%/tile) tiles and lane width of % \n", image.width, image.height, core_count, tile_count, tile_size.x, tile_size.y, view_memory_size(tile_size.x * tile_size.y * size_of(Color)), LaneWidth)
     print("Quality: % rays per pixel with a maximum of % bounces\n", world.ray_per_pixel, world.max_bounce_count)
-    
     
     Work :: struct {
         world:   ^World,
@@ -136,10 +97,6 @@ main :: proc() {
         rect:    Rectangle2i, 
         entropy: RandomSeries,
     }
-    
-    work_queue: WorkQueue
-    create_infos := make([] CreateThreadInfo, core_count)
-    init_work_queue(&work_queue, create_infos[:])
     
     works := make([]Work, tile_count)
     work_index: u32
@@ -153,19 +110,22 @@ main :: proc() {
             work := &works[work_index]
             work_index += 1
             work ^= { 
-                &world, 
+                world, 
                 camera, 
                 image, 
                 rect, 
                 seed_random_series(1842098778 + row * 984612097 + col * 237711 + cast(i32) work_index),
             }
             
-            enqueue_work_or_do_immediatly(&work_queue, proc(work: ^Work) {
+            enqueue_work_or_do_immediatly(work_queue, proc(work: ^Work) {
                 render_tile(work.world, work.camera, work.image, work.rect, &work.entropy)
             }, work)
         }
     }
-    
+    return start
+}
+
+wait_for_one_render_to_end :: proc (image: Image, world: ^World, work_queue: ^WorkQueue) -> time.Time {
     {
         total_pixels := image.width * image.height
         for work_queue.completion_count != work_queue.completion_goal {
@@ -173,9 +133,13 @@ main :: proc() {
         }
         print_to_console("\n", console = os_old.stderr)
     }
-    complete_all_work(&work_queue)
+    complete_all_work(work_queue)
     end := time.now()
     
+    return end
+}
+
+print_render_results :: proc (world: ^World, start, end: time.Time) {
     total_time := time.diff(start, end)
     bounces_computed := volatile_load(&world.bounces_computed)
     loops_computed   := volatile_load(&world.loops_computed)
@@ -187,14 +151,9 @@ main :: proc() {
     view_magnitude(loops_computed), 
     view_magnitude(wasted_bounces), view_percentage_ratio(cast(f32) wasted_bounces / cast(f32) loops_computed), 
     cast(time.Duration) nanoseconds)
-    
-    output_path := "./render.bmp"
-    img.write_bmp(ctprint("%", output_path), image.width, image.height, 4, &image.data[0])
-    cwd, _ := os.get_working_directory(context.temp_allocator)
-    print("Wrote ouput to %/%", cwd, output_path)
-    
-    close_work_queue_and_wait_for_threads(&work_queue)
 }
+
+////////////////////////////////////////////////
 
 load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, all_brdf_values: ^[dynamic] v3) {
     spall_proc()
@@ -212,6 +171,7 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, all_brdf_values: ^[d
         }
     }
     
+    dest.values_index = cast(u32) len(all_brdf_values)
     if !invalid {
         dest.count, data = (cast(^uv3) &data[0])^, data[size_of(uv3):]
         
@@ -223,7 +183,6 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, all_brdf_values: ^[d
         read_size := cast(umm) &temp_values[0] + auto_cast len(temp_values) * size_of(f64)
         assert(file_size == read_size)
         
-        dest.values_index = cast(u32) len(all_brdf_values)
         dest.values_count = total_count
         
         start := dest.values_index
@@ -251,13 +210,14 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, all_brdf_values: ^[d
         assert(len(all_brdf_values) == auto_cast(start + total_count))
         assert(len(all_brdf_values) == cap(all_brdf_values))
     } else {
-        dest.values_index = cast(u32) len(all_brdf_values)
         dest.values_count = 1
         
         dest.count = 1
         append(all_brdf_values, v3{1,1,1})
     }
 }
+
+////////////////////////////////////////////////
 
 render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle2i, entropy: ^RandomSeries) {
     film_distance :: 1
@@ -346,18 +306,25 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
             for &plane in world.planes {
                 tolerance :: 0.00001
                 
-                denom := dot(plane.normal, ray_d)
+                plane_normal := vec_cast(lane_f32, plane.normal)
+                plane_tangent := vec_cast(lane_f32, plane.tangent)
+                plane_binormal := vec_cast(lane_f32, plane.binormal)
+                
+                center := vec_cast(lane_f32, plane.center)
+                radius := cast(lane_f32) plane.radius
+                
+                denom := dot(plane_normal, ray_d)
                 denom_mask := less_than(denom, -tolerance) | greater_than(denom, tolerance)
                 
                 if denom_mask == 0 do continue
                 
-                t := dot(plane.normal, plane.center - ray_o) / denom
+                t := dot(plane_normal, center - ray_o) / denom
                 t_mask := greater_than(t, min_t) & less_than(t, closest_t)
                 if t_mask == 0 do continue
                 
                 hit_point := ray_o + t * ray_d
-                local_hit := hit_point - plane.center
-                t_mask &= less_than(simd.abs(local_hit.x), plane.radius) & less_than(simd.abs(local_hit.y), plane.radius)
+                local_hit := hit_point - center
+                t_mask &= less_than(simd.abs(local_hit.x), radius) & less_than(simd.abs(local_hit.y), radius)
                 if t_mask == 0 do continue
                 
                 hit_mask := denom_mask & t_mask
@@ -369,13 +336,14 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 
                 conditional_assign(hit_mask, &next_o, ray_o + t*ray_d)
                 
-                conditional_assign(hit_mask, &normal,   plane.normal)
-                conditional_assign(hit_mask, &tangent,  plane.tangent)
-                conditional_assign(hit_mask, &binormal, plane.binormal)
+                conditional_assign(hit_mask, &normal,   plane_normal)
+                conditional_assign(hit_mask, &tangent,  plane_tangent)
+                conditional_assign(hit_mask, &binormal, plane_binormal)
             }
             
             for &sphere in world.spheres {
-                locale_origin := ray_o - sphere.center
+                center := vec_cast(lane_f32, sphere.center)
+                locale_origin := ray_o - center
                 
                 a := dot(ray_d, ray_d)
                 b := 2 * dot(locale_origin, ray_d)
@@ -408,7 +376,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 // @todo(viktor): reuse the next_origin calculation
                 conditional_assign(hit_mask, &next_o,  ray_o + t*ray_d)
                 
-                conditional_assign(hit_mask, &normal,    next_o - sphere.center)
+                conditional_assign(hit_mask, &normal,    next_o - center)
                 
                 s_tangent  := normalize_or_zero(cross(lane_v3{0, 0, 1}, normal))
                 s_binormal := cross(normal, s_tangent)
@@ -417,9 +385,9 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 conditional_assign(hit_mask, &binormal, s_binormal)
             }
             
-            hit_emit    := gather(world.materials[:], hit_mat_index, "emit",    lane_v3)
-            hit_reflect := gather(world.materials[:], hit_mat_index, "reflect", lane_v3)
-            hit_scatter := gather(world.materials[:], hit_mat_index, "scatter", lane_f32)
+            hit_emit    := gather(world.materials[:], hit_mat_index, "emit",    type_of(Material{}.emit), lane_v3)
+            hit_reflect := gather(world.materials[:], hit_mat_index, "reflect", type_of(Material{}.reflect), lane_v3)
+            hit_scatter := gather(world.materials[:], hit_mat_index, "scatter", type_of(Material{}.scatter), lane_f32)
             
             // only allow world.no_hit on the first time we didnt hit anything
             // @todo(viktor): make this a helper I guess
@@ -541,17 +509,17 @@ brdf_lookup :: proc (all_brdf_values: [] v3, materials: [] Material, index: lane
     return result
 }
 
-gather :: proc (array: [] $T, index: lane_u32, $member: string, $Result: typeid) -> (result: Result) {
+gather :: proc (array: [] $T, index: lane_u32, $member: string, $member_type: typeid, $Result: typeid) -> (result: Result) {
     pointer := array_index_member(array, index, member)
     
     when Result == lane_v3 {
-        Element :: type_of(result[0])
-        channel :: size_of(Element)
+        ResultElement :: intrinsics.type_elem_type(Result)
+        channel :: size_of(intrinsics.type_elem_type(member_type))
         #unroll for channel_index in cast(umm) 0..<len(result) {
-            result[channel_index] = gather_no_mask(cast(lane_pmm) (pointer + channel * channel_index), Element)
+            result[channel_index] = cast(ResultElement) gather_no_mask(cast(lane_pmm) (pointer + channel * channel_index), lane_f32)
         }
     } else when Result == lane_f32 {
-        result = gather_no_mask(cast(lane_pmm) pointer, Result)
+        result = cast(Result) gather_no_mask(cast(lane_pmm) pointer, Result)
     } else do #panic("unhandled")
     
     return result
