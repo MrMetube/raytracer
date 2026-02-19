@@ -15,7 +15,7 @@ import win "core:sys/windows"
 // readd renderdoc, and maybe simplify it
 // windows subsystem: "-subsystem:windows", "-subsystem:console"
 
-
+// @todo(viktor): explain the args parsing syntax (run|debug):<target.exe in build dir>
 
 cmd   := &the_state.cmd
 procs := &the_state.procs
@@ -23,8 +23,8 @@ procs := &the_state.procs
 ////////////////////////////////////////////////
 // Internal state
 
-raddbg      :: `raddbg.exe`
-raddbg_path :: `C:\tools\raddbg\`+ raddbg
+raddbg      :: "raddbg.exe"
+raddbg_path :: "C:/tools/raddbg/"+ raddbg
 
 Procs :: [dynamic] os.Process
 Cmd   :: [dynamic] string
@@ -37,7 +37,9 @@ the_state := struct {
     outputs: map [string] bool,
 
     wait_on_procs: bool,
-    run_from_data: bool
+    run_from_data: bool,
+    
+    runs: [dynamic] Run,
 } {
     // Defaults
 }
@@ -46,6 +48,11 @@ Handle_Running_Exe :: enum {
     Skip,
     Abort, 
     Kill,
+}
+
+Run :: struct {
+    name: string,
+    debug: bool,
 }
 
 ////////////////////////////////////////////////
@@ -129,49 +136,84 @@ end_build :: proc (cmd: ^Cmd) {
     the_state.current_output = ""
 }
 
-// @api just do this parsing and make arrays for each kind of command and its targets. 
-// then let the user check this data, so we can conditionally build, run and debug 
-// when nothing in build is passed, build everything
-// when nothing in run / debug / renderdoc is passed 
-// @todo(viktor): if needed make this user controlled and just handle the prefix and checking output steps
-run_or_debug_according_to_args :: proc () {
+parse_run_and_debug_arguments :: proc () {
+    runs := &the_state.runs
+    
     run_prefix := "run:"
     debug_prefix := "debug:"
     
+    any_debug: bool
     for argument in os.args[1:] {
+        if strings.starts_with(argument, "/") {
+            continue
+        }
+        
         if strings.starts_with(argument, run_prefix) {
             rest := argument[len(run_prefix):]
+            append(runs, Run { name = rest, debug = false })
             
-            if success, found := the_state.outputs[rest]; found {
-                if success {
-                    if the_state.run_from_data {
-                        os.change_directory("./data")
-                    }
-                
-                    append(cmd, fmt.tprintf("../build/%v", rest))
-                    if the_state.wait_on_procs {
-                        run_command(cmd, async = procs, stdout = os.stdout, stderr = os.stderr)
-                    } else {
-                        run_command(cmd, async = procs)
-                    }
-                } else {
-                    // @todo(viktor): notify user?
-                }
-            } else {
-                // @todo(viktor): notify user?
-            }
         } else if strings.starts_with(argument, debug_prefix) {
             rest := argument[len(debug_prefix):]
+            append(runs, Run { name = rest, debug = true })
+            any_debug = true
+        }
+    }
+    
+    if any_debug {
+        if ok, _ := is_running(raddbg); ok {
+            fmt.printf("Debugger is running, stopping it.\n")
+            append(cmd, raddbg_path)
+            append(cmd, "--ipc")
+            append(cmd, "kill_all")
+            run_command(cmd)
+        } else {
+            fmt.printf("Starting the Debugger.\n")
+            append(cmd, raddbg_path)
+            run_command(cmd, async = procs)
+        }
+    }
+}
+
+run_or_debug_according_to_args :: proc () {
+    for run in the_state.runs {
+        success, found := the_state.outputs[run.name]
+        if !found {
+            verb := run.debug ? "running" : "debugging"
+            fmt.printf("ERROR: Skipped %v '%v', because it was not built by this program.\n", verb, run.name)
+            if !run.debug {
+                fmt.printf("  Try 'run_command' to run any other program.\n")
+            }
+            continue
+        }
+        
+        if !success {
+            verb := run.debug ? "running" : "debugging"
+            fmt.printf("ERROR: Skipped %v '%v', because it failed to build.\n", verb, run.name)
+            continue
+        }
+        
+        if run.debug {
             append(cmd, raddbg_path)
             append(cmd, "--ipc")
             append(cmd, "select_target")
-            append(cmd, rest)
+            append(cmd, run.name)
             run_command(cmd)
             
             append(cmd, raddbg_path)
             append(cmd, "--ipc")
             append(cmd, "restart")
             run_command(cmd)
+        } else {
+            if the_state.run_from_data {
+                os.change_directory("./data")
+            }
+            
+            append(cmd, fmt.tprintf("../build/%v", run.name))
+            if the_state.wait_on_procs {
+                run_command(cmd, async = procs, stdout = os.stdout, stderr = os.stderr)
+            } else {
+                run_command(cmd, async = procs)
+            }
         }
     }
 }

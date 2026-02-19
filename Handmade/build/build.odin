@@ -9,6 +9,8 @@ pedantic :: !false
 main :: proc () {
     init_build(run_from_data = true, wait = true)
     
+    parse_run_and_debug_arguments()
+    
     if !check_printlikes() do os.exit(1)
     
     if begin_build(cmd, "code", "ray.exe", .Kill) {
