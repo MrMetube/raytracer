@@ -32,8 +32,10 @@ Cmd   :: [dynamic] string
 the_state := struct {
     cmd: Cmd,
     procs: Procs,
-
+    
+    // @cleanup
     current_output: string,
+    last_output:    string,
     outputs: map [string] bool,
 
     wait_on_procs: bool,
@@ -51,6 +53,7 @@ Handle_Running_Exe :: enum {
 }
 
 Run :: struct {
+    // @note(viktor): an empty name "" means run the default output
     name: string,
     debug: bool,
 }
@@ -128,6 +131,7 @@ build_pedantic :: proc (pedantic: bool, imports := "-vet-unused-imports", semico
 end_build :: proc (cmd: ^Cmd) {
     if run_command(cmd) {
         fmt.printf("  Build successful %v.\n", the_state.current_output)
+        the_state.last_output = the_state.current_output
     } else {
         the_state.outputs[the_state.current_output] = false
     }
@@ -148,6 +152,11 @@ parse_run_and_debug_arguments :: proc () {
     for argument in os.args[1:] {
         if strings.starts_with(argument, "/") {
             continue
+        }
+        
+        if argument == "debug" {
+            append(runs, Run { name = "", debug = true})
+            any_debug = true
         }
         
         if strings.starts_with(argument, run_prefix) {
@@ -178,10 +187,16 @@ parse_run_and_debug_arguments :: proc () {
 
 run_or_debug_according_to_args :: proc () {
     for run in the_state.runs {
-        success, found := the_state.outputs[run.name]
+        name := run.name
+        if name == "" { // default
+            // @note(viktor): assume last output
+            name = the_state.last_output
+        }
+        
+        success, found := the_state.outputs[name]
         if !found {
             verb := run.debug ? "running" : "debugging"
-            fmt.printf("ERROR: Skipped %v '%v', because it was not built by this program.\n", verb, run.name)
+            fmt.printf("ERROR: Skipped %v '%v', because it was not built by this program.\n", verb, name)
             if !run.debug {
                 fmt.printf("  Try 'run_command' to run any other program.\n")
             }
@@ -190,7 +205,7 @@ run_or_debug_according_to_args :: proc () {
         
         if !success {
             verb := run.debug ? "running" : "debugging"
-            fmt.printf("ERROR: Skipped %v '%v', because it failed to build.\n", verb, run.name)
+            fmt.printf("ERROR: Skipped %v '%v', because it failed to build.\n", verb, name)
             continue
         }
         
@@ -198,7 +213,7 @@ run_or_debug_according_to_args :: proc () {
             append(cmd, raddbg_path)
             append(cmd, "--ipc")
             append(cmd, "select_target")
-            append(cmd, run.name)
+            append(cmd, name)
             run_command(cmd)
             
             append(cmd, raddbg_path)
@@ -210,7 +225,7 @@ run_or_debug_according_to_args :: proc () {
                 os.change_directory("./data")
             }
             
-            append(cmd, fmt.tprintf("../build/%v", run.name))
+            append(cmd, fmt.tprintf("../build/%v", name))
             if the_state.wait_on_procs {
                 run_command(cmd, async = procs, stdout = os.stdout, stderr = os.stderr)
             } else {
@@ -258,26 +273,29 @@ handle_running_exe_gracefully :: proc (exe_name: string, handling: Handle_Runnin
             fmt.printf("  Aborting build!\n", exe_name)
             os.exit(0)
             
-        case .Kill: 
-            fmt.printf("  Killing running instance.\n")
-            
-            // @cleanup
-            process, err := os.process_open(auto_cast pid)
-            if err != nil {
-                fmt.printf("  Failed to open '%v': %v\n", exe_name, err)
-                os.exit(1)
-            }
-            
-            err = os.process_kill(process)
-            if err != nil {
-                fmt.printf("  Failed to kill '%v': %v\n", exe_name, err)
-                os.exit(1)
-            }
-            
-            err = os.process_close(process)
-            if err != nil {
-                fmt.printf("  Failed to close '%v': %v\n", exe_name, err)
-                os.exit(1)
+        case .Kill:
+            // @note(viktor): if the exe was started from the debugger it should already be killed by the kill_all command before the build was started
+            if running, _ := is_running(raddbg); !running {
+                fmt.printf("  Killing running instance.\n")
+                
+                // @cleanup
+                process, err := os.process_open(auto_cast pid)
+                if err != nil {
+                    fmt.printf("  Failed to open '%v': %v\n", exe_name, err)
+                    os.exit(1)
+                }
+                
+                err = os.process_kill(process)
+                if err != nil {
+                    fmt.printf("  Failed to kill '%v': %v\n", exe_name, err)
+                    os.exit(1)
+                }
+                
+                err = os.process_close(process)
+                if err != nil {
+                    fmt.printf("  Failed to close '%v': %v\n", exe_name, err)
+                    os.exit(1)
+                }
             }
         }
     }
