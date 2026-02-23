@@ -48,11 +48,11 @@ scatter :: proc(material: Material, ray: Ray, hit_record: HitRecord) -> (v3, Ray
         
 	case Dielectric:
 		attenuation = 1
-		refraction_ratio := hit_record.front_face ? 1 / m.index_of_refraction : m.index_of_refraction
+		refraction_ratio := hit_record.front_face ? 1 / m.index_of_refraction : m.index_of_refraction / 1
 		unit_direction := normalize(ray.direction)
 		cos_theta := min(dot(-unit_direction, hit_record.normal), 1)
 		sin_theta := square_root(1 - cos_theta * cos_theta)
-
+        
 		cannot_refract := refraction_ratio * sin_theta > 1
 		direction: v3 = ---
 		if cannot_refract || reflectance(cos_theta, refraction_ratio) > random_unilateral() {
@@ -60,7 +60,7 @@ scatter :: proc(material: Material, ray: Ray, hit_record: HitRecord) -> (v3, Ray
 		} else {
 			direction = linalg.refract(unit_direction, hit_record.normal, refraction_ratio)
 		}
-
+        
 		scattered = {hit_record.p, direction}
 		ok = true
 	}

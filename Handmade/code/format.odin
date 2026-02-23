@@ -433,7 +433,7 @@ format_any :: proc (ctx: ^Format_Context, arg: any) {
         // @todo(viktor): maybe do this myself
         buf, count := utf8.encode_rune(value)
         bytes := buf[:count]
-        append(&temp, bytes)
+        append(&temp, transmute(string) bytes)
         
       case string:    append(&temp, value)
       case cstring:   append(&temp, string(value))
@@ -671,8 +671,7 @@ format_float_with_ryu :: proc (dest: ^String_Builder, view: View) {
     if size == 8 {
         float := view.value.(f64)
         result := d2fixed_buffered(float, precision, buffer)
-        // set_len(dest, len(dest) + len(result))
-        dest.count += auto_cast len(result)
+        set_len(dest, len(dest) + len(result))
     } else if size == 4 {
         float := view.value.(f32)
         when false {
@@ -680,8 +679,7 @@ format_float_with_ryu :: proc (dest: ^String_Builder, view: View) {
         } else {
             result := d2fixed_buffered(cast(f64) float, precision, buffer)
         }
-        // set_len(dest, len(dest) + len(result))
-        dest.count += auto_cast len(result)
+        set_len(dest, len(dest) + len(result))
     } else if size == 2 {
         // float := view.value.(f16)
         unimplemented()
@@ -695,6 +693,7 @@ format_float_with_ryu :: proc (dest: ^String_Builder, view: View) {
         }
     }
 }
+
 format_float_badly :: proc (dest: ^String_Builder, view: View) {
     when false {
         fraction, integer := fractional(float)

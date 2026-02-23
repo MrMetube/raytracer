@@ -66,11 +66,11 @@ Rectangle2i :: Rectangle(v2i)
 Tau :: 6.28318530717958647692528676655900576
 Pi  :: 3.14159265358979323846264338327950288
 
-Element   :: 2.71828182845904523536
+E   :: 2.71828182845904523536
 
 τ :: Tau
 π :: Pi
-e :: Element
+e :: E
 
 SqrtTwo   :: 1.41421356237309504880168872420969808
 SqrtThree :: 1.73205080756887729352744634150587236
@@ -83,8 +83,7 @@ MaxF64Precision :: 16 // Maximum number of meaningful digits after the decimal p
 MaxF32Precision ::  8 // Maximum number of meaningful digits after the decimal point for 'f32'
 MaxF16Precision ::  4 // Maximum number of meaningful digits after the decimal point for 'f16'
 
-NegativeInfinity :: math.NEG_INF_F32
-PositiveInfinity :: math.INF_F32
+Infinity :: math.INF_F32
 
 RadPerDeg :: Tau/360.0
 DegPerRad :: 360.0/Tau
@@ -373,6 +372,7 @@ when LaneWidth != 1 {
     shift_right   :: simd.shr
     horizontal_add :: simd.reduce_add_pairs
     maximum :: simd.max
+    minimum :: simd.min
     
     extract_v3 :: proc (a: lane_v3, #any_int n: u32) -> (result: v3) {
         result.x = extract(a.x, n)
@@ -430,6 +430,7 @@ when LaneWidth != 1 {
     shift_right   :: proc (a: $T, n: u32) -> T { return a >> n }
     
     maximum :: max
+    minimum :: min
     
     extract :: proc (a: $T, n: u32) -> (result: T) { 
         when intrinsics.type_is_array(T) {
@@ -441,6 +442,138 @@ when LaneWidth != 1 {
         }
         return result
     }
+}
+
+////////////////////////////////////////////////
+// Matrix operations
+
+identity :: proc () -> (result: m4) {
+    result = 1
+    return result
+}
+
+transpose :: proc (a: m4) -> (result: m4) {
+    for c in 0 ..= 3 {
+        for r in 0 ..= 3 {
+            result[c, r] = a[r, c]
+        }
+    }
+    return result
+}
+
+////////////////////////////////////////////////
+
+multiply :: proc { multiply3, multiply4 }
+multiply4 :: proc (a: m4, p: v4) -> (result: v4) {
+    result.x = a[0, 0] * p.x + a[0, 1] * p.y + a[0, 2] * p.z + a[0, 3] * p.w
+    result.y = a[1, 0] * p.x + a[1, 1] * p.y + a[1, 2] * p.z + a[1, 3] * p.w
+    result.z = a[2, 0] * p.x + a[2, 1] * p.y + a[2, 2] * p.z + a[2, 3] * p.w
+    result.w = a[3, 0] * p.x + a[3, 1] * p.y + a[3, 2] * p.z + a[3, 3] * p.w
+    
+    return result
+}
+multiply3 :: proc (a: m4, p: v3, w: f32 = 1) -> (result: v3) {
+    product := multiply(a, V4(p, w))
+    result = product.xyz
+    result /= product.w 
+    
+    return result
+}
+
+////////////////////////////////////////////////
+
+x_rotation :: yz_rotation
+y_rotation :: xz_rotation
+z_rotation :: xy_rotation
+
+xy_rotation :: proc (angle: f32) -> (result: m4) {
+    c := cos(angle)
+    s := sin(angle)
+    
+    result = {
+        c, -s, 0, 0,
+        s,  c, 0, 0,
+        0,  0, 1, 0,
+        0,  0, 0, 1,
+    }
+    
+    return result
+}
+
+yz_rotation :: proc (angle: f32) -> (result: m4) {
+    c := cos(angle)
+    s := sin(angle)
+    
+    result = {
+        1, 0,  0, 0,
+        0, c, -s, 0,
+        0, s,  c, 0,
+        0, 0,  0, 1,
+    }
+    
+    return result
+}
+
+xz_rotation :: proc (angle: f32) -> (result: m4) {
+    c := cos(angle)
+    s := sin(angle)
+
+    result = {
+         c, 0, s, 0,
+         0, 1, 0, 0,
+        -s, 0, c, 0,
+         0, 0, 0, 1,
+    }
+
+    return result
+}
+
+translate :: proc (a: m4, t: v3) -> (result: m4) {
+    result = a
+    
+    result[0, 3] += t.x
+    result[1, 3] += t.y
+    result[2, 3] += t.z
+    
+    return result
+}
+
+////////////////////////////////////////////////
+
+get_column :: proc (a: m4, column: u32) -> (result: v3) {
+    result.x = a[0, column]
+    result.y = a[1, column]
+    result.z = a[2, column]
+
+    return result
+}
+
+get_row :: proc (a: m4, row: u32) -> (result: v3) {
+    result.x = a[row, 0]
+    result.y = a[row, 1]
+    result.z = a[row, 2]
+
+    return result
+}
+
+rows_3x3 :: proc (x, y, z: v3) -> (result: m4) {
+    result = m4 {
+        x.x, x.y, x.z, 0,
+        y.x, y.y, y.z, 0,
+        z.x, z.y, z.z, 0,
+          0,   0,   0, 1,
+    }
+    return result
+}
+
+columns_3x3 :: proc (x, y, z: v3) -> (result: m4) {
+    result = m4 {
+        x.x, y.x, z.x, 0,
+        x.y, y.y, z.y, 0,
+        x.z, y.z, z.z, 0,
+          0,   0,   0, 1,
+    }
+    return result
 }
 
 ////////////////////////////////////////////////
