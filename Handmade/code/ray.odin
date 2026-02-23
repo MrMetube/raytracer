@@ -59,8 +59,8 @@ World :: struct {
 }
 
 Camera :: struct {
-    x, y, z: lane_v3,
-    p:       lane_v3,
+    x, y, z: v3,
+    p:       v3,
 }
 
 Ray :: struct {
@@ -221,7 +221,7 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, all_brdf_values: ^[d
 
 render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle2i, entropy: ^RandomSeries) {
     film_distance :: 1
-    film_center := camera.p - film_distance * camera.z
+    film_center := vec_cast(lane_f32, camera.p - film_distance * camera.z)
     
     film_w: f32 = 1
     film_h: f32 = 1
@@ -276,20 +276,25 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
     lane_ray_count := rays_per_pixel / LaneWidth
     sample_contribution_factor := 1.0 / cast(f32) rays_per_pixel
     
+    camera_p := vec_cast(lane_f32, camera.p)
+    camera_x := vec_cast(lane_f32, camera.x)
+    camera_y := vec_cast(lane_f32, camera.y)
+    camera_z := vec_cast(lane_f32, camera.z)
+    
     for _ in 0..<lane_ray_count {
         jitter := random_unilateral(entropy, lane_v2)
         off := lane_v2{film_x, film_y} + jitter * pixel_size
-        film_p := film_center + (off.x*camera.x*half_film_w + off.y*camera.y * half_film_h) 
+        film_p := film_center + (off.x*camera_x*half_film_w + off.y*camera_y * half_film_h) 
         
-        ray_o := camera.p
-        ray_d := normalize_or_zero(film_p - camera.p)
+        ray_o := camera_p
+        ray_d := normalize_or_zero(film_p - camera_p)
         
         min_t: lane_f32 = 0.0001
         attenuation: lane_v3 = 1
         lane_mask: lane_u32 = 0xffffffff
         sample: lane_v3
         for _ in 0..<max_bounce_count {
-            closest_t: lane_f32 = PositiveInfinity
+            closest_t: lane_f32 = +Infinity
             
             hit_mat_index: lane_u32
             did_hit: lane_u32
@@ -336,7 +341,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 
                 conditional_assign(hit_mask, &next_o, ray_o + t*ray_d)
                 
-                conditional_assign(hit_mask, &normal,   plane_normal)
+                conditional_assign(hit_mask, &normal,   normalize_or_zero(plane_normal))
                 conditional_assign(hit_mask, &tangent,  plane_tangent)
                 conditional_assign(hit_mask, &binormal, plane_binormal)
             }
@@ -374,9 +379,8 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 conditional_assign(hit_mask, &hit_mat_index, sphere.material)
                 
                 // @todo(viktor): reuse the next_origin calculation
-                conditional_assign(hit_mask, &next_o,  ray_o + t*ray_d)
-                
-                conditional_assign(hit_mask, &normal,    next_o - center)
+                conditional_assign(hit_mask, &next_o, ray_o + t*ray_d)
+                conditional_assign(hit_mask, &normal, normalize_or_zero(next_o - center))
                 
                 s_tangent  := normalize_or_zero(cross(lane_v3{0, 0, 1}, normal))
                 s_binormal := cross(normal, s_tangent)
@@ -391,9 +395,9 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
             
             // only allow world.no_hit on the first time we didnt hit anything
             // @todo(viktor): make this a helper I guess
-            (cast(^lane_u32) &hit_emit.r)^ &= lane_mask
-            (cast(^lane_u32) &hit_emit.g)^ &= lane_mask
-            (cast(^lane_u32) &hit_emit.b)^ &= lane_mask
+            hit_emit.r *= cast(lane_f32) (1 & lane_mask)
+            hit_emit.g *= cast(lane_f32) (1 & lane_mask)
+            hit_emit.b *= cast(lane_f32) (1 & lane_mask)
             
             // Color Accumulation
             sample += attenuation * hit_emit
@@ -519,6 +523,8 @@ gather :: proc (array: [] $T, index: lane_u32, $member: string, $member_type: ty
             result[channel_index] = cast(ResultElement) gather_no_mask(cast(lane_pmm) (pointer + channel * channel_index), lane_f32)
         }
     } else when Result == lane_f32 {
+        result = cast(Result) gather_no_mask(cast(lane_pmm) pointer, Result)
+    } else when Result == lane_u32 {
         result = cast(Result) gather_no_mask(cast(lane_pmm) pointer, Result)
     } else do #panic("unhandled")
     

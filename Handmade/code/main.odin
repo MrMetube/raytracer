@@ -2,7 +2,6 @@ package main
 
 import os "core:os/os2"
 import os_old "core:os"
-import "core:time"
 
 import img "vendor:stb/image"
 import rl "vendor:raylib"
@@ -36,7 +35,7 @@ main :: proc() {
     load_brdf_merl("./BRDFDatabase/brdfs/purple-paint.binary", &world.materials[5].brdf, &world.all_brdf_values); material_names[5] = "purple-paint"
     load_brdf_merl("./BRDFDatabase/brdfs/white-marble.binary", &world.materials[6].brdf, &world.all_brdf_values); material_names[6] = "white-marble"
     
-    append(&world.planes,  Plane  { normal = {0,0,1}, tangent = {}, binormal = {}, center = { 0, 0, 0}, radius = PositiveInfinity, material = 6 })
+    append(&world.planes,  Plane  { normal = {0,0,1}, tangent = {}, binormal = {}, center = { 0, 0, 0}, radius = +Infinity, material = 6 })
     append(&world.planes,  Plane  { normal = {1,0,0}, tangent = {}, binormal = {}, center = {-2, 0, 0}, radius = 6, material = 4 })
     
     append(&world.spheres, Sphere { center = { 0, 0, 0}, radius = 1, material = 2 })
@@ -46,18 +45,24 @@ main :: proc() {
     append(&world.spheres, Sphere { center = {-2, 3, 0}, radius = 2, material = 6 })
     
     camera: Camera
-    camera.p = lane_v3{0, -7, 1}
-    camera.z = normalize_or_zero(camera.p)
-    camera.x = normalize_or_zero(cross(lane_v3{0, 0, 1}, camera.z))
-    camera.y = normalize_or_zero(cross(camera.z, camera.x))
+    camera_look_at(&camera, {0, -7, 1}, {0, 0, 0})
     
-    image: Image
-    image.width  = 1920
-    image.height = 1080
-    image.data = make([]Color, image.width * image.height)
+    camera_look_at :: proc (camera: ^Camera, p: v3, look_at: v3) {
+        camera.p = p
+        camera.z = normalize_or_zero(-(look_at - camera.p))
+        camera.x = normalize_or_zero(cross(v3{0, 0, 1}, camera.z))
+        camera.y = normalize_or_zero(cross(camera.z, camera.x))
+    }
+    
+    fast_factor :: 6
+    
+    quality_image: Image
+    quality_image.width  = 1920
+    quality_image.height = 1080
+    quality_image.data = make([]Color, quality_image.width * quality_image.height)
     fast_image: Image
-    fast_image.width  = image.width  / 6
-    fast_image.height = image.height / 6
+    fast_image.width  = quality_image.width  / fast_factor
+    fast_image.height = quality_image.height / fast_factor
     fast_image.data = make([]Color, fast_image.width * fast_image.height)
     quality_rays_per_pixel: u32 = 64
     fast_rays_per_pixel: u32 = 8
@@ -68,12 +73,14 @@ main :: proc() {
     
     ////////////////////////////////////////////////
         
+    window_size := v2i { quality_image.width, quality_image.height }
+    
     render_active := false
+    rl.InitWindow(window_size.x, window_size.y, "Handmade Ray")
+    rl.SetTargetFPS(144)
     
-    rl.InitWindow(image.width, image.height, "Handmade Ray")
-    rl.SetTargetFPS(60)
-    
-    texture: rl.Texture
+    main_texture: rl.Texture
+    side_texture: rl.Texture
     font := rl.LoadFontEx("./fonts/VictorMono-Bold.otf", FontSize, nil, 0)
 
     rl.GuiEnable()
@@ -81,14 +88,15 @@ main :: proc() {
     rl.GuiSetStyle(.DEFAULT, auto_cast rl.GuiDefaultProperty.TEXT_SIZE, FontSize)
     rl.GuiSetStyle(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_NORMAL, auto_cast rl.ColorToInt(rl.WHITE))
     
-    ui_rect := rectangle_min_dimension(v2{}, vec_cast(f32, image.width, image.height))
+    ui_rect := rectangle_min_dimension(v2{}, vec_cast(f32, quality_image.width, quality_image.height))
     ui_rect = add_radius(ui_rect, -10)
     
     request_fast_render: bool
+    request_quality_render: bool
     world_for_renderer: World
     
-    render_image: Image
-    render_scale: f32
+    render_image: ^Image
+    fast_image_is_focussed: bool
     
     show_materials: bool
     show_planes: bool
@@ -96,7 +104,96 @@ main :: proc() {
     
     ////////////////////////////////////////////////
     
+    mouse_is_look: bool
+    request_quality_render = true
+    ddp: v3
+    dp: v3
     for !rl.WindowShouldClose() {
+        delta_time := rl.GetFrameTime()
+        
+        speed: f32 = 60
+        if rl.IsKeyDown(.LEFT_SHIFT) {
+            print("sprint %\n", ddp)
+        } else {
+            ddp *= 0.1
+        }
+        
+        dddp: v3
+        if rl.IsKeyDown(.A) do dddp += {-1, 0,  0}
+        if rl.IsKeyDown(.D) do dddp += { 1, 0,  0}
+        if rl.IsKeyDown(.W) do dddp += { 0, 0, -1}
+        if rl.IsKeyDown(.S) do dddp += { 0, 0,  1}
+        
+        if rl.IsMouseButtonPressed(.MIDDLE) {
+            mouse_is_look = !mouse_is_look
+        }
+        
+        dlook: v2
+        if mouse_is_look {
+            dlook = -rl.GetMouseDelta()
+        }
+        
+        if !rl.IsWindowFocused() {
+            mouse_is_look = false
+            rl.ShowCursor()
+        } else {
+            if mouse_is_look {
+                rl.HideCursor()
+                rl.SetMousePosition(window_size.x / 2, window_size.y / 2)
+            } else do rl.ShowCursor()   
+            
+        }
+        
+        sensitivity :: 0.2
+        if dlook != 0 {
+            dlook *= sensitivity * delta_time
+            
+            axis_angle_rotation :: proc(axis: v3, angle: f32) -> m4 {
+                cos_angle := cos(angle)
+                sin_angle := sin(angle)
+                inv_angle := 1.0 - cos_angle
+                
+                x, y, z := axis.x, axis.y, axis.z
+                
+                return m4 {
+                    inv_angle*x*x + cos_angle,   inv_angle*x*y - sin_angle*z, inv_angle*x*z + sin_angle*y, 0,
+                    inv_angle*x*y + sin_angle*z, inv_angle*y*y + cos_angle,   inv_angle*y*z - sin_angle*x, 0,
+                    inv_angle*x*z - sin_angle*y, inv_angle*y*z + sin_angle*x, inv_angle*z*z + cos_angle,   0,
+                              0,           0,         0,   1,
+                }
+            }
+            
+            yaw_rot := axis_angle_rotation(normalize(camera.y), dlook.x)
+            camera.z = normalize(multiply3(yaw_rot, camera.z))
+            camera.x = normalize(multiply3(yaw_rot, camera.x))
+            
+            pitch_rot := axis_angle_rotation(normalize(camera.x), dlook.y)
+            camera.z = normalize(multiply3(pitch_rot, camera.z))
+            camera.y = normalize(multiply3(pitch_rot, camera.y))
+            
+            camera.z = normalize_or_zero(camera.z)
+            camera.x = normalize_or_zero(cross(v3{0, 0, 1}, camera.z))
+            camera.y = normalize_or_zero(cross(camera.z, camera.x))
+            
+            request_fast_render = true
+        }
+        
+        dddp = normalize_or_zero(dddp)
+        dddp *= speed
+        ddp += dddp
+        ddp *= 0.9
+        dp += ddp * delta_time
+        dp *= 0.9
+        if length_squared(dp) < square(cast(f32) 0.01) do dp = 0
+        
+        if dp != 0 {
+            camera.p += dp.x * camera.x * delta_time
+            camera.p += dp.y * camera.y * delta_time
+            camera.p += dp.z * camera.z * delta_time
+            
+            request_fast_render = true
+        }
+        
         if rl.IsKeyPressed(.J) {
             quality_rays_per_pixel /= 2
         }
@@ -112,7 +209,11 @@ main :: proc() {
         quality_rays_per_pixel = clamp(quality_rays_per_pixel, LaneWidth, 2048)
         fast_rays_per_pixel    = clamp(fast_rays_per_pixel,    LaneWidth, 128)
         
-        if (request_fast_render || rl.IsKeyPressed(.SPACE)) && !render_active {
+        if rl.IsKeyPressed(.SPACE) {
+            request_quality_render = true
+        }
+        
+        if (request_fast_render || request_quality_render) && !render_active {
             render_active = true
             world.bounces_computed = 0
             world.loops_computed = 0
@@ -128,26 +229,30 @@ main :: proc() {
             copy(world_for_renderer.planes[:], world.planes[:])
             copy(world_for_renderer.materials[:], world.materials[:])
             
-            render_image = image
-            if request_fast_render {
-                render_image = fast_image
-                world_for_renderer.ray_per_pixel = fast_rays_per_pixel
-            } else {
+            render_image = &quality_image
+            if request_quality_render {
+                request_quality_render = false
                 world_for_renderer.ray_per_pixel = quality_rays_per_pixel
+            } else {
+                assert(request_fast_render)
+                request_fast_render = false
+                
+                render_image = &fast_image
+                world_for_renderer.ray_per_pixel = fast_rays_per_pixel
             }
             
-            begin_one_render(render_image, core_count, &world_for_renderer, camera, &work_queue)
+            begin_one_render(render_image^, core_count, &world_for_renderer, camera, &work_queue)
             
-            request_fast_render = false
         }
         
-        load_image_into_texture: ^Image
         if render_active {
             if work_is_completed(&work_queue) {
                 complete_all_work(&work_queue)
                 
                 render_active = false
-                load_image_into_texture = &render_image
+                
+                load_image_into_texture(&main_texture, quality_image)
+                load_image_into_texture(&side_texture, fast_image)
                 
                 delete(world_for_renderer.spheres)
                 delete(world_for_renderer.planes)
@@ -156,29 +261,12 @@ main :: proc() {
         }
         
         if rl.IsKeyPressed(.R) {
-            load_image_into_texture = &image
+            fast_image_is_focussed = !fast_image_is_focussed
         }
-        if rl.IsKeyPressed(.Q) {
-            load_image_into_texture = &fast_image
-        }
-        
-        if load_image_into_texture != nil {
-            selected_image := load_image_into_texture^
-            rl_image := rl.Image {
-                data = raw_data(selected_image.data),
-                width = selected_image.width,
-                height = selected_image.height,
-                mipmaps = 1,
-                format = .UNCOMPRESSED_R8G8B8A8,
-            }
-            texture = rl.LoadTextureFromImage(rl_image)
-            render_scale = cast(f32) image.width / cast(f32) selected_image.width
-        }
-        
         
         if rl.IsKeyPressed(.F5) && !render_active {
             output_path := "./render.bmp"
-            img.write_bmp(ctprint("%", output_path), image.width, image.height, 4, &image.data[0])
+            img.write_bmp(ctprint("%", output_path), quality_image.width, quality_image.height, 4, &quality_image.data[0])
             cwd, _ := os.get_working_directory(context.temp_allocator)
             print("Wrote ouput to %/%\n", cwd, output_path)
         }
@@ -187,7 +275,13 @@ main :: proc() {
         
         rl.BeginDrawing()
         rl.ClearBackground({0x18, 0x18, 0x18, 0xff})
-        rl.DrawTextureEx(texture, 0, 0, render_scale, rl.WHITE)
+        if fast_image_is_focussed {
+            rl.DrawTextureEx(side_texture, 0, 0, fast_factor, rl.WHITE)
+            rl.DrawTextureEx(main_texture, vec_cast(f32, window_size.x - main_texture.width / fast_factor, 0), 0, 1.0 / fast_factor, rl.WHITE)
+        } else {
+            rl.DrawTextureEx(main_texture, 0, 0, 1, rl.WHITE)
+            rl.DrawTextureEx(side_texture, vec_cast(f32, window_size.x - side_texture.width, 0), 0, 1, rl.WHITE)
+        }
         
         layout: Layout
         layout.font = font
@@ -197,7 +291,7 @@ main :: proc() {
         
         if render_active {
             if !work_is_completed(&work_queue) {
-                total_pixels := image.width * image.height
+                total_pixels := render_image.width * render_image.height
                 done_percentage := cast(f32) world_for_renderer.pixels_done / cast(f32) total_pixels
                 
                 before := layout.at
@@ -309,6 +403,18 @@ main :: proc() {
         
         rl.EndDrawing()
     }
+}
+
+load_image_into_texture :: proc (texture: ^rl.Texture, image: Image) {
+    rl_image := rl.Image {
+        data = raw_data(image.data),
+        width = image.width,
+        height = image.height,
+        mipmaps = 1,
+        format = .UNCOMPRESSED_R8G8B8A8,
+    }
+    
+    texture^ = rl.LoadTextureFromImage(rl_image)
 }
 
 ////////////////////////////////////////////////
