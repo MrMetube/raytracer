@@ -582,7 +582,7 @@ columns_3x3 :: proc (x, y, z: v3) -> (result: m4) {
 rectangle_min_dimension         :: proc { rectangle_min_dimension_2, rectangle_min_dimension_v }
 rectangle_min_dimension_2       :: proc(x: $Element, y, w, h: Element)             -> Rectangle([2]Element) { return rectangle_min_dimension_v([2]Element{x, y}, [2]Element{w, h}) }
 rectangle_min_dimension_v       :: proc(min: $T, dimension: T)         -> Rectangle(T)    { return { min,                      min + dimension          } }
-rectangle_min_max               :: proc(min, max: $T)                  -> Rectangle(T)    { return { min,                      max                      } }
+rectangle_min_max               :: proc(min: $T, max: T)               -> Rectangle(T)    { return { min,                      max                      } }
 rectangle_center_dimension      :: proc(center: $T, dimension: T)      -> Rectangle(T)    { return { center - (dimension / 2), center + (dimension / 2) } }
 rectangle_center_half_dimension :: proc(center: $T, half_dimension: T) -> Rectangle(T)    { return { center - half_dimension,  center + half_dimension  } }
 

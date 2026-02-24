@@ -1,3 +1,4 @@
+#+vet explicit-allocators
 package main
 
 import "base:intrinsics"
@@ -30,7 +31,7 @@ Material :: struct {
     brdf:    BrdfTable,
 }
 
-Plane :: struct #all_or_none {
+Plane :: struct {
     normal, tangent, binormal: v3,
     center:   v3,
     radius:   f32,
@@ -46,15 +47,15 @@ Sphere :: struct {
 World :: struct {
     spheres:   [dynamic] Sphere,
     planes:    [dynamic] Plane,
-    all_brdf_values: [dynamic] v3,
     materials: [dynamic] Material,
+    all_brdf_values: [dynamic] v3,
     
     bounces_computed: u64,
     loops_computed:   u64,
     tiles_retired:    u32,
     pixels_done:      u32,
     
-    ray_per_pixel:    u32,
+    rays_per_pixel:   u32,
     max_bounce_count: u32,
 }
 
@@ -69,10 +70,10 @@ Ray :: struct {
 
 ////////////////////////////////////////////////
 
-do_one_render :: proc (image: Image, core_count: i32, world: ^World, camera: Camera, work_queue: ^WorkQueue, create_infos: [] CreateThreadInfo) {
+do_one_render :: proc (render_allocator: Allocator, image: Image, core_count: i32, world: ^World, camera: Camera, work_queue: ^WorkQueue, create_infos: [] CreateThreadInfo) {
     init_work_queue(work_queue, create_infos[:])
 
-    start := begin_one_render(image, core_count, world, camera, work_queue)
+    start := enqueue_render_work(render_allocator, image, core_count, world, camera, work_queue)
     end := wait_for_one_render_to_end(image, world, work_queue)
     
     close_work_queue_and_wait_for_threads(work_queue)
@@ -80,15 +81,15 @@ do_one_render :: proc (image: Image, core_count: i32, world: ^World, camera: Cam
     print_render_results(world, start, end)
 }
 
-begin_one_render :: proc (image: Image, core_count: i32, world: ^World, camera: Camera, work_queue: ^WorkQueue) -> time.Time {
+enqueue_render_work :: proc (render_allocator: Allocator, image: Image, core_count: i32, world: ^World, camera: Camera, work_queue: ^WorkQueue) -> time.Time {
     tile_size: v2i = image.width / core_count
     
-    tile_cols := (image.width  + tile_size.x - 1) / tile_size.x
-    tile_rows := (image.height + tile_size.y - 1) / tile_size.y
+    tile_cols  := (image.width  + tile_size.x - 1) / tile_size.x
+    tile_rows  := (image.height + tile_size.y - 1) / tile_size.y
     tile_count := tile_cols * tile_rows
     
-    print("Configuration: %x% with % cores and % %x% (%/tile) tiles and lane width of % \n", image.width, image.height, core_count, tile_count, tile_size.x, tile_size.y, view_memory_size(tile_size.x * tile_size.y * size_of(Color)), LaneWidth)
-    print("Quality: % rays per pixel with a maximum of % bounces\n", world.ray_per_pixel, world.max_bounce_count)
+    // print("Configuration: %x% with % cores and % %x% (%/tile) tiles and lane width of % \n", image.width, image.height, core_count, tile_count, tile_size.x, tile_size.y, view_memory_size(tile_size.x * tile_size.y * size_of(Color)), LaneWidth)
+    // print("Quality: % rays per pixel with a maximum of % bounces\n", world.rays_per_pixel, world.max_bounce_count)
     
     Work :: struct {
         world:   ^World,
@@ -98,24 +99,20 @@ begin_one_render :: proc (image: Image, core_count: i32, world: ^World, camera: 
         entropy: RandomSeries,
     }
     
-    works := make([]Work, tile_count)
+    works := make_slice(render_allocator, [] Work, tile_count)
     work_index: u32
     
     start := time.now()
     for row in 0..<tile_rows {
         for col in 0..<tile_cols {
             rect := rectangle_min_dimension(tile_size * {col, row}, tile_size)
-            rect = get_intersection(rect, rectangle_min_dimension(i32(0), 0, image.width, image.height))
+            rect  = get_intersection(rect, rectangle_min_dimension(i32(0), 0, image.width, image.height))
+            
+            entropy := seed_random_series(1842098778 + row * 984612097 + col * 237711 + cast(i32) work_index)
             
             work := &works[work_index]
             work_index += 1
-            work ^= { 
-                world, 
-                camera, 
-                image, 
-                rect, 
-                seed_random_series(1842098778 + row * 984612097 + col * 237711 + cast(i32) work_index),
-            }
+            work ^= { world, camera, image, rect, entropy }
             
             enqueue_work_or_do_immediatly(work_queue, proc(work: ^Work) {
                 render_tile(work.world, work.camera, work.image, work.rect, &work.entropy)
@@ -271,7 +268,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
     loops_computed_lanes: lane_u32
     
     max_bounce_count := world.max_bounce_count
-    rays_per_pixel   := world.ray_per_pixel
+    rays_per_pixel   := world.rays_per_pixel
     
     lane_ray_count := rays_per_pixel / LaneWidth
     sample_contribution_factor := 1.0 / cast(f32) rays_per_pixel
@@ -279,7 +276,6 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
     camera_p := vec_cast(lane_f32, camera.p)
     camera_x := vec_cast(lane_f32, camera.x)
     camera_y := vec_cast(lane_f32, camera.y)
-    camera_z := vec_cast(lane_f32, camera.z)
     
     for _ in 0..<lane_ray_count {
         jitter := random_unilateral(entropy, lane_v2)
@@ -329,7 +325,9 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 
                 hit_point := ray_o + t * ray_d
                 local_hit := hit_point - center
-                t_mask &= less_than(simd.abs(local_hit.x), radius) & less_than(simd.abs(local_hit.y), radius)
+                t_mask &= less_than(simd.abs(local_hit.x), radius) 
+                t_mask &= less_than(simd.abs(local_hit.y), radius)
+                t_mask &= less_than(simd.abs(local_hit.z), radius)
                 if t_mask == 0 do continue
                 
                 hit_mask := denom_mask & t_mask

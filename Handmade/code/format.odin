@@ -306,7 +306,7 @@ begin_temp_views :: proc (width: Maybe(u16) = nil) {
     
     if temp_view_allocator.procedure == nil {
         // @todo(viktor): find a better place for this
-        buffer := make([] u8, 64*4096)
+        buffer := make([] u8, 64*4096, context.allocator)
         mem.arena_init(&temp_view_arena, buffer)
         temp_view_allocator = mem.arena_allocator(&temp_view_arena)
         assert(temp_view_allocator.procedure != nil)
@@ -327,7 +327,7 @@ append_temp_view :: proc (value: any) {
     
     size := info.size
     copied := make([] u8, size, temp_view_allocator)
-    copy(copied, slice_from_parts_cast(u8, view.value.data, size))
+    copy(copied, slice_from_parts(u8, view.value.data, size))
     view.value.data = raw_data(copied)
     
     temp_view_buffer[temp_view_next_index] = view

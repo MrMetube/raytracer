@@ -2,19 +2,40 @@ package main
 
 import os "core:os/os2"
 import os_old "core:os"
+import "core:time"
+import "core:math"
 
 import img "vendor:stb/image"
 import rl "vendor:raylib"
 
 FontSize :: 20
 
+Render :: struct {
+    requested: bool,
+    active: bool,
+    start, end: time.Time,
+    
+    world: World,
+    
+    image: Image,
+    texture: rl.Texture,
+    queue: WorkQueue,
+    
+    arena: Arena,
+    allocator: Allocator,
+}
+
+////////////////////////////////////////////////
+
 main :: proc() {
+    rl.SetTraceLogLevel(.WARNING)
+    
     init_spall()
     
     core_count := cast(i32) os_old.processor_core_count() - 1
     
     world: World
-    world.ray_per_pixel = 8
+    world.rays_per_pixel   = 8
     world.max_bounce_count = 8
     
     append(&world.materials, Material{ emit    = { .3  , .4  , .5 },              })
@@ -25,7 +46,7 @@ main :: proc() {
     append(&world.materials, Material{ reflect = { .65 , .1  , .7 }, scatter = .9 })
     append(&world.materials, Material{ reflect = { .9  , .9  , .8 }, scatter = .6 })
     
-    material_names := make([] string, len(world.materials))
+    material_names := make_slice(context.allocator, [] string, len(world.materials))
     
     load_brdf_merl("",                                         &world.materials[0].brdf, &world.all_brdf_values); material_names[0] = ""
     load_brdf_merl("./BRDFDatabase/brdfs/gray-plastic.binary", &world.materials[1].brdf, &world.all_brdf_values); material_names[1] = "gray-plastic"
@@ -35,86 +56,96 @@ main :: proc() {
     load_brdf_merl("./BRDFDatabase/brdfs/purple-paint.binary", &world.materials[5].brdf, &world.all_brdf_values); material_names[5] = "purple-paint"
     load_brdf_merl("./BRDFDatabase/brdfs/white-marble.binary", &world.materials[6].brdf, &world.all_brdf_values); material_names[6] = "white-marble"
     
-    append(&world.planes,  Plane  { normal = {0,0,1}, tangent = {}, binormal = {}, center = { 0, 0, 0}, radius = +Infinity, material = 6 })
-    append(&world.planes,  Plane  { normal = {1,0,0}, tangent = {}, binormal = {}, center = {-2, 0, 0}, radius = 6, material = 4 })
-    
-    append(&world.spheres, Sphere { center = { 0, 0, 0}, radius = 1, material = 2 })
+    append(&world.spheres, Sphere { center = { 0, 0, 0},   radius = 1,  material = 2 })
     append(&world.spheres, Sphere { center = { 3,-2, 0.4}, radius = .1, material = 3 })
-    append(&world.spheres, Sphere { center = {-2,-1, 2}, radius = 1, material = 1 })
-    append(&world.spheres, Sphere { center = { 1,-1, 3}, radius = 1, material = 5 })
-    append(&world.spheres, Sphere { center = {-2, 3, 0}, radius = 2, material = 6 })
+    append(&world.spheres, Sphere { center = {-2,-1, 2},   radius = 1,  material = 1 })
+    append(&world.spheres, Sphere { center = { 1,-1, 3},   radius = 1,  material = 5 })
+    append(&world.spheres, Sphere { center = {-2, 3, 0},   radius = 2,  material = 6 })
     
-    camera: Camera
-    camera_look_at(&camera, {0, -7, 1}, {0, 0, 0})
-    
-    camera_look_at :: proc (camera: ^Camera, p: v3, look_at: v3) {
-        camera.p = p
-        camera.z = normalize_or_zero(-(look_at - camera.p))
-        camera.x = normalize_or_zero(cross(v3{0, 0, 1}, camera.z))
-        camera.y = normalize_or_zero(cross(camera.z, camera.x))
+    area_size := cast(f32) 20
+    gen_entropy := seed_random_series(565)
+    for _ in 0..< square(area_size) * 1.2 {
+        radius := random_between_f32(&gen_entropy, 0.1, 0.4)
+        
+        bounds := radius + 0.05
+        
+        center: v3
+        center.z = bounds
+        
+        attemps: for i in 0..< 10 {
+            center.xy = random_bilateral(&gen_entropy, v2) * (area_size - bounds)
+            for other in world.spheres {
+                if length_squared(other.center - center) > square(other.radius + bounds) {
+                    break attemps
+                }
+            }
+        }
+        
+        material := random_between_u32(&gen_entropy, 1, auto_cast len(world.materials) - 1)
+        append(&world.spheres, Sphere { center, radius, material })
     }
     
-    fast_factor :: 6
+    append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 1 })
+    append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
+    append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size-0.1}, radius = area_size/5, material = 3 })
+    append(&world.planes, Plane { normal = { 1, 0, 0}, tangent = {}, binormal = {}, center = {-area_size, 0, 0},     radius = area_size,   material = 2 })
+    append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 2 })
+    append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
     
-    quality_image: Image
-    quality_image.width  = 1920
-    quality_image.height = 1080
-    quality_image.data = make([]Color, quality_image.width * quality_image.height)
-    fast_image: Image
-    fast_image.width  = quality_image.width  / fast_factor
-    fast_image.height = quality_image.height / fast_factor
-    fast_image.data = make([]Color, fast_image.width * fast_image.height)
-    quality_rays_per_pixel: u32 = 64
-    fast_rays_per_pixel: u32 = 8
-    
-    work_queue: WorkQueue
-    create_infos := make([] CreateThreadInfo, core_count)
-    init_work_queue(&work_queue, create_infos[:])
+    camera: Camera
+    camera.p = {0, -7, 1}
+    camera.z = normalize_or_zero(camera.p)
+    camera.x = normalize_or_zero(cross(v3{0, 0, 1}, camera.z))
+    camera.y = normalize_or_zero(cross(camera.z, camera.x))
     
     ////////////////////////////////////////////////
         
-    window_size := v2i { quality_image.width, quality_image.height }
+    window_size := v2i { 1920, 1080 }
     
-    render_active := false
     rl.InitWindow(window_size.x, window_size.y, "Handmade Ray")
     rl.SetTargetFPS(144)
     
-    main_texture: rl.Texture
-    side_texture: rl.Texture
     font := rl.LoadFontEx("./fonts/VictorMono-Bold.otf", FontSize, nil, 0)
-
+    
     rl.GuiEnable()
     rl.GuiSetFont(font)
     rl.GuiSetStyle(.DEFAULT, auto_cast rl.GuiDefaultProperty.TEXT_SIZE, FontSize)
     rl.GuiSetStyle(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_NORMAL, auto_cast rl.ColorToInt(rl.WHITE))
     
-    ui_rect := rectangle_min_dimension(v2{}, vec_cast(f32, quality_image.width, quality_image.height))
+    ui_rect := rectangle_min_dimension(v2{}, vec_cast(f32, window_size))
     ui_rect = add_radius(ui_rect, -10)
-    
-    request_fast_render: bool
-    request_quality_render: bool
-    world_for_renderer: World
-    
-    render_image: ^Image
-    fast_image_is_focussed: bool
     
     show_materials: bool
     show_planes: bool
     show_spheres: bool
     
+    
+    fast_factor :: 6
+    quality_render: Render
+    fast_render:    Render
+    init_render(&quality_render, 64, 8, window_size.x, window_size.y, core_count)
+    init_render(&fast_render,    8,  4, window_size.x / fast_factor, window_size.y / fast_factor, core_count)
+    
+    renders := make_dynamic_array(context.allocator, [dynamic] ^Render, 0, 2)
+    append(&renders, &quality_render)
+    append(&renders, &fast_render)
+    
     ////////////////////////////////////////////////
     
+    fast_render.requested = true
+    fast_image_is_focussed: bool = true
+    
     mouse_is_look: bool
-    request_quality_render = true
     ddp: v3
     dp: v3
     for !rl.WindowShouldClose() {
+        rl.BeginDrawing()
+        rl.ClearBackground({0x18, 0x18, 0x18, 0xff})
+        
         delta_time := rl.GetFrameTime()
         
         speed: f32 = 60
-        if rl.IsKeyDown(.LEFT_SHIFT) {
-            print("sprint %\n", ddp)
-        } else {
+        if !rl.IsKeyDown(.LEFT_SHIFT) {
             ddp *= 0.1
         }
         
@@ -144,38 +175,25 @@ main :: proc() {
             
         }
         
-        sensitivity :: 0.2
         if dlook != 0 {
-            dlook *= sensitivity * delta_time
+            dlook *= 100/vec_cast(f32, window_size) * delta_time
+            up :: v3{0,0,1}
             
-            axis_angle_rotation :: proc(axis: v3, angle: f32) -> m4 {
-                cos_angle := cos(angle)
-                sin_angle := sin(angle)
-                inv_angle := 1.0 - cos_angle
-                
-                x, y, z := axis.x, axis.y, axis.z
-                
-                return m4 {
-                    inv_angle*x*x + cos_angle,   inv_angle*x*y - sin_angle*z, inv_angle*x*z + sin_angle*y, 0,
-                    inv_angle*x*y + sin_angle*z, inv_angle*y*y + cos_angle,   inv_angle*y*z - sin_angle*x, 0,
-                    inv_angle*x*z - sin_angle*y, inv_angle*y*z + sin_angle*x, inv_angle*z*z + cos_angle,   0,
-                              0,           0,         0,   1,
-                }
+            yaw   := axis_angle_rotation(camera.y,                            dlook.x)
+            pitch := axis_angle_rotation(normalize(multiply3(yaw, camera.x)), dlook.y)
+            
+            new_z := multiply3(pitch * yaw, camera.z)
+            
+            if abs(dot(new_z, up)) < 0.9999 {
+                camera.z = new_z
+            } else {
+                camera.z = multiply3(yaw, camera.z)
             }
             
-            yaw_rot := axis_angle_rotation(normalize(camera.y), dlook.x)
-            camera.z = normalize(multiply3(yaw_rot, camera.z))
-            camera.x = normalize(multiply3(yaw_rot, camera.x))
-            
-            pitch_rot := axis_angle_rotation(normalize(camera.x), dlook.y)
-            camera.z = normalize(multiply3(pitch_rot, camera.z))
-            camera.y = normalize(multiply3(pitch_rot, camera.y))
-            
-            camera.z = normalize_or_zero(camera.z)
-            camera.x = normalize_or_zero(cross(v3{0, 0, 1}, camera.z))
+            camera.x = normalize_or_zero(cross(up, camera.z))
             camera.y = normalize_or_zero(cross(camera.z, camera.x))
             
-            request_fast_render = true
+            fast_render.requested = true
         }
         
         dddp = normalize_or_zero(dddp)
@@ -191,72 +209,66 @@ main :: proc() {
             camera.p += dp.y * camera.y * delta_time
             camera.p += dp.z * camera.z * delta_time
             
-            request_fast_render = true
+            fast_render.requested = true
         }
         
-        if rl.IsKeyPressed(.J) {
-            quality_rays_per_pixel /= 2
+        // @todo(viktor): set in render and only copy on render start, check that noone is using render.world.raysperpixel
+        if !quality_render.active {
+            if rl.IsKeyPressed(.J) {
+                quality_render.world.rays_per_pixel /= 2
+            }
+            if rl.IsKeyPressed(.K) {
+                quality_render.world.rays_per_pixel *= 2
+            }
+            quality_render.world.rays_per_pixel = clamp(quality_render.world.rays_per_pixel, LaneWidth, 2048)
         }
-        if rl.IsKeyPressed(.K) {
-            quality_rays_per_pixel *= 2
+        
+        if !fast_render.active {
+            if rl.IsKeyPressed(.N) {
+                fast_render.world.rays_per_pixel /= 2
+            }
+            if rl.IsKeyPressed(.M) {
+                fast_render.world.rays_per_pixel *= 2
+            }
+            fast_render.world.rays_per_pixel = clamp(fast_render.world.rays_per_pixel, LaneWidth, 128)
         }
-        if rl.IsKeyPressed(.N) {
-            fast_rays_per_pixel /= 2
-        }
-        if rl.IsKeyPressed(.M) {
-            fast_rays_per_pixel *= 2
-        }
-        quality_rays_per_pixel = clamp(quality_rays_per_pixel, LaneWidth, 2048)
-        fast_rays_per_pixel    = clamp(fast_rays_per_pixel,    LaneWidth, 128)
         
         if rl.IsKeyPressed(.SPACE) {
-            request_quality_render = true
+            quality_render.requested = true
         }
         
-        if (request_fast_render || request_quality_render) && !render_active {
-            render_active = true
-            world.bounces_computed = 0
-            world.loops_computed = 0
-            world.tiles_retired = 0
-            world.pixels_done = 0
-            
-            world_for_renderer = world
-            world_for_renderer.spheres   = make([dynamic] Sphere, len(world.spheres))
-            world_for_renderer.planes    = make([dynamic] Plane, len(world.planes))
-            world_for_renderer.materials = make([dynamic] Material, len(world.materials))
-            
-            copy(world_for_renderer.spheres[:], world.spheres[:])
-            copy(world_for_renderer.planes[:], world.planes[:])
-            copy(world_for_renderer.materials[:], world.materials[:])
-            
-            render_image = &quality_image
-            if request_quality_render {
-                request_quality_render = false
-                world_for_renderer.ray_per_pixel = quality_rays_per_pixel
+        for &render in renders {
+            if !render.active {
+                if render.requested {
+                    render.requested = false
+                    render.active = true
+                    
+                    render.world.bounces_computed = 0
+                    render.world.loops_computed   = 0
+                    render.world.tiles_retired    = 0
+                    render.world.pixels_done      = 0
+                    
+                    render.world.all_brdf_values = world.all_brdf_values
+                    
+                    make_by_pointer(&render.world.spheres,   len(world.spheres),   render.allocator)
+                    make_by_pointer(&render.world.planes,    len(world.planes),    render.allocator)
+                    make_by_pointer(&render.world.materials, len(world.materials), render.allocator)
+                    
+                    copy(render.world.spheres[:],   world.spheres[:])
+                    copy(render.world.planes[:],    world.planes[:])
+                    copy(render.world.materials[:], world.materials[:])
+                    
+                    render.start = enqueue_render_work(render.allocator, render.image, core_count, &render.world, camera, &render.queue)
+                }
             } else {
-                assert(request_fast_render)
-                request_fast_render = false
-                
-                render_image = &fast_image
-                world_for_renderer.ray_per_pixel = fast_rays_per_pixel
-            }
-            
-            begin_one_render(render_image^, core_count, &world_for_renderer, camera, &work_queue)
-            
-        }
-        
-        if render_active {
-            if work_is_completed(&work_queue) {
-                complete_all_work(&work_queue)
-                
-                render_active = false
-                
-                load_image_into_texture(&main_texture, quality_image)
-                load_image_into_texture(&side_texture, fast_image)
-                
-                delete(world_for_renderer.spheres)
-                delete(world_for_renderer.planes)
-                delete(world_for_renderer.materials)
+                if work_is_completed(&render.queue) {
+                    complete_all_work(&render.queue)
+                    
+                    render.active = false
+                    render.end = time.now()
+                    free_all(render.allocator)
+                    load_image_into_texture(&render.texture, render.image)
+                }
             }
         }
         
@@ -264,45 +276,52 @@ main :: proc() {
             fast_image_is_focussed = !fast_image_is_focussed
         }
         
-        if rl.IsKeyPressed(.F5) && !render_active {
+        if rl.IsKeyPressed(.F5) && !quality_render.active {
             output_path := "./render.bmp"
-            img.write_bmp(ctprint("%", output_path), quality_image.width, quality_image.height, 4, &quality_image.data[0])
+            img.write_bmp(ctprint("%", output_path), quality_render.image.width, quality_render.image.height, 4, &quality_render.image.data[0])
             cwd, _ := os.get_working_directory(context.temp_allocator)
             print("Wrote ouput to %/%\n", cwd, output_path)
         }
         
         ////////////////////////////////////////////////
         
-        rl.BeginDrawing()
-        rl.ClearBackground({0x18, 0x18, 0x18, 0xff})
-        if fast_image_is_focussed {
-            rl.DrawTextureEx(side_texture, 0, 0, fast_factor, rl.WHITE)
-            rl.DrawTextureEx(main_texture, vec_cast(f32, window_size.x - main_texture.width / fast_factor, 0), 0, 1.0 / fast_factor, rl.WHITE)
-        } else {
-            rl.DrawTextureEx(main_texture, 0, 0, 1, rl.WHITE)
-            rl.DrawTextureEx(side_texture, vec_cast(f32, window_size.x - side_texture.width, 0), 0, 1, rl.WHITE)
-        }
-        
         layout: Layout
         layout.font = font
         layout.at = ui_rect.min
         
-        display_line(&layout, "rays per pixel: quality % / fast % ", quality_rays_per_pixel, fast_rays_per_pixel)
-        
-        if render_active {
-            if !work_is_completed(&work_queue) {
-                total_pixels := render_image.width * render_image.height
-                done_percentage := cast(f32) world_for_renderer.pixels_done / cast(f32) total_pixels
-                
-                before := layout.at
-                text_width := display_line(&layout, "Rendering")
-                
-                progress_p := before + { text_width + 10, 0 }
-                total_size: f32 = get_dimension(ui_rect).x / 10
-                rl.DrawRectangleLinesEx({ progress_p.x, progress_p.y, total_size, FontSize}, 2, rl.WHITE)
-                rl.DrawRectangleV(progress_p, { linear_blend(cast(f32) 0, total_size, done_percentage) , FontSize}, rl.WHITE)
-            }
+        if fast_image_is_focussed {
+            rl.DrawTextureEx(fast_render.texture, 0, 0, fast_factor, rl.WHITE)
+            rl.DrawTextureEx(quality_render.texture, vec_cast(f32, window_size.x - quality_render.texture.width / fast_factor, 0), 0, 1.0 / fast_factor, rl.WHITE)
         } else {
+            rl.DrawTextureEx(quality_render.texture, 0, 0, 1, rl.WHITE)
+            rl.DrawTextureEx(fast_render.texture, vec_cast(f32, window_size.x - fast_render.texture.width, 0), 0, 1, rl.WHITE)
+        }
+        
+        display_line(&layout, "rays per pixel: quality % / fast % ", quality_render.world.rays_per_pixel, fast_render.world.rays_per_pixel)
+        
+        for &render in renders {
+            layout_begin_horizontal(&layout)
+            end := render.active ? time.now() : render.end
+            display_line(&layout, "Render took: %", time.diff(render.start, end))
+            
+            if render.active && !work_is_completed(&render.queue){
+                total_pixels := render.image.width * render.image.height
+                done_percentage := cast(f32) render.world.pixels_done / cast(f32) total_pixels
+                
+                layout_advance(&layout, 10)
+                bar_p := layout.at
+                bar_width  := get_dimension(ui_rect).x / 10
+                bar_height := cast(f32) FontSize * 0.8
+                
+                rect     := rectangle_min_dimension(bar_p, v2{bar_width,                                             bar_height})
+                progress := rectangle_min_dimension(bar_p, v2{linear_blend(cast(f32) 0, bar_width, done_percentage), bar_height})
+                rl.DrawRectangleRec(to_rl_rect(add_radius(rect, 1)), rl.BLACK)
+                rl.DrawRectangleLinesEx(to_rl_rect(rect), 2, rl.WHITE)
+                rl.DrawRectangleRec(to_rl_rect(progress), rl.WHITE)
+                layout_advance(&layout, bar_width)
+            }
+            
+            layout_end_horizontal(&layout)
             layout_advance(&layout, FontSize)
         }
         
@@ -319,10 +338,10 @@ main :: proc() {
                 defer layout_unindent(&layout)
                 
                 display_slider(&layout, 360, &material, 0, cast(f32) len(material_names)-0.51, "Material Index")
-                if sphere.material != round(u32, material) do request_fast_render = true
+                if sphere.material != round(u32, material) do fast_render.requested = true
                 sphere.material = round(u32, material)
-                if display_slider(&layout,    240, &sphere.radius, 0.001, 10, "Radius")                      do request_fast_render = true
-                if display_slider_v3(&layout, 240, &sphere.center, -10, 10, "Center", flags = { .relative }) do request_fast_render = true
+                if display_slider  (&layout, 240, &sphere.radius, 0.001, 10, "Radius")                      do fast_render.requested = true
+                if display_slider_v(&layout, 240, &sphere.center, -10, 10, "Center", flags = { .relative }) do fast_render.requested = true
                 
                 layout_advance(&layout, 10)
             }
@@ -341,11 +360,11 @@ main :: proc() {
                 defer layout_unindent(&layout)
                 
                 display_slider(&layout, 360, &material, 0, cast(f32) len(material_names)-0.51, "Material Index")
-                if plane.material != round(u32, material) do request_fast_render = true
+                if plane.material != round(u32, material) do fast_render.requested = true
                 plane.material = round(u32, material)
                 
-                if display_slider(&layout,    240, &plane.radius, 0.1, 10, "Radius")                        do request_fast_render = true
-                if display_slider_v3(&layout, 240, &plane.center, -10, 10, "Center", flags = { .relative }) do request_fast_render = true
+                if display_slider  (&layout, 240, &plane.radius, 0.1, 1000, "Radius", flags = { .logarithmic }) do fast_render.requested = true
+                if display_slider_v(&layout, 240, &plane.center, -10, 10,   "Center", flags = { .relative })    do fast_render.requested = true
                 
                 layout_advance(&layout, 10)
             }
@@ -363,7 +382,7 @@ main :: proc() {
                 layout_indent(&layout)
                 defer layout_unindent(&layout)
                 
-                if display_slider(&layout, 240, &material.scatter, 0, 1, "Scatter")  do request_fast_render = true
+                if display_slider(&layout, 240, &material.scatter, 0, 1, "Scatter")  do fast_render.requested = true
                 
                 layout_advance(&layout, 10)
                 layout_begin_horizontal(&layout)
@@ -377,7 +396,7 @@ main :: proc() {
                     before := color
                     size := to_rl_rect(rectangle_min_dimension(layout.at, color_size))
                     rl.GuiColorPicker(size, "", &color)
-                    if color != before do request_fast_render = true
+                    if color != before do fast_render.requested = true
                     material.emit = rl.ColorNormalize(color).rgb
                     
                     layout_advance(&layout, color_size + 50)
@@ -392,7 +411,7 @@ main :: proc() {
                     before := color
                     size := to_rl_rect(rectangle_min_dimension(layout.at, color_size))
                     rl.GuiColorPicker(size, "", &color)
-                    if color != before do request_fast_render = true
+                    if color != before do fast_render.requested = true
                     material.reflect = rl.ColorNormalize(color).rgb
                 }
                 layout_end_horizontal(&layout)
@@ -405,16 +424,47 @@ main :: proc() {
     }
 }
 
+init_render :: proc (render: ^Render, rays_per_pixel: u32, max_bounce_count: u32, image_width: i32, image_height: i32, core_count: i32) {
+    render.world.rays_per_pixel = rays_per_pixel
+    render.world.max_bounce_count = max_bounce_count
+    
+    render.allocator = arena_allocator(&render.arena)
+    
+    render.image.width  = image_width
+    render.image.height = image_height
+    render.image.data   = make_slice(context.allocator, [] Color, render.image.width * render.image.height)
+    
+    create_infos, err := make_slice(context.allocator, [] CreateThreadInfo, core_count) // @leak
+    init_work_queue(&render.queue, create_infos)
+}
+
 load_image_into_texture :: proc (texture: ^rl.Texture, image: Image) {
+    rl.UnloadTexture(texture^)
+    
     rl_image := rl.Image {
-        data = raw_data(image.data),
-        width = image.width,
-        height = image.height,
+        data    = raw_data(image.data),
+        width   = image.width,
+        height  = image.height,
         mipmaps = 1,
-        format = .UNCOMPRESSED_R8G8B8A8,
+        format  = .UNCOMPRESSED_R8G8B8A8,
     }
     
     texture^ = rl.LoadTextureFromImage(rl_image)
+}
+
+axis_angle_rotation :: proc(axis: v3, angle: f32) -> m4 {
+    cos_angle := cos(angle)
+    sin_angle := sin(angle)
+    inv_angle := 1.0 - cos_angle
+    
+    x, y, z := axis.x, axis.y, axis.z
+    
+    return m4 {
+        inv_angle*x*x + cos_angle,   inv_angle*x*y - sin_angle*z, inv_angle*x*z + sin_angle*y, 0,
+        inv_angle*x*y + sin_angle*z, inv_angle*y*y + cos_angle,   inv_angle*y*z - sin_angle*x, 0,
+        inv_angle*x*z - sin_angle*y, inv_angle*y*z + sin_angle*x, inv_angle*z*z + cos_angle,   0,
+        0,                           0,                           0,                           1,
+    }
 }
 
 ////////////////////////////////////////////////
@@ -457,25 +507,25 @@ layout_unindent :: proc (layout: ^Layout) {
 ////////////////////////////////////////////////
 
 SliderFlag :: enum {
-    relative
-    // @todo(viktor): add logarithmic
+    relative,
+    logarithmic,
 }
 SliderFlags :: bit_set[SliderFlag]
 
-display_slider_v3 :: proc (layout: ^Layout, width: f32, value: ^v3, min: v3, max: v3, format: string = "", args: ..any, flags := SliderFlags{}) -> bool {
+// @copypasta
+display_slider_v :: proc (layout: ^Layout, width: f32, value: ^$V/[$N] $E, min: V, max: V, format: string = "", args: ..any, flags := SliderFlags{}) -> bool {
     layout_begin_horizontal(layout)
     if format != "" {
         display_line(layout, format, ..args)
         layout_advance(layout, 10)
     }
     
-    slider_width := (width - 20) / 3.0
+    slider_width := (width - 20) / len(V)
     result: bool
-    result ||= display_slider_raw(layout, slider_width, &value.x, min.x, max.x, flags = flags)
-    layout_advance(layout, 10)
-    result ||= display_slider_raw(layout, slider_width, &value.y, min.x, max.x, flags = flags)
-    layout_advance(layout, 10)
-    result ||= display_slider_raw(layout, slider_width, &value.z, min.x, max.x, flags = flags)
+    for i in 0..<len(V) {
+        result ||= display_slider_raw(layout, slider_width, &value[i], min[i], max[i], flags = flags)
+        layout_advance(layout, 10)
+    }
     layout_end_horizontal(layout)
     layout_advance(layout, FontSize)
     return result
@@ -483,7 +533,6 @@ display_slider_v3 :: proc (layout: ^Layout, width: f32, value: ^v3, min: v3, max
 
 display_slider :: proc (layout: ^Layout, width: f32, value: ^f32, min: f32, max: f32, format: string = "", args: ..any, flags : SliderFlags = {}) -> bool {
     layout_begin_horizontal(layout)
-    before := layout^
     if format != "" {
         display_line(layout, format, ..args)
         layout_advance(layout, 10)
@@ -507,9 +556,23 @@ display_slider_raw :: proc (layout: ^Layout, width: f32, value: ^f32, min: f32, 
     bounds := rectangle_min_dimension(layout.at, size)
     layout_advance(layout, size)
     
-    before_value := value^
-    rl.GuiSlider(to_rl_rect(bounds), "", "", value, min, max)
-    result := value^ != before_value
+    result: bool
+    if .logarithmic in flags {
+        editing_value := math.ln(value^)
+        min = math.ln(min)
+        max = math.ln(max)
+        rl.GuiSlider(to_rl_rect(bounds), "", "", &editing_value, min, max)
+        
+        new_value := math.exp(editing_value)
+        result = new_value != value^
+        value^ = new_value
+    } else {
+        editing_value := value^
+        rl.GuiSlider(to_rl_rect(bounds), "", "", &editing_value, min, max)
+        
+        result = editing_value != value^
+        value^ = editing_value
+    }
     
     return result
 }

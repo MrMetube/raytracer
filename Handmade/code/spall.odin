@@ -35,7 +35,7 @@ SpallBufferSize :: 1 * Gigabyte
 @(disabled=!SpallEnabled)
 init_spall :: proc (thread_index: u32 = 0, location := #caller_location) {
     spall_ctx = spall.context_create("trace.spall", 10 * time.Millisecond)
-    err := make(&backing_buffer, SpallBufferSize)
+    err := make_by_pointer(&backing_buffer, SpallBufferSize)
     assert(err == nil)
     spall_buffer = spall.buffer_create(backing_buffer, thread_index)
 }
