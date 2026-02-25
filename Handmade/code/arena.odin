@@ -249,12 +249,6 @@ check_arena :: proc (arena: ^Arena) {
 ////////////////////////////////////////////////
 // Wrappers for base:runtime 
 
-Allocator          :: runtime.Allocator
-Allocator_Error    :: runtime.Allocator_Error
-Allocator_Mode     :: runtime.Allocator_Mode
-Allocator_Mode_Set :: runtime.Allocator_Mode_Set
-
-
 @(require_results)
 make_struct :: proc (allocator: Allocator, $T: typeid, params := DefaultPushParams, loc := #caller_location) -> (^T, Allocator_Error) #optional_allocator_error {
     data, error := make_size(allocator, size_of(T), align_of(T), params, loc)

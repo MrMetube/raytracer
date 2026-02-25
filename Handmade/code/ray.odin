@@ -279,18 +279,19 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
     
     for _ in 0..<lane_ray_count {
         jitter := random_unilateral(entropy, lane_v2)
-        off := lane_v2{film_x, film_y} + jitter * pixel_size
-        film_p := film_center + (off.x*camera_x*half_film_w + off.y*camera_y * half_film_h) 
+        offset := lane_v2{film_x, film_y} + jitter * pixel_size
+        film_p := film_center + (offset.x*camera_x*half_film_w + offset.y*camera_y * half_film_h) 
         
         ray_o := camera_p
         ray_d := normalize_or_zero(film_p - camera_p)
         
-        min_t: lane_f32 = 0.0001
-        attenuation: lane_v3 = 1
-        lane_mask: lane_u32 = 0xffffffff
+        min_t       := cast(lane_f32) 0.0001
+        attenuation := cast(lane_v3) 1
+        lane_mask   := lane_true
         sample: lane_v3
+        
         for _ in 0..<max_bounce_count {
-            closest_t: lane_f32 = +Infinity
+            closest_t := cast(lane_f32) +Infinity
             
             hit_mat_index: lane_u32
             did_hit: lane_u32
@@ -307,8 +308,8 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
             for &plane in world.planes {
                 tolerance :: 0.00001
                 
-                plane_normal := vec_cast(lane_f32, plane.normal)
-                plane_tangent := vec_cast(lane_f32, plane.tangent)
+                plane_normal   := vec_cast(lane_f32, plane.normal)
+                plane_tangent  := vec_cast(lane_f32, plane.tangent)
                 plane_binormal := vec_cast(lane_f32, plane.binormal)
                 
                 center := vec_cast(lane_f32, plane.center)
@@ -333,7 +334,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 hit_mask := denom_mask & t_mask
                 
                 conditional_assign(hit_mask, &closest_t, t)
-                conditional_assign(hit_mask, &did_hit, 0xffffffff)
+                conditional_assign(hit_mask, &did_hit, lane_true)
                 
                 conditional_assign(hit_mask, &hit_mat_index, plane.material)
                 
@@ -530,7 +531,7 @@ gather :: proc (array: [] $T, index: lane_u32, $member: string, $member_type: ty
 }
 
 gather_no_mask :: proc (pointer: lane_pmm, $T: typeid) -> T {
-    result := simd.gather(pointer, cast(T) 0, cast(lane_u32) 0xffffffff)
+    result := simd.gather(pointer, cast(T) 0, lane_true)
     return result
 }
 

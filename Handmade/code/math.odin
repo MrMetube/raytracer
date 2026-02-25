@@ -53,6 +53,10 @@ when LaneWidth != 1 {
     lane_f64 :: f64
 }
 
+lane_true  :: cast(lane_u32) 0xffffffff
+lane_false :: cast(lane_u32) 0
+
+
 m4 :: matrix[4,4] f32
 
 Rectangle   :: struct($T: typeid) { min, max: T }
@@ -371,8 +375,20 @@ when LaneWidth != 1 {
     shift_left    :: simd.shl
     shift_right   :: simd.shr
     horizontal_add :: simd.reduce_add_pairs
-    maximum :: simd.max
-    minimum :: simd.min
+    maximum :: proc (a: $T, b: T) -> T {
+        when intrinsics.type_is_simd_vector(T) {
+            return simd.max(a, b)
+        } else {
+            return max(a, b)
+        }
+    }
+    minimum :: proc (a: $T, b: T) -> T {
+        when intrinsics.type_is_simd_vector(T) {
+            return simd.min(a, b)
+        } else {
+            return min(a, b)
+        }
+    }
     
     extract_v3 :: proc (a: lane_v3, #any_int n: u32) -> (result: v3) {
         result.x = extract(a.x, n)
@@ -412,7 +428,7 @@ when LaneWidth != 1 {
 } else {
     conditional_assign :: proc (mask: $M, dest: ^$D, value: D) {
         mask := mask
-        mask = mask == 0 ? 0 : 0xffffffff
+        mask  = mask == 0 ? lane_false : lane_true
         when intrinsics.type_is_array(D) {
             #unroll for i in 0..<len(D) {
                 conditional_assign(mask, &dest[i], value[i])
@@ -421,9 +437,9 @@ when LaneWidth != 1 {
             dest ^= cast(D) (((cast(^M)dest)^ &~ mask) | (transmute(M) value & mask))
         }
     }
-    greater_equal  :: proc (a, b: $T) -> u32 { return a >= b ? 0xffffffff : 0}
-    greater_than   :: proc (a, b: $T) -> u32 { return a >  b ? 0xffffffff : 0}
-    less_than      :: proc (a, b: $T) -> u32 { return a <  b ? 0xffffffff : 0}
+    greater_equal  :: proc (a, b: $T) -> u32 { return a >= b ? lane_true : lane_false}
+    greater_than   :: proc (a, b: $T) -> u32 { return a >  b ? lane_true : lane_false}
+    less_than      :: proc (a, b: $T) -> u32 { return a <  b ? lane_true : lane_false}
     horizontal_add :: proc (a: $T) -> T { return a}
     
     shift_left    :: proc (a: $T, n: u32) -> T { return a << n }
@@ -625,8 +641,30 @@ add_offset :: proc(rect: $R/Rectangle($T), offset: T) -> (result: R) {
 contains :: proc(rect: Rectangle($T), point: T) -> (result: b32) {
     result = true
     #unroll for i in 0..<len(T) {
-        result &&= rect.min[i] < point[i] && point[i] < rect.max[i] 
+        result &&= rect.min[i] <= point[i] && point[i] < rect.max[i] 
     }
+    return result
+}
+
+contains_inclusive :: proc(rect: Rectangle($T), point: T) -> (result: b32) {
+    result = true
+    #unroll for i in 0..<len(T) {
+        result &&= rect.min[i] <= point[i] && point[i] <= rect.max[i] 
+    }
+    return result
+}
+
+dimension_contains :: proc(dimension: $V/[$N]$T, point: V) -> (result: b32) {
+    result = true
+    #unroll for i in 0..<N {
+        result &&= 0 <= point[i] && point[i] < dimension[i] 
+    }
+    return result
+}
+
+contains_rect :: proc(a: $R/Rectangle($T), b: R) -> (result: b32) {
+    u := get_union(a, b)
+    result = a == u
     return result
 }
 
@@ -668,6 +706,14 @@ get_xy :: proc(rect: Rectangle3) -> (result: Rectangle2) {
     result.min = rect.min.xy
     result.max = rect.max.xy
     
+    return result
+}
+
+rectangle_modulus :: proc (rect: $R/Rectangle($T), p: T) -> (result: T) {
+    dim := get_dimension(rect)
+    offset := p - rect.min
+    result = (((offset % dim) + dim) % dim) + rect.min
+    assert(contains(rect, result))
     return result
 }
 

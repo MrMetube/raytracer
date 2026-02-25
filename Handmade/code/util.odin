@@ -240,6 +240,11 @@ make_by_pointer_soa_dynamic_array_len_cap :: proc (pointer: ^$T/#soa [dynamic] $
 
 ////////////////////////////////////////////////
 
+Allocator          :: runtime.Allocator
+Allocator_Error    :: runtime.Allocator_Error
+Allocator_Mode     :: runtime.Allocator_Mode
+Allocator_Mode_Set :: runtime.Allocator_Mode_Set
+
 Raw_Dynamic_Array :: struct {
     data: rawptr,
     len:  int,
