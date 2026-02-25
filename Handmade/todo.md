@@ -1,9 +1,9 @@
 ### To be done
+- Add collections of basic elements (oct-tree)
 - Make UI to add new spheres and planes
-- UI for Brdfs, how to display? Maybe another view with just the selected object rendered alone. Needs a render task queue. 
-- Add bounding volumes(Rectangle) and triangles
-- Add collections of basic elements (oct-tree) 
+- UI for Brdfs, how to display? Maybe another view with just the selected object rendered alone. Needs a render task queue.
 - Select/Move(scale/rotate) objects in the editor ui? Needs a fast rendering view. 
+
 - Add refraction (and make it variable like .scatter with a basic lerp) 
   - Ensure that the refraction is correct
 

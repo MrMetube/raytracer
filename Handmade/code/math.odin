@@ -369,9 +369,17 @@ when LaneWidth != 1 {
         }
     }
 
+    absolute      :: simd.abs
     greater_equal :: simd.lanes_ge
+    less_equal    :: simd.lanes_le
     greater_than  :: simd.lanes_gt
     less_than     :: simd.lanes_lt
+    
+    approximate_equal :: proc (a, b: lane_f32, epsilon : lane_f32 = 0.000001) -> lane_u32 {
+        result := less_than(absolute(a - b), epsilon)
+        return result
+    }
+
     shift_left    :: simd.shl
     shift_right   :: simd.shr
     horizontal_add :: simd.reduce_add_pairs
@@ -440,6 +448,7 @@ when LaneWidth != 1 {
     greater_equal  :: proc (a, b: $T) -> u32 { return a >= b ? lane_true : lane_false}
     greater_than   :: proc (a, b: $T) -> u32 { return a >  b ? lane_true : lane_false}
     less_than      :: proc (a, b: $T) -> u32 { return a <  b ? lane_true : lane_false}
+    less_equal     :: proc (a, b: $T) -> u32 { return a <= b ? lane_true : lane_false}
     horizontal_add :: proc (a: $T) -> T { return a}
     
     shift_left    :: proc (a: $T, n: u32) -> T { return a << n }

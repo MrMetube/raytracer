@@ -44,8 +44,14 @@ Sphere :: struct {
     material: u32,
 }
 
+Triangle :: struct {
+    a, b, c: v3,
+    material: u32,
+}
+
 World :: struct {
     spheres:   [dynamic] Sphere,
+    triangles: [dynamic] Triangle,
     planes:    [dynamic] Plane,
     materials: [dynamic] Material,
     all_brdf_values: [dynamic] v3,
@@ -293,7 +299,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
         for _ in 0..<max_bounce_count {
             closest_t := cast(lane_f32) +Infinity
             
-            hit_mat_index: lane_u32
+            hit_material_index: lane_u32
             did_hit: lane_u32
             
             next_o: lane_v3
@@ -303,7 +309,9 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
             binormal: lane_v3
             
             bounces_computed_lanes += 1 & lane_mask
-            loops_computed_lanes += 1
+            loops_computed_lanes   += 1
+            
+            ////////////////////////////////////////////////
             
             for &plane in world.planes {
                 tolerance :: 0.00001
@@ -318,31 +326,80 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 denom := dot(plane_normal, ray_d)
                 denom_mask := less_than(denom, -tolerance) | greater_than(denom, tolerance)
                 
-                if denom_mask == 0 do continue
+                if denom_mask == lane_false do continue
                 
                 t := dot(plane_normal, center - ray_o) / denom
                 t_mask := greater_than(t, min_t) & less_than(t, closest_t)
-                if t_mask == 0 do continue
+                if t_mask == lane_false do continue
                 
                 hit_point := ray_o + t * ray_d
                 local_hit := hit_point - center
                 t_mask &= less_than(simd.abs(local_hit.x), radius) 
                 t_mask &= less_than(simd.abs(local_hit.y), radius)
                 t_mask &= less_than(simd.abs(local_hit.z), radius)
-                if t_mask == 0 do continue
+                if t_mask == lane_false do continue
                 
                 hit_mask := denom_mask & t_mask
                 
                 conditional_assign(hit_mask, &closest_t, t)
                 conditional_assign(hit_mask, &did_hit, lane_true)
                 
-                conditional_assign(hit_mask, &hit_mat_index, plane.material)
+                conditional_assign(hit_mask, &hit_material_index, plane.material)
                 
                 conditional_assign(hit_mask, &next_o, ray_o + t*ray_d)
                 
                 conditional_assign(hit_mask, &normal,   normalize_or_zero(plane_normal))
                 conditional_assign(hit_mask, &tangent,  plane_tangent)
                 conditional_assign(hit_mask, &binormal, plane_binormal)
+            }
+            
+            for &triangle in world.triangles {
+                a := vec_cast(lane_f32, triangle.a)
+                b := vec_cast(lane_f32, triangle.b)
+                c := vec_cast(lane_f32, triangle.c)
+                
+                ab := b - a
+                ac := c - a
+                ray_cross_ac := cross(ray_d, ac)
+                determinant  := dot(ab, ray_cross_ac)
+                
+                not_parallel_mask := ~approximate_equal(determinant, 0, 0.0000001)
+                if not_parallel_mask == lane_false do continue
+                
+                inv_determinant := 1.0 / determinant
+                s := ray_o - a
+                u := inv_determinant * dot(s, ray_cross_ac)
+                
+                u_mask := greater_equal(u, 0) & less_equal(u, 1)
+                if u_mask == lane_false do continue
+                
+                s_cross_ab := cross(s, ab)
+                v := inv_determinant * dot(ray_d, s_cross_ab)
+                
+                v_mask := greater_equal(v, 0) & less_equal(u + v, 1)
+                if v_mask == lane_false do continue
+                
+                t := inv_determinant * dot(ac, s_cross_ab)
+                t_mask := greater_than(t, min_t) & less_than(t, closest_t)
+                if t_mask == lane_false do continue
+                
+                hit_mask := not_parallel_mask & u_mask & v_mask & t_mask
+                
+                // @note(viktor): Assuming counter-clockwise winding order
+                triangle_normal   := normalize_or_zero(cross(ab, ac))
+                triangle_tangent  := normalize_or_zero(ab)
+                triangle_binormal := normalize_or_zero(cross(triangle_normal, triangle_tangent))
+                
+                conditional_assign(hit_mask, &closest_t, t)
+                conditional_assign(hit_mask, &did_hit, lane_true)
+                
+                conditional_assign(hit_mask, &hit_material_index, triangle.material)
+                
+                conditional_assign(hit_mask, &next_o, ray_o + t*ray_d)
+                
+                conditional_assign(hit_mask, &normal,   triangle_normal)
+                conditional_assign(hit_mask, &tangent,  triangle_tangent)
+                conditional_assign(hit_mask, &binormal, triangle_binormal)
             }
             
             for &sphere in world.spheres {
@@ -357,7 +414,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 tolerance :: 0.00001
                 root_mask := greater_equal(root, 0)
                 
-                if root_mask == 0 do continue
+                if root_mask == lane_false do continue
                 
                 t_pos := (-b + root) / (2 * a)
                 t_neg := (-b - root) / (2 * a)
@@ -368,14 +425,14 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 
                 t_mask   := greater_than(t, min_t) & less_than(t, closest_t)
                 
-                if t_mask == 0 do continue
+                if t_mask == lane_false do continue
                 
                 hit_mask := root_mask & t_mask
                 
                 conditional_assign(hit_mask, &closest_t, t)
                 conditional_assign(hit_mask, &did_hit, 0xffffffff)
                 
-                conditional_assign(hit_mask, &hit_mat_index, sphere.material)
+                conditional_assign(hit_mask, &hit_material_index, sphere.material)
                 
                 // @todo(viktor): reuse the next_origin calculation
                 conditional_assign(hit_mask, &next_o, ray_o + t*ray_d)
@@ -388,9 +445,11 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 conditional_assign(hit_mask, &binormal, s_binormal)
             }
             
-            hit_emit    := gather(world.materials[:], hit_mat_index, "emit",    type_of(Material{}.emit), lane_v3)
-            hit_reflect := gather(world.materials[:], hit_mat_index, "reflect", type_of(Material{}.reflect), lane_v3)
-            hit_scatter := gather(world.materials[:], hit_mat_index, "scatter", type_of(Material{}.scatter), lane_f32)
+            ////////////////////////////////////////////////
+            
+            hit_emit    := gather(world.materials[:], hit_material_index, "emit",    type_of(Material{}.emit), lane_v3)
+            hit_reflect := gather(world.materials[:], hit_material_index, "reflect", type_of(Material{}.reflect), lane_v3)
+            hit_scatter := gather(world.materials[:], hit_material_index, "scatter", type_of(Material{}.scatter), lane_f32)
             
             // only allow world.no_hit on the first time we didnt hit anything
             // @todo(viktor): make this a helper I guess
@@ -402,16 +461,15 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
             sample += attenuation * hit_emit
             
             lane_mask &= did_hit
-            if lane_mask == 0 {
-                break
-            }
+            if lane_mask == lane_false do break
+            
             // Bounce
             pure_bounce   := reflect(ray_d, normal)
             random_bounce := normalize_or_zero(normal + random_bilateral(entropy, lane_v3))
             
             next_d := linear_blend(pure_bounce, random_bounce, hit_scatter)
             
-            reflectance := brdf_lookup(world.all_brdf_values[:], world.materials[:], hit_mat_index, -ray_d, normal, tangent, binormal, next_d)
+            reflectance := brdf_lookup(world.all_brdf_values[:], world.materials[:], hit_material_index, -ray_d, normal, tangent, binormal, next_d)
             reflectance *= hit_reflect
             conditional_assign(did_hit, &attenuation, attenuation * reflectance)
             

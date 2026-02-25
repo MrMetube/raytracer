@@ -56,41 +56,46 @@ main :: proc() {
     load_brdf_merl("./BRDFDatabase/brdfs/purple-paint.binary", &world.materials[5].brdf, &world.all_brdf_values); material_names[5] = "purple-paint"
     load_brdf_merl("./BRDFDatabase/brdfs/white-marble.binary", &world.materials[6].brdf, &world.all_brdf_values); material_names[6] = "white-marble"
     
-    append(&world.spheres, Sphere { center = { 0, 0, 0},   radius = 1,  material = 2 })
-    append(&world.spheres, Sphere { center = { 3,-2, 0.4}, radius = .1, material = 3 })
-    append(&world.spheres, Sphere { center = {-2,-1, 2},   radius = 1,  material = 1 })
-    append(&world.spheres, Sphere { center = { 1,-1, 3},   radius = 1,  material = 5 })
-    append(&world.spheres, Sphere { center = {-2, 3, 0},   radius = 2,  material = 6 })
+    // append(&world.spheres, Sphere { center = { 0, 0, 0},   radius = 1,  material = 2 })
+    // append(&world.spheres, Sphere { center = { 3,-2, 0.4}, radius = .1, material = 3 })
+    // append(&world.spheres, Sphere { center = {-2,-1, 2},   radius = 1,  material = 1 })
+    // append(&world.spheres, Sphere { center = { 1,-1, 3},   radius = 1,  material = 5 })
+    // append(&world.spheres, Sphere { center = {-2, 3, 0},   radius = 2,  material = 6 })
     
     area_size := cast(f32) 20
-    gen_entropy := seed_random_series(565)
-    for _ in 0..< square(area_size) * 1.2 {
-        radius := random_between_f32(&gen_entropy, 0.1, 0.4)
-        
-        bounds := radius + 0.05
-        
-        center: v3
-        center.z = bounds
-        
-        attemps: for i in 0..< 10 {
-            center.xy = random_bilateral(&gen_entropy, v2) * (area_size - bounds)
-            for other in world.spheres {
-                if length_squared(other.center - center) > square(other.radius + bounds) {
-                    break attemps
+    if false {
+        gen_entropy := seed_random_series(565)
+        for _ in 0..< square(area_size) * 1.2 {
+            radius := random_between_f32(&gen_entropy, 0.1, 0.4)
+            
+            bounds := radius + 0.05
+            
+            center: v3
+            center.z = bounds
+            
+            attemps: for _ in 0..< 10 {
+                center.xy = random_bilateral(&gen_entropy, v2) * (area_size - bounds)
+                for other in world.spheres {
+                    if length_squared(other.center - center) > square(other.radius + bounds) {
+                        break attemps
+                    }
                 }
             }
+            
+            material := random_between_u32(&gen_entropy, 1, auto_cast len(world.materials) - 1)
+            append(&world.spheres, Sphere { center, radius, material })
         }
-        
-        material := random_between_u32(&gen_entropy, 1, auto_cast len(world.materials) - 1)
-        append(&world.spheres, Sphere { center, radius, material })
     }
-    
+        
     append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 1 })
     append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
     append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size-0.1}, radius = area_size/5, material = 3 })
-    append(&world.planes, Plane { normal = { 1, 0, 0}, tangent = {}, binormal = {}, center = {-area_size, 0, 0},     radius = area_size,   material = 2 })
-    append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 2 })
-    append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
+    // append(&world.planes, Plane { normal = { 1, 0, 0}, tangent = {}, binormal = {}, center = {-area_size, 0, 0},     radius = area_size,   material = 2 })
+    // append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 2 })
+    // append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
+    
+    teapot := load_teapot(4)
+    append(&world.triangles, ..teapot)
     
     camera: Camera
     camera.p = {0, -7, 1}
@@ -252,11 +257,13 @@ main :: proc() {
                     
                     make_by_pointer(&render.world.spheres,   len(world.spheres),   render.allocator)
                     make_by_pointer(&render.world.planes,    len(world.planes),    render.allocator)
+                    make_by_pointer(&render.world.triangles, len(world.triangles), render.allocator)
                     make_by_pointer(&render.world.materials, len(world.materials), render.allocator)
                     
                     copy(render.world.spheres[:],   world.spheres[:])
                     copy(render.world.planes[:],    world.planes[:])
                     copy(render.world.materials[:], world.materials[:])
+                    copy(render.world.triangles[:], world.triangles[:])
                     
                     render.start = enqueue_render_work(render.allocator, render.image, core_count, &render.world, camera, &render.queue)
                 }
@@ -434,7 +441,7 @@ init_render :: proc (render: ^Render, rays_per_pixel: u32, max_bounce_count: u32
     render.image.height = image_height
     render.image.data   = make_slice(context.allocator, [] Color, render.image.width * render.image.height)
     
-    create_infos, err := make_slice(context.allocator, [] CreateThreadInfo, core_count) // @leak
+    create_infos := make_slice(context.allocator, [] CreateThreadInfo, core_count) // @leak
     init_work_queue(&render.queue, create_infos)
 }
 
