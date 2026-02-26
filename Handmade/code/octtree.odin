@@ -1,0 +1,123 @@
+package main
+
+Node_Index :: distinct u32
+
+Base_Node :: struct {
+    first_subnode: Node_Index,
+    next_subnode:  Node_Index,
+    
+    first_value: Node_Index,
+    next_value:  Node_Index,
+    value_count: i16,
+    
+    bounds: Rectangle3,
+}
+
+/* 
+  - A Node is either a octtree node containing values and subnodes 
+    or a value node.
+  - Node_Index 0 is reserved for the nil-value / nil-node.
+  - The root of the tree is defined as index 1.
+  - It is currently not allowed to tree_append a octtree node.
+  
+  - The nodes of the tree may have subnodes.
+  - These are reached through the first_subnode from the parent and 
+    then through the next_subnode until an index of 0 is reached.
+  - Only tree nodes have the first/next_subnode and first_value set.
+  
+  - The values of a node are structured similarly and are reached 
+    through the first_value and then the next_value.
+  - Values only ever point to their next sibling.
+*/
+
+Nil_Index  :: 0
+Root_Index :: 1
+
+tree_init :: proc (tree: ^[dynamic] $Node, bounds: Rectangle3) {
+    append_nothing(tree) // nil
+    append_nothing(tree) // root
+    
+    root := &tree[Root_Index]
+    root.bounds = bounds
+}
+
+tree_append :: proc (temp_stack: ^[dynamic] Node_Index, tree: ^[dynamic] $Node, value: Node, values_per_node: i16 = 32, Dimesions := 3) -> bool {
+    Dimensions :: cast(u32) 3
+    
+    clear(temp_stack)
+    append(temp_stack, Root_Index)
+    
+    value_index := cast(Node_Index) len(tree)
+    append(tree, value)
+    
+    into_index: Node_Index
+    for len(temp_stack) > 0 {
+        node_index := pop(temp_stack)
+        node := &tree[node_index]
+        if !contains_rect(node.bounds, value.bounds) do continue
+        
+        // @todo(viktor): its seems to not matter how large a node is at the current scale of value nodes
+        // @todo(viktor): was this just because the subdivide was broken?
+        if node.value_count < values_per_node {
+            into_index = node_index
+            break
+        }
+        
+        // @note(viktor): subdivide node
+        if node.first_subnode == Nil_Index {
+            first_subnode_index := cast(Node_Index) len(tree)
+    
+            count :: 1 << Dimensions
+            for _ in 0..<count do append_nothing(tree)
+            
+            half := get_dimension(node.bounds) * 0.5
+            
+            for sector_index in 0 ..< count {
+                // @note(viktor): spread the bits into a vector like 0b101 -> {1, 0, 1}
+                factor: [Dimensions] f32
+                for axis in 0 ..< Dimensions {
+                    mask := 1 << axis
+                    factor[axis] = (sector_index & mask) == 0 ? 0 : 1
+                }
+                
+                // @note(viktor): reverse the indices so that they appear in order in the linked list
+                subnode_index := first_subnode_index + cast(Node_Index) (count - 1 - sector_index)
+                subnode := &tree[subnode_index]
+                subnode.bounds = rectangle_min_dimension(node.bounds.min + factor * half, half)
+                
+                subnode.next_subnode = node.first_subnode
+                node.first_subnode   = subnode_index
+            }
+        }
+        
+        sub_could_contain: bool
+        subs: for sub_index := node.first_subnode; sub_index != Nil_Index; sub_index = tree[sub_index].next_subnode {
+            sub := &tree[sub_index]
+            if contains_rect(sub.bounds, value.bounds) {
+                sub_could_contain = true
+                append(temp_stack, sub_index)
+                break subs
+            }
+        }
+        
+        if !sub_could_contain {
+            into_index = node_index
+            break
+        }
+    }
+    
+    result: bool
+    if into_index != Nil_Index {
+        result = true
+        
+        into  := &tree[into_index]
+        value := &tree[value_index]
+        
+        value.next_value = into.first_value
+        into.first_value = value_index
+        
+        into.value_count += 1
+    }
+    
+    return result
+}

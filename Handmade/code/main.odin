@@ -12,16 +12,17 @@ FontSize :: 20
 
 Render :: struct {
     requested: bool,
-    active: bool,
+    active:    bool,
+    
     start, end: time.Time,
     
     world: World,
     
-    image: Image,
+    image:   Image,
     texture: rl.Texture,
-    queue: WorkQueue,
+    queue:   WorkQueue,
     
-    arena: Arena,
+    arena:     Arena,
     allocator: Allocator,
 }
 
@@ -41,7 +42,7 @@ main :: proc() {
     append(&world.materials, Material{ emit    = { .3  , .4  , .5 },              })
     append(&world.materials, Material{ reflect = { .5  , .5  , .5 }, scatter = 1  })
     append(&world.materials, Material{ reflect = { .7  , .5  , .3 }, scatter = .8 })
-    append(&world.materials, Material{ emit    = { 3.5 , 2.0 , .5 }, scatter = 1. })
+    append(&world.materials, Material{ emit    = {  35 ,  20 , .5 }, scatter = 1. })
     append(&world.materials, Material{ reflect = { .2  , .8  , .2 }, scatter = .3 })
     append(&world.materials, Material{ reflect = { .65 , .1  , .7 }, scatter = .9 })
     append(&world.materials, Material{ reflect = { .9  , .9  , .8 }, scatter = .6 })
@@ -86,16 +87,116 @@ main :: proc() {
             append(&world.spheres, Sphere { center, radius, material })
         }
     }
-        
-    append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 1 })
-    append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
+    
+    append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 6 })
+    // append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
     append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size-0.1}, radius = area_size/5, material = 3 })
     // append(&world.planes, Plane { normal = { 1, 0, 0}, tangent = {}, binormal = {}, center = {-area_size, 0, 0},     radius = area_size,   material = 2 })
     // append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 2 })
     // append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
     
-    teapot := load_teapot(4)
+    teapot := load_teapot(0, 4)
     append(&world.triangles, ..teapot)
+    
+    ////////////////////////////////////////////////
+    
+    tree_init(&world.sphere_nodes, rectangle_center_dimension(v3{}, 128))
+    
+    stack := make_dynamic_array(context.temp_allocator, [dynamic] Node_Index, 0, 0)
+    
+    for sphere, index in world.spheres {
+        value: Sphere_Node
+        value.sphere_index = auto_cast index
+        
+        value.bounds = rectangle_center_dimension(sphere.center, sphere.radius)
+        
+        ok := tree_append(&stack, &world.sphere_nodes, value, values_per_node = 32)
+        assert(ok)
+    }
+    
+    clear(&stack)
+    
+    tree_init(&world.triangle_nodes, rectangle_center_dimension(v3{}, 128))
+    
+    for triangle, index in world.triangles {
+        value: Triangle_Node
+        value.triangle_index = auto_cast index
+        
+        value.bounds = rectangle_inverted_infinity(Rectangle3)
+        value.bounds = get_union_point(value.bounds, triangle.a)
+        value.bounds = get_union_point(value.bounds, triangle.b)
+        value.bounds = get_union_point(value.bounds, triangle.c)
+        append(&world.triangle_nodes, value)
+        
+        // utah 1
+        //    1   444 ms
+        //    2   460 ms
+        //    4   474 ms
+        //    8   510 ms
+        //   32   745 ms
+        //  128 ~1000 ms
+        // 1024 ~2500 ms
+        // 4096 ~4000 ms
+        
+        // utah 2
+        //    1   930 ms
+        //    2   940 ms
+        //    4   960 ms
+        //    8 ~1000 ms
+        //   32   xxx ms
+        //  128   xxx ms
+        // 1024   xxx ms
+        // 4096   xxx ms
+        ok := tree_append(&stack, &world.triangle_nodes, value, values_per_node = 8)
+        assert(ok)
+    }
+    
+    if false {
+        print_node :: proc (nodes: [dynamic] $T, level: int, it_index: Node_Index, count: ^i16) {
+            for _ in 0..<level * 4 do print(" ")
+            it := nodes[it_index]
+            print("node %\n", it_index)
+            count^ += it.value_count
+            if it.value_count != 0 {
+                for _ in 0..<level * 4 do print(" ")
+                print("values:\n")
+                for _ in 0..<(level+1) * 4 do print(" ")
+                for link := it.first_value; link != 0; link = nodes[link].next_value {
+                    print("%, ", link)
+                }
+                print("\n")
+            }
+            if it.first_subnode != 0 {
+                for _ in 0..<level * 4 do print(" ")
+                print("subnodes:\n")
+                for link := it.first_subnode; link != 0; link = nodes[link].next_subnode {
+                    print_node(nodes, level + 1, link, count)
+                }
+                for _ in 0..<level * 4 do print(" ")
+                print(";\n")
+            }
+        }
+        
+        print("// Spheres\n")
+        {
+            total_count: i16
+            print_node(world.sphere_nodes, 0, Root_Index, &total_count)
+            
+            print("Total count %/%\n", total_count, len(world.spheres))
+            print("Total nodes %\n", len(world.sphere_nodes))
+        }
+        print("////////////////////////////////////////////////\n")
+        print("// Triangles\n")
+        {
+            total_count: i16
+            print_node(world.triangle_nodes, 0, Root_Index, &total_count)
+            
+            print("Total count %/%\n", total_count, len(world.triangles))
+            print("Total nodes %\n", len(world.triangle_nodes))
+        }
+    }
+    
+    ////////////////////////////////////////////////
     
     camera: Camera
     camera.p = {0, -7, 1}
@@ -144,6 +245,8 @@ main :: proc() {
     ddp: v3
     dp: v3
     for !rl.WindowShouldClose() {
+        free_all(context.temp_allocator)
+        
         rl.BeginDrawing()
         rl.ClearBackground({0x18, 0x18, 0x18, 0xff})
         
@@ -255,15 +358,20 @@ main :: proc() {
                     
                     render.world.all_brdf_values = world.all_brdf_values
                     
-                    make_by_pointer(&render.world.spheres,   len(world.spheres),   render.allocator)
-                    make_by_pointer(&render.world.planes,    len(world.planes),    render.allocator)
-                    make_by_pointer(&render.world.triangles, len(world.triangles), render.allocator)
-                    make_by_pointer(&render.world.materials, len(world.materials), render.allocator)
+                    // @volatile
+                    make_by_pointer(&render.world.spheres,        len(world.spheres),        render.allocator)
+                    make_by_pointer(&render.world.planes,         len(world.planes),         render.allocator)
+                    make_by_pointer(&render.world.sphere_nodes,   len(world.sphere_nodes),   render.allocator)
+                    make_by_pointer(&render.world.triangle_nodes, len(world.triangle_nodes), render.allocator)
+                    make_by_pointer(&render.world.triangles,      len(world.triangles),      render.allocator)
+                    make_by_pointer(&render.world.materials,      len(world.materials),      render.allocator)
                     
-                    copy(render.world.spheres[:],   world.spheres[:])
-                    copy(render.world.planes[:],    world.planes[:])
-                    copy(render.world.materials[:], world.materials[:])
-                    copy(render.world.triangles[:], world.triangles[:])
+                    copy(render.world.spheres[:],        world.spheres[:])
+                    copy(render.world.sphere_nodes[:],   world.sphere_nodes[:])
+                    copy(render.world.triangle_nodes[:], world.triangle_nodes[:])
+                    copy(render.world.planes[:],         world.planes[:])
+                    copy(render.world.materials[:],      world.materials[:])
+                    copy(render.world.triangles[:],      world.triangles[:])
                     
                     render.start = enqueue_render_work(render.allocator, render.image, core_count, &render.world, camera, &render.queue)
                 }
@@ -332,6 +440,7 @@ main :: proc() {
             layout_advance(&layout, FontSize)
         }
         
+        // @todo(viktor): Rebuild the octtree if the spheres are edited in any way
         layout_advance(&layout, FontSize)
         if display_list(&layout, &show_spheres, "Spheres") {
             layout_indent(&layout)

@@ -146,6 +146,10 @@ vec_max :: proc (a: $T, b: T) -> (result: T) {
 vec_min :: proc (a: $T, b: T) -> (result: T) {
     when intrinsics.type_is_simd_vector(T) {
         result = simd.min(a, b)
+    } else when intrinsics.type_is_array(T) {
+        #no_bounds_check #unroll for i in 0..<len(T) {
+            result[i] = vec_min(a[i], b[i])
+        }
     } else {
         result = min(a, b)
     }

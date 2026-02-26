@@ -23,21 +23,7 @@ uv4 :: [4] u32
 
 LaneWidth :: 8
 
-when LaneWidth != 1 {
-    lane_f32 :: #simd [LaneWidth] f32
-    lane_u32 :: #simd [LaneWidth] u32
-    lane_i32 :: #simd [LaneWidth] i32
-    
-    lane_v2 :: [2] lane_f32
-    lane_v3 :: [3] lane_f32
-    lane_v4 :: [4] lane_f32
-    
-    lane_uv3 :: [3] lane_u32
-    
-    lane_pmm :: #simd [LaneWidth] pmm
-    lane_umm :: #simd [LaneWidth] umm
-    lane_f64 :: #simd [LaneWidth] f64
-} else {
+when LaneWidth == 1 {
     lane_f32 :: f32
     lane_u32 :: u32
     lane_i32 :: i32
@@ -51,6 +37,20 @@ when LaneWidth != 1 {
     lane_pmm :: pmm
     lane_umm :: umm
     lane_f64 :: f64
+} else {
+    lane_f32 :: #simd [LaneWidth] f32
+    lane_u32 :: #simd [LaneWidth] u32
+    lane_i32 :: #simd [LaneWidth] i32
+    
+    lane_v2 :: [2] lane_f32
+    lane_v3 :: [3] lane_f32
+    lane_v4 :: [4] lane_f32
+    
+    lane_uv3 :: [3] lane_u32
+    
+    lane_pmm :: #simd [LaneWidth] pmm
+    lane_umm :: #simd [LaneWidth] umm
+    lane_f64 :: #simd [LaneWidth] f64
 }
 
 lane_true  :: cast(lane_u32) 0xffffffff
@@ -200,10 +200,14 @@ round_v :: proc($T: typeid, v: [$N]$F) -> (result: [N]T) {
 }
 
 floor :: proc { floor_f, floor_v }
-floor_f :: proc($T: typeid, f: f32) -> (i: T) {
-    return cast(T) math.floor(f)
+floor_f :: proc($T: typeid, f: $F) -> (i: T) {
+    when F == lane_f32 {
+        return cast(T) simd.floor(f)
+    } else {
+        return cast(T) math.floor(f)
+    }
 }
-floor_v :: proc($T: typeid, fs: [$N]f32) -> [N]T {
+floor_v :: proc($T: typeid, fs: [$N] f32) -> [N] T {
     return vec_cast(T, simd.to_array(simd.floor(simd.from_array(fs))))
 }
 
@@ -358,7 +362,41 @@ linear_to_srgb :: proc(l: v3) -> (s: v3) {
 ////////////////////////////////////////////////
 // Simd operations
 
-when LaneWidth != 1 {
+when LaneWidth == 1 {
+    conditional_assign :: proc (mask: $M, dest: ^$D, value: D) {
+        mask := mask
+        mask  = mask == 0 ? lane_false : lane_true
+        when intrinsics.type_is_array(D) {
+            #unroll for i in 0..<len(D) {
+                conditional_assign(mask, &dest[i], value[i])
+            }
+        } else {
+            dest ^= cast(D) (((cast(^M)dest)^ &~ mask) | (transmute(M) value & mask))
+        }
+    }
+    greater_equal  :: proc (a: $T, b: T) -> u32 { return a >= b ? lane_true : lane_false}
+    greater_than   :: proc (a: $T, b: T) -> u32 { return a >  b ? lane_true : lane_false}
+    less_than      :: proc (a: $T, b: T) -> u32 { return a <  b ? lane_true : lane_false}
+    less_equal     :: proc (a: $T, b: T) -> u32 { return a <= b ? lane_true : lane_false}
+    horizontal_add :: proc (a: $T) -> T { return a}
+    
+    shift_left    :: proc (a: $T, n: u32) -> T { return a << n }
+    shift_right   :: proc (a: $T, n: u32) -> T { return a >> n }
+    
+    maximum :: max
+    minimum :: min
+    
+    extract :: proc (a: $T, n: u32) -> (result: T) { 
+        when intrinsics.type_is_array(T) {
+            #unroll for i in 0..<len(D) {
+                result[i] = a[i]
+            }
+        } else {
+            result = a
+        }
+        return result
+    }
+} else {
     conditional_assign :: proc (mask: $M, dest: ^$D, value: D) {
         when intrinsics.type_is_array(D) {
             #unroll for i in 0..<len(D) {
@@ -374,6 +412,7 @@ when LaneWidth != 1 {
     less_equal    :: simd.lanes_le
     greater_than  :: simd.lanes_gt
     less_than     :: simd.lanes_lt
+    equal         :: simd.lanes_eq
     
     approximate_equal :: proc (a, b: lane_f32, epsilon : lane_f32 = 0.000001) -> lane_u32 {
         result := less_than(absolute(a - b), epsilon)
@@ -432,40 +471,6 @@ when LaneWidth != 1 {
         } else {
             a^ = simd.replace(a^, n, value)
         }
-    }
-} else {
-    conditional_assign :: proc (mask: $M, dest: ^$D, value: D) {
-        mask := mask
-        mask  = mask == 0 ? lane_false : lane_true
-        when intrinsics.type_is_array(D) {
-            #unroll for i in 0..<len(D) {
-                conditional_assign(mask, &dest[i], value[i])
-            }
-        } else {
-            dest ^= cast(D) (((cast(^M)dest)^ &~ mask) | (transmute(M) value & mask))
-        }
-    }
-    greater_equal  :: proc (a, b: $T) -> u32 { return a >= b ? lane_true : lane_false}
-    greater_than   :: proc (a, b: $T) -> u32 { return a >  b ? lane_true : lane_false}
-    less_than      :: proc (a, b: $T) -> u32 { return a <  b ? lane_true : lane_false}
-    less_equal     :: proc (a, b: $T) -> u32 { return a <= b ? lane_true : lane_false}
-    horizontal_add :: proc (a: $T) -> T { return a}
-    
-    shift_left    :: proc (a: $T, n: u32) -> T { return a << n }
-    shift_right   :: proc (a: $T, n: u32) -> T { return a >> n }
-    
-    maximum :: max
-    minimum :: min
-    
-    extract :: proc (a: $T, n: u32) -> (result: T) { 
-        when intrinsics.type_is_array(T) {
-            #unroll for i in 0..<len(D) {
-                result[i] = a[i]
-            }
-        } else {
-            result = a
-        }
-        return result
     }
 }
 
@@ -686,7 +691,7 @@ intersects :: proc(a, b: Rectangle($T)) -> (result: b32) {
     return result
 }
 
-get_intersection :: proc(a, b: $R/Rectangle($T)) -> (result: R) {
+get_intersection :: proc(a: $R/Rectangle($T), b: R) -> (result: R) {
     #unroll for i in 0..<len(T) {
         result.min[i] = max(a.min[i], b.min[i])
         result.max[i] = min(a.max[i], b.max[i])
@@ -696,10 +701,18 @@ get_intersection :: proc(a, b: $R/Rectangle($T)) -> (result: R) {
     
 }
 
-get_union :: proc(a, b: $R/Rectangle($T)) -> (result: R) {
+get_union :: proc(a: $R/Rectangle($T), b: R) -> (result: R) {
     #unroll for i in 0..<len(T) {
         result.min[i] = min(a.min[i], b.min[i])
         result.max[i] = max(a.max[i], b.max[i])
+    }
+    
+    return result
+}
+get_union_point :: proc(a: $R/Rectangle($T), p: T) -> (result: R) {
+    #unroll for i in 0..<len(T) {
+        result.min[i] = min(a.min[i], p[i])
+        result.max[i] = max(a.max[i], p[i])
     }
     
     return result
