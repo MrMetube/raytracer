@@ -141,10 +141,10 @@ worker_thread :: proc (parameter: pmm) {
     for {
         if do_next_work_queue_entry(queue) {
             if queue.closed do break
-            spall_begin("thread idle")
+            
+            spall_scope("thread idle")
             INFINITE :: transmute(win.DWORD) i32(-1)
             win.WaitForSingleObjectEx(queue.semaphore_handle, INFINITE, false)
-            spall_end()
         }
     }
     

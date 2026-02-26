@@ -1,3 +1,4 @@
+#+no-instrumentation
 #+vet !unused-procedures
 package main
 

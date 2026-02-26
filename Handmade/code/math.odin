@@ -1,3 +1,4 @@
+#+no-instrumentation
 #+vet !unused-procedures
 package main
 
@@ -463,7 +464,7 @@ when LaneWidth == 1 {
     }
     
     // @naming
-    replace :: proc (a: ^$T/ #simd[$N] $Element, #any_int n: u32, value: $X) {
+    replace :: proc (a: ^$T/ #simd[$N] $Element, #any_int n: u32, value: Element) {
         when intrinsics.type_is_array(T) {
             #unroll for i in 0..<len(T) {
                 a[i] = simd.replace(a[i], n, value[i])

@@ -95,7 +95,9 @@ main :: proc() {
     // append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 2 })
     // append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
     
-    teapot := load_teapot(0, 4)
+    ////////////////////////////////////////////////
+    
+    teapot := load_teapot(1, 2)
     append(&world.triangles, ..teapot)
     
     ////////////////////////////////////////////////
@@ -128,26 +130,29 @@ main :: proc() {
         value.bounds = get_union_point(value.bounds, triangle.c)
         append(&world.triangle_nodes, value)
         
-        // utah 1
-        //    1   444 ms
-        //    2   460 ms
-        //    4   474 ms
-        //    8   510 ms
-        //   32   745 ms
-        //  128 ~1000 ms
-        // 1024 ~2500 ms
-        // 4096 ~4000 ms
+        // utah 0
+        //    1   230 ms
+        //    2   239 ms
+        //    4   258 ms
+        //    8   281 ms
+        //   32   401 ms
+        //  128   855 ms
         
-        // utah 2
-        //    1   930 ms
-        //    2   940 ms
-        //    4   960 ms
+        // utah 1 
+        // ~5.5 times as many as 0
+        //    1   462 ms
+        //    2   471 ms
+        //    4   494 ms
+        //    8   510 ms
+        
+        // utah 2 
+        // ~7.5 times as many as 1
+        // ~41  times as many as 0
+        //    1 ~1000 ms
+        //    2 ~1000 ms
+        //    4 ~1000 ms
         //    8 ~1000 ms
-        //   32   xxx ms
-        //  128   xxx ms
-        // 1024   xxx ms
-        // 4096   xxx ms
-        ok := tree_append(&stack, &world.triangle_nodes, value, values_per_node = 8)
+        ok := tree_append(&stack, &world.triangle_nodes, value, values_per_node = 1)
         assert(ok)
     }
     
@@ -199,8 +204,10 @@ main :: proc() {
     ////////////////////////////////////////////////
     
     camera: Camera
-    camera.p = {0, -7, 1}
-    camera.z = normalize_or_zero(camera.p)
+    camera.p = {2.33, -4.22, 3.8}
+    camera.z = normalize_or_zero(camera.p - {0.3, 0.8, 0.5})
+    // camera.p = {0, -7, 1}
+    // camera.z = normalize_or_zero(camera.p)
     camera.x = normalize_or_zero(cross(v3{0, 0, 1}, camera.z))
     camera.y = normalize_or_zero(cross(camera.z, camera.x))
     
@@ -231,6 +238,8 @@ main :: proc() {
     fast_render:    Render
     init_render(&quality_render, 64, 8, window_size.x, window_size.y, core_count)
     init_render(&fast_render,    8,  4, window_size.x / fast_factor, window_size.y / fast_factor, core_count)
+    defer close_work_queue_and_wait_for_threads(&quality_render.queue)
+    defer close_work_queue_and_wait_for_threads(&fast_render.queue)
     
     renders := make_dynamic_array(context.allocator, [dynamic] ^Render, 0, 2)
     append(&renders, &quality_render)
@@ -374,9 +383,11 @@ main :: proc() {
                     copy(render.world.triangles[:],      world.triangles[:])
                     
                     render.start = enqueue_render_work(render.allocator, render.image, core_count, &render.world, camera, &render.queue)
+                    spall_begin("render")
                 }
             } else {
                 if work_is_completed(&render.queue) {
+                    spall_end()
                     complete_all_work(&render.queue)
                     
                     render.active = false
@@ -412,6 +423,7 @@ main :: proc() {
             rl.DrawTextureEx(fast_render.texture, vec_cast(f32, window_size.x - fast_render.texture.width, 0), 0, 1, rl.WHITE)
         }
         
+        display_line(&layout, "Camera: % : % ", camera.p, camera.p + -camera.z)
         display_line(&layout, "rays per pixel: quality % / fast % ", quality_render.world.rays_per_pixel, fast_render.world.rays_per_pixel)
         
         for &render in renders {
