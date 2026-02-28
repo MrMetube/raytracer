@@ -9,7 +9,7 @@ import "core:math"
 import img "vendor:stb/image"
 import rl "vendor:raylib"
 
-Todo :: !true
+Todo :: true
 
 FontSize :: 20
 
@@ -31,7 +31,7 @@ Render :: struct {
 
 ////////////////////////////////////////////////
 
-fast_factor :: 60
+fast_factor :: 6 when SpallDisabled else 60
 
 main :: proc() {
     rl.SetTraceLogLevel(.WARNING)
@@ -111,7 +111,7 @@ main :: proc() {
     append(&world.triangles, ..teapot)
     
     ////////////////////////////////////////////////
-    values_per_node :: 4
+    values_per_node :: 1
     
     stack := make_dynamic_array(context.temp_allocator, [dynamic] Node_Index, 0, 0)
     reserve(&world.sphere_nodes, len(world.spheres))
@@ -120,7 +120,7 @@ main :: proc() {
     // Currently the octtree is a ~30% gain compared to the straight array
     for sphere, index in world.spheres {
         value: Sphere_Node
-        value.sphere_index = auto_cast index
+        value.value = sphere
         value.bounds = rectangle_center_dimension(sphere.center, sphere.radius)
         
         ok := octtree_append(&stack, &world.sphere_nodes, value, values_per_node)
@@ -131,10 +131,11 @@ main :: proc() {
     reserve(&world.triangle_nodes, len(world.triangles))
     tree_init(&world.triangle_nodes, rectangle_center_dimension(v3{}, 128))
     
-    for triangle, index in world.triangles {
+    for triangle in world.triangles {
         value: Triangle_Node
-        value.triangle_index = auto_cast index
+        value.value = triangle
         
+        #assert(Todo, "either actually test this bounds or remove it from value nodes")
         value.bounds = rectangle_inverted_infinity(Rectangle3)
         value.bounds = get_union_point(value.bounds, triangle.a)
         value.bounds = get_union_point(value.bounds, triangle.b)
@@ -344,6 +345,7 @@ main :: proc() {
                     render.world.loops_computed   = 0
                     render.world.tiles_retired    = 0
                     render.world.pixels_done      = 0
+                    render.world.nil_value_lanes_tested = 0
                     
                     render.world.all_brdf_values = world.all_brdf_values
                     
@@ -362,13 +364,13 @@ main :: proc() {
                     copy(render.world.materials[:],      world.materials[:])
                     copy(render.world.triangles[:],      world.triangles[:])
                     
-                    render.start = enqueue_render_work(render.allocator, render.image, core_count, &render.world, camera, &render.queue)
-                    spall_begin("render")
+                    begin_render(render, core_count, camera)
                 }
             } else {
                 if work_is_completed(&render.queue) {
-                    spall_end()
                     complete_all_work(&render.queue)
+                    
+                    print_render_results(&render.world, render.start, render.end)
                     
                     render.active = false
                     render.end = time.now()

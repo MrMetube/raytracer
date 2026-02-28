@@ -41,7 +41,8 @@ lane_index_dynamic :: #force_inline proc (array: $T/ [dynamic] $E, index: lane_u
     return result
 }
 
-lane_member :: #force_inline proc (lane: Lane($T), $member: string, $_member_type: typeid) -> Lane(_member_type) {
+lane_member :: #force_inline proc (lane: Lane($T), $member: string, $_member_type: typeid) -> Lane(_member_type) 
+where intrinsics.type_field_index_of(T, member) != 999 { // @note(viktor): 999 is a bullshit value, if the member is not valid the where will also fail
     // @todo(viktor): once OLS doesn't crash anymore we can remove the parameter
     type :: intrinsics.type_field_type(T, member)
     #assert(type == _member_type)

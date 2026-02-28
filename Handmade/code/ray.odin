@@ -236,11 +236,12 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
             
             if true {
                 spall_scope("triangles")
-                gather_all_possibly_hit_nodes_from_tree_wide(world.triangle_nodes[:], ray_o, ray_d, min_t, closest_t, world, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
+                traverse_tree_and_test_hits(world.triangle_nodes[:], ray_o, ray_d, min_t, closest_t, world, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
             } else {
                 // @note(viktor): skip nil triangle
                 for index in 1 ..< cast(u32) len(world.triangles) {
-                    hit_triangle(world, index, ray_o, ray_d, min_t, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
+                    triangle := lane_index(world.triangles, index)
+                    hit_triangle(triangle, ray_o, ray_d, min_t, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
                 }
             }
             
@@ -248,11 +249,12 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
             
             if !true {
                 spall_scope("spheres")
-                gather_all_possibly_hit_nodes_from_tree_wide(world.sphere_nodes[:], ray_o, ray_d, min_t, closest_t, world, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
+                traverse_tree_and_test_hits(world.sphere_nodes[:], ray_o, ray_d, min_t, closest_t, world, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
             } else {
                 // @note(viktor): skip nil sphere
                 for index in 1 ..< cast(u32) len(world.spheres) {
-                    hit_sphere(world, index, ray_o, ray_d, min_t, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
+                    sphere := lane_index(world.spheres, index)
+                    hit_sphere(sphere, ray_o, ray_d, min_t, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
                 }
             }
             
@@ -309,7 +311,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
 
 ////////////////////////////////////////////////
 
-gather_all_possibly_hit_nodes_from_tree_wide :: proc (nodes: [] $Node, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32,
+traverse_tree_and_test_hits :: proc (nodes: [] $Node, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32,
     world: ^World, closest_t: ^lane_f32, did_hit, hit_material_index: ^lane_u32, next_o, normal, tangent, binormal: ^lane_v3) {
     spall_proc()
     inv_d := 1 / normalize_or_zero(ray_d)
@@ -320,6 +322,13 @@ gather_all_possibly_hit_nodes_from_tree_wide :: proc (nodes: [] $Node, ray_o, ra
     stacks := stacks_[:]
     stacks[0] = Root_Index
     stack_lens: lane_u32 = 1
+    
+    values_: [1024] lane_Node_Index
+    values := values_[:]
+    values_write: lane_u32
+    values_read:  lane_u32
+    
+    local_nil_value_lanes_tested: [9] u32
     
     // @note(viktor): currently the stacks grow and shrink in lockstep
     // lanes without valid work, work on the nil node and nil values
@@ -358,37 +367,17 @@ gather_all_possibly_hit_nodes_from_tree_wide :: proc (nodes: [] $Node, ray_o, ra
             conditional_assign(push_subnodes, &stack_lens, stack_lens+8)
             spall_end()
             
-            
-            spall_begin("value loop")
             // @speed what is a better data layout for the values, we spend a lot of time in here, a lot of the time many lanes are emtpy
+            spall_begin("value append")
             link := first_value & cast(lane_Node_Index) hit_mask
             for link != 0 {
-                member :: "sphere_index" when Node == Sphere_Node else "triangle_index"
+                not_empty := not_equal(link, 0)
+                lane_scatter(lane_index_wide(values, values_write), link)
+                conditional_assign(not_empty, &values_write, values_write+1)
+                assert(less_than(values_write, auto_cast len(values)) == lane_true)
                 
                 node := lane_index(nodes, cast(lane_u32) link)
-                value_index := lane_gather(lane_member(node, member, u32))
-                
-                when Node != Sphere_Node {
-                    hit_triangle(world, value_index, ray_o, ray_d, min_t, closest_t, did_hit, hit_material_index, next_o, normal, tangent, binormal)
-                } else {
-                    hit_sphere(world, value_index, ray_o, ray_d, min_t, closest_t, did_hit, hit_material_index, next_o, normal, tangent, binormal)
-                }
-                
                 link = lane_gather(lane_member(node, "next_value", Node_Index)) 
-                #assert(Todo, "fewer empty lanes")
-                empties := horizontal_add(1 & equal(link, 0))
-                switch empties {
-                case 0: spall_begin("empty 0")
-                case 1: spall_begin("empty 1")
-                case 2: spall_begin("empty 2")
-                case 3: spall_begin("empty 3")
-                case 4: spall_begin("empty 4")
-                case 5: spall_begin("empty 5")
-                case 6: spall_begin("empty 6")
-                case 7: spall_begin("empty 7")
-                case 8: spall_begin("empty 8")
-                }
-                spall_end()
             }
             spall_end()
         } else {
@@ -435,6 +424,47 @@ gather_all_possibly_hit_nodes_from_tree_wide :: proc (nodes: [] $Node, ray_o, ra
             }
         }
     }
+    
+    spall_begin("value tests")
+    for values_read != values_write {
+        value_index := lane_gather(lane_index_wide(values, values_read))
+        conditional_assign(not_equal(values_read, values_write), &values_read, values_read + 1)
+        
+        if value_index == 0 do continue
+        
+        node  := lane_index(nodes, cast(lane_u32) value_index)
+        value := lane_member(node, "value", Sphere when Node == Sphere_Node else Triangle)
+        
+        when Node != Sphere_Node {
+            hit_triangle(value, ray_o, ray_d, min_t, closest_t, did_hit, hit_material_index, next_o, normal, tangent, binormal)
+        } else {
+            hit_sphere(value, ray_o, ray_d, min_t, closest_t, did_hit, hit_material_index, next_o, normal, tangent, binormal)
+        }
+        
+        empties := horizontal_add(1 & equal(value_index, 0))
+        switch empties {
+            case 0: local_nil_value_lanes_tested[0] += 1
+            case 1: local_nil_value_lanes_tested[1] += 1
+            case 2: local_nil_value_lanes_tested[2] += 1
+            case 3: local_nil_value_lanes_tested[3] += 1
+            case 4: local_nil_value_lanes_tested[4] += 1
+            case 5: local_nil_value_lanes_tested[5] += 1
+            case 6: local_nil_value_lanes_tested[6] += 1
+            case 7: local_nil_value_lanes_tested[7] += 1
+            case 8: unreachable()
+        }
+    }
+    spall_end()
+    
+    atomic_add(&world.nil_value_lanes_tested[0], local_nil_value_lanes_tested[0])
+    atomic_add(&world.nil_value_lanes_tested[1], local_nil_value_lanes_tested[1])
+    atomic_add(&world.nil_value_lanes_tested[2], local_nil_value_lanes_tested[2])
+    atomic_add(&world.nil_value_lanes_tested[3], local_nil_value_lanes_tested[3])
+    atomic_add(&world.nil_value_lanes_tested[4], local_nil_value_lanes_tested[4])
+    atomic_add(&world.nil_value_lanes_tested[5], local_nil_value_lanes_tested[5])
+    atomic_add(&world.nil_value_lanes_tested[6], local_nil_value_lanes_tested[6])
+    atomic_add(&world.nil_value_lanes_tested[7], local_nil_value_lanes_tested[7])
+    atomic_add(&world.nil_value_lanes_tested[8], local_nil_value_lanes_tested[8])
 }
 
 ////////////////////////////////////////////////
@@ -454,13 +484,13 @@ hit_rectangle :: proc (ray_o, inv_d: lane_v3, min, max: lane_v3, t_min_init, t_m
     return result
 }
 
-hit_sphere :: proc (world: ^World, sphere_index: lane_u32, ray_o, ray_d: lane_v3, min_t: lane_f32, closest_t: ^lane_f32, did_hit, hit_material_index: ^lane_u32, next_o, normal, tangent, binormal: ^lane_v3) {
+hit_sphere :: proc (sphere: Lane(Sphere), ray_o, ray_d: lane_v3, min_t: lane_f32, closest_t: ^lane_f32, did_hit, hit_material_index: ^lane_u32, next_o, normal, tangent, binormal: ^lane_v3) {
     spall_proc()
     // @note(viktor): if sphere_index == 0 its the Nil sphere
     // then the root will be NaN making the t_mask zero, so no hit can be registered
-    center   := lane_gather_v(lane_member(lane_index(world.spheres, sphere_index), "center",   v3))
-    radius   := lane_gather(  lane_member(lane_index(world.spheres, sphere_index), "radius",   f32))
-    material := lane_gather(  lane_member(lane_index(world.spheres, sphere_index), "material", u32))
+    center   := lane_gather_v(lane_member(sphere, "center",   v3))
+    radius   := lane_gather(  lane_member(sphere, "radius",   f32))
+    material := lane_gather(  lane_member(sphere, "material", u32))
     
     local_origin := ray_o - center
     a := dot(ray_d, ray_d)
@@ -500,17 +530,14 @@ hit_sphere :: proc (world: ^World, sphere_index: lane_u32, ray_o, ray_d: lane_v3
     conditional_assign(hit_mask, binormal, s_binormal)
 }
 
-hit_triangle :: proc (world: ^World, triangle_index: lane_u32, ray_o, ray_d: lane_v3, min_t: lane_f32, closest_t: ^lane_f32, did_hit, hit_material_index: ^lane_u32, next_o, normal, tangent, binormal: ^lane_v3) {
+hit_triangle :: proc (triangle: Lane(Triangle), ray_o, ray_d: lane_v3, min_t: lane_f32, closest_t: ^lane_f32, did_hit, hit_material_index: ^lane_u32, next_o, normal, tangent, binormal: ^lane_v3) {
     spall_proc()
     // @note(viktor): if triangle_index == 0 its the Nil triangle
     // then determinant will be zero, so no hit can be registered
-    a        := lane_gather_v(lane_member(lane_index(world.triangles, triangle_index), "a", v3))
-    b        := lane_gather_v(lane_member(lane_index(world.triangles, triangle_index), "b", v3))
-    c        := lane_gather_v(lane_member(lane_index(world.triangles, triangle_index), "c", v3))
-    material := lane_gather(  lane_member(lane_index(world.triangles, triangle_index), "material", u32))
-    
-    materials_ok := less_than(material, cast(lane_u32) len(world.materials))
-    assert(materials_ok == lane_true)
+    a        := lane_gather_v(lane_member(triangle, "a", v3))
+    b        := lane_gather_v(lane_member(triangle, "b", v3))
+    c        := lane_gather_v(lane_member(triangle, "c", v3))
+    material := lane_gather(  lane_member(triangle, "material", u32))
     
     ab := b - a
     ac := c - a
