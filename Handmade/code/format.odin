@@ -1,5 +1,4 @@
 #+vet !unused-procedures
-// #+no-instrumentation
 package main
 
 import "base:runtime"

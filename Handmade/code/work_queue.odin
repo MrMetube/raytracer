@@ -59,7 +59,11 @@ close_work_queue_and_wait_for_threads :: proc (queue: ^WorkQueue) {
     dummy: int // @todo(viktor): make a version of enqueue work without a data
     for queue.closed_thread_count != queue.opened_thread_count {
         // @note(viktor): wake the threads, is there an easier way?
-        enqueue_work(queue, proc (_: ^int) {}, &dummy)
+        old_next_entry := queue.next_entry_to_write
+        new_next_entry := (old_next_entry + 1) % len(queue.entries)
+        if new_next_entry != queue.next_entry_to_read {
+            enqueue_work(queue, proc (_: ^int) {}, &dummy)
+        }
     }
 }
 
@@ -142,7 +146,6 @@ worker_thread :: proc (parameter: pmm) {
         if do_next_work_queue_entry(queue) {
             if queue.closed do break
             
-            spall_scope("thread idle")
             INFINITE :: transmute(win.DWORD) i32(-1)
             win.WaitForSingleObjectEx(queue.semaphore_handle, INFINITE, false)
         }

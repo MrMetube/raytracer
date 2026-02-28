@@ -5,7 +5,8 @@ package main
 import "core:prof/spall"
 import "core:time"
 
-SpallDisabled :: true
+SpallDisabled :: !true
+SpallBufferSize :: 1 * Gigabyte
 
 spall_ctx: spall.Context
 @(thread_local) spall_buffer: spall.Buffer
@@ -14,22 +15,20 @@ spall_ctx: spall.Context
 ////////////////////////////////////////////////
 
 when false {
-@(instrumentation_enter)
-@(disabled=SpallDisabled)
-spall_enter :: proc "contextless" (proc_address, call_site_return_address: rawptr, loc := #caller_location) {
-	spall._buffer_begin(&spall_ctx, &spall_buffer, "", "", loc)
-}
+    @(instrumentation_enter)
+    @(disabled=SpallDisabled)
+    spall_enter :: proc "contextless" (proc_address, call_site_return_address: rawptr, loc := #caller_location) {
+        spall._buffer_begin(&spall_ctx, &spall_buffer, "", "", loc)
+    }
 
-@(instrumentation_exit)
-@(disabled=SpallDisabled)
-spall_exit :: proc "contextless" (proc_address, call_site_return_address: rawptr, loc := #caller_location) {
-	spall._buffer_end(&spall_ctx, &spall_buffer)
-}
+    @(instrumentation_exit)
+    @(disabled=SpallDisabled)
+    spall_exit :: proc "contextless" (proc_address, call_site_return_address: rawptr, loc := #caller_location) {
+        spall._buffer_end(&spall_ctx, &spall_buffer)
+    }
 }
 
 ////////////////////////////////////////////////
-
-SpallBufferSize :: 256 * Megabyte
 
 @(deferred_none = delete_spall)
 @(disabled=SpallDisabled)

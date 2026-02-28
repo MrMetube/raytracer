@@ -3,8 +3,6 @@ package build
 
 import "core:fmt"
 import "core:strings"
-import "core:os"
-import "core:log"
 import "core:terminal/ansi"
 import "core:os/os2"
 import "core:odin/ast"

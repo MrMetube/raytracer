@@ -39,6 +39,11 @@ main :: proc() {
     world.rays_per_pixel   = 8
     world.max_bounce_count = 8
     
+    // nil sphere, triangle, and plane
+    append(&world.spheres,   Sphere{})
+    append(&world.triangles, Triangle{})
+    append(&world.planes,    Plane{})
+    
     append(&world.materials, Material{ emit    = { .3  , .4  , .5 },              })
     append(&world.materials, Material{ reflect = { .5  , .5  , .5 }, scatter = 1  })
     append(&world.materials, Material{ reflect = { .7  , .5  , .3 }, scatter = .8 })
@@ -97,12 +102,12 @@ main :: proc() {
     
     ////////////////////////////////////////////////
     
-    teapot := load_teapot(1, 2)
+    teapot := load_teapot(0, 2)
     append(&world.triangles, ..teapot)
     
     ////////////////////////////////////////////////
     
-    tree_init(&world.sphere_nodes, rectangle_center_dimension(v3{}, 128))
+    tree_init(&world.sphere_nodes, rectangle_center_dimension(v3{0, 0, 0}, 128))
     
     stack := make_dynamic_array(context.temp_allocator, [dynamic] Node_Index, 0, 0)
     
@@ -152,7 +157,7 @@ main :: proc() {
         //    2 ~1000 ms
         //    4 ~1000 ms
         //    8 ~1000 ms
-        ok := tree_append(&stack, &world.triangle_nodes, value, values_per_node = 1)
+        ok := tree_append(&stack, &world.triangle_nodes, value, values_per_node = 4)
         assert(ok)
     }
     
@@ -204,10 +209,13 @@ main :: proc() {
     ////////////////////////////////////////////////
     
     camera: Camera
-    camera.p = {2.33, -4.22, 3.8}
-    camera.z = normalize_or_zero(camera.p - {0.3, 0.8, 0.5})
-    // camera.p = {0, -7, 1}
-    // camera.z = normalize_or_zero(camera.p)
+    if false {
+        camera.p = {2.33, -4.22, 3.8}
+        camera.z = normalize_or_zero(camera.p - {0.3, 0.8, 0.5})
+    } else {
+        camera.p = {0, -7, 1}
+        camera.z = normalize_or_zero(camera.p)
+    }
     camera.x = normalize_or_zero(cross(v3{0, 0, 1}, camera.z))
     camera.y = normalize_or_zero(cross(camera.z, camera.x))
     

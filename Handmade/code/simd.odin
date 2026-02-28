@@ -12,9 +12,9 @@ Lane :: struct ($T: typeid) {
 }
 
 lane_index :: proc { lane_index_array, lane_index_dynamic, lane_index_slice, lane_index_slice_lane }
-lane_index_wide :: #force_inline proc (slice: [] $L/ #simd[$N] $E, index: lane_u32) -> Lane(E) {
+lane_index_wide :: #force_inline proc (slice: [] $Vector/ #simd[$N] $E, index: lane_u32) -> Lane(E) {
     base   := cast(lane_umm) raw_data(slice)
-    offset := cast(lane_umm) index * size_of(L)
+    offset := cast(lane_umm) index * size_of(Vector)
     result := Lane(E) { cast(lane_pmm) (base + offset) }
     return result
 }
@@ -68,8 +68,8 @@ lane_gather_no_mask :: #force_inline proc (lane: Lane($T)) -> #simd [LaneWidth] 
 }
 lane_gather_v :: #force_inline proc (lane: Lane($T/ [$N] $E)) -> [N] #simd [LaneWidth] E {
     result: [N] #simd [LaneWidth] E
-    #unroll for channel_index in cast(u32) 0..<N {
-        result[channel_index] = lane_gather(lane_index(lane, channel_index))
+    #no_bounds_check #unroll for channel_index in cast(u32) 0..<N {
+        result[channel_index] = lane_gather(lane_index(lane, cast(lane_u32) channel_index))
     }
     return result
 }

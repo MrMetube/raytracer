@@ -1,5 +1,5 @@
-#+no-instrumentation
 #+vet !unused-procedures
+#+no-instrumentation
 package main
 
 import "base:intrinsics"
@@ -38,6 +38,7 @@ when LaneWidth == 1 {
     lane_pmm :: pmm
     lane_umm :: umm
     lane_f64 :: f64
+    lane_u64 :: u64
 } else {
     lane_f32 :: #simd [LaneWidth] f32
     lane_u32 :: #simd [LaneWidth] u32
@@ -52,11 +53,13 @@ when LaneWidth == 1 {
     lane_pmm :: #simd [LaneWidth] pmm
     lane_umm :: #simd [LaneWidth] umm
     lane_f64 :: #simd [LaneWidth] f64
+    lane_u64 :: #simd [LaneWidth] u64
 }
 
-lane_true  :: cast(lane_u32) 0xffffffff
 lane_false :: cast(lane_u32) 0
-
+lane_true  :: cast(lane_u32) 0xffff_ffff
+lane_false_64 :: cast(lane_u64) 0
+lane_true_64  :: cast(lane_u64) 0xffff_ffff_ffff_ffff
 
 m4 :: matrix[4,4] f32
 
@@ -89,6 +92,7 @@ MaxF32Precision ::  8 // Maximum number of meaningful digits after the decimal p
 MaxF16Precision ::  4 // Maximum number of meaningful digits after the decimal point for 'f16'
 
 Infinity :: math.INF_F32
+QNaN     :: math.QNAN_F32
 
 RadPerDeg :: Tau/360.0
 DegPerRad :: 360.0/Tau
@@ -100,7 +104,7 @@ square :: proc(x: $T) -> T where intrinsics.type_is_numeric(T) || intrinsics.typ
 
 square_root :: proc(x: $T) -> (result: T) where intrinsics.type_is_numeric(T) || intrinsics.type_is_array(T) || intrinsics.type_is_simd_vector(T) { 
     when intrinsics.type_is_array(T) {
-        #unroll for i in 0..<len(T) {
+        #no_bounds_check #unroll for i in 0..<len(T) {
             result[i] = simd.sqrt(x[i])
         }
     } else {
@@ -149,7 +153,7 @@ clamp :: proc(value: $T, min, max: T) -> (result: T) {
     when intrinsics.type_is_simd_vector(T) {
         result = simd.clamp(value, min, max)
     } else when intrinsics.type_is_array(T) {
-        #unroll for i in 0..<len(T) {
+        #no_bounds_check #unroll for i in 0..<len(T) {
             result[i] = clamp(value[i], min[i], max[i])
         }
     } else {
@@ -181,11 +185,11 @@ modulus_i :: proc(value: $I, divisor: I) -> I where intrinsics.type_is_integer(I
     return value % divisor
 }
 modulus_vf :: proc(value: [$N]f32, divisor: f32) -> (result: [N]f32) where N > 1 {
-    #unroll for i in 0..<N do result[i] = math.mod(value[i], divisor) 
+    #no_bounds_check #unroll for i in 0..<N do result[i] = math.mod(value[i], divisor) 
     return result
 }
 modulus_v :: proc(value: [$N]f32, divisor: [N]f32) -> (result: [N]f32) {
-    #unroll for i in 0..<N do result[i] = math.mod(value[i], divisor[i]) 
+    #no_bounds_check #unroll for i in 0..<N do result[i] = math.mod(value[i], divisor[i]) 
     return result
 }
 
@@ -196,7 +200,7 @@ where !intrinsics.type_is_array(F)
     return  cast(T) (f < 0 ? -math.round(-f) : math.round(f))
 }
 round_v :: proc($T: typeid, v: [$N]$F) -> (result: [N]T) {
-    #unroll for i in 0..<N do result[i] = cast(T) math.round(v[i]) 
+    #no_bounds_check #unroll for i in 0..<N do result[i] = cast(T) math.round(v[i]) 
     return result
 }
 
@@ -296,7 +300,7 @@ arm :: proc(angle: f32) -> (result: v2) {
 }
 
 dot :: proc(a, b: $V/[$N]$Element) -> (result: Element) {
-    #unroll for i in 0..<N {
+    #no_bounds_check #unroll for i in 0..<N {
         result += a[i] * b[i]
     }
     
@@ -337,7 +341,7 @@ normalize :: proc(vec: $V) -> (result: V) {
 normalize_or_zero :: proc(vec: $V/[$N]$T) -> (result: V) {
     len_sq := length_squared(vec)
     when intrinsics.type_is_simd_vector(T) {
-        len_mask := simd.lanes_gt(len_sq, 0.0000001)
+        len_mask := greater_than(len_sq, 0.0000001)
         conditional_assign(len_mask, &result, vec / square_root(len_sq))
     } else {
         if len_sq > 0.0000001 {
@@ -350,7 +354,7 @@ normalize_or_zero :: proc(vec: $V/[$N]$T) -> (result: V) {
 linear_to_srgb :: proc(l: v3) -> (s: v3) {
     l := l
     l = clamp_01(l)
-    #unroll for i in 0..<len(l) {
+    #no_bounds_check #unroll for i in 0..<len(l) {
         s[i] = 12.92 * l[i]
         if l[i] > 0.0031308 {
             s[i] = 1.055 * power(l[i], 1.0/2.4) - 0.055
@@ -368,7 +372,7 @@ when LaneWidth == 1 {
         mask := mask
         mask  = mask == 0 ? lane_false : lane_true
         when intrinsics.type_is_array(D) {
-            #unroll for i in 0..<len(D) {
+            #no_bounds_check #unroll for i in 0..<len(D) {
                 conditional_assign(mask, &dest[i], value[i])
             }
         } else {
@@ -389,7 +393,7 @@ when LaneWidth == 1 {
     
     extract :: proc (a: $T, n: u32) -> (result: T) { 
         when intrinsics.type_is_array(T) {
-            #unroll for i in 0..<len(D) {
+            #no_bounds_check #unroll for i in 0..<len(D) {
                 result[i] = a[i]
             }
         } else {
@@ -400,7 +404,7 @@ when LaneWidth == 1 {
 } else {
     conditional_assign :: proc (mask: $M, dest: ^$D, value: D) {
         when intrinsics.type_is_array(D) {
-            #unroll for i in 0..<len(D) {
+            #no_bounds_check #unroll for i in 0..<len(D) {
                 conditional_assign(mask, &dest[i], value[i])
             }
         } else {
@@ -414,14 +418,26 @@ when LaneWidth == 1 {
     greater_than  :: simd.lanes_gt
     less_than     :: simd.lanes_lt
     equal         :: simd.lanes_eq
+    not_equal     :: simd.lanes_ne
+    
+    is_nan :: proc { is_nan_s, is_nan_v }
+    
+    is_nan_v :: proc (x: $V/ #simd[$N] $F) -> #simd[N] (u32 when F == f32 else u64) {
+        result := not_equal(x, x)
+        return result
+    }
+    is_nan_s :: proc (x: $F) -> bool where !intrinsics.type_is_simd_vector(F) {
+        result := !(x == x)
+        return result
+    }
     
     approximate_equal :: proc (a, b: lane_f32, epsilon : lane_f32 = 0.000001) -> lane_u32 {
         result := less_than(absolute(a - b), epsilon)
         return result
     }
 
-    shift_left    :: simd.shl
-    shift_right   :: simd.shr
+    shift_left     :: simd.shl
+    shift_right    :: simd.shr
     horizontal_add :: simd.reduce_add_pairs
     maximum :: proc (a: $T, b: T) -> T {
         when intrinsics.type_is_simd_vector(T) {
@@ -447,7 +463,7 @@ when LaneWidth == 1 {
     
     extract :: proc (a: $T/#simd[$N] $Element, #any_int n: u32) -> (result: Element) {
         when intrinsics.type_is_array(T) {
-            #unroll for i in 0..<len(T) {
+            #no_bounds_check #unroll for i in 0..<len(T) {
                 result[i] = simd.extract(a[i], n)
             }
         } else {
@@ -466,7 +482,7 @@ when LaneWidth == 1 {
     // @naming
     replace :: proc (a: ^$T/ #simd[$N] $Element, #any_int n: u32, value: Element) {
         when intrinsics.type_is_array(T) {
-            #unroll for i in 0..<len(T) {
+            #no_bounds_check #unroll for i in 0..<len(T) {
                 a[i] = simd.replace(a[i], n, value[i])
             }
         } else {
@@ -484,8 +500,8 @@ identity :: proc () -> (result: m4) {
 }
 
 transpose :: proc (a: m4) -> (result: m4) {
-    for c in 0 ..= 3 {
-        for r in 0 ..= 3 {
+    #no_bounds_check #unroll for c in 0 ..= 3 {
+        #unroll for r in 0 ..= 3 {
             result[c, r] = a[r, c]
         }
     }
@@ -655,7 +671,7 @@ add_offset :: proc(rect: $R/Rectangle($T), offset: T) -> (result: R) {
 
 contains :: proc(rect: Rectangle($T), point: T) -> (result: b32) {
     result = true
-    #unroll for i in 0..<len(T) {
+    #no_bounds_check #unroll for i in 0..<len(T) {
         result &&= rect.min[i] <= point[i] && point[i] < rect.max[i] 
     }
     return result
@@ -663,7 +679,7 @@ contains :: proc(rect: Rectangle($T), point: T) -> (result: b32) {
 
 contains_inclusive :: proc(rect: Rectangle($T), point: T) -> (result: b32) {
     result = true
-    #unroll for i in 0..<len(T) {
+    #no_bounds_check #unroll for i in 0..<len(T) {
         result &&= rect.min[i] <= point[i] && point[i] <= rect.max[i] 
     }
     return result
@@ -671,7 +687,7 @@ contains_inclusive :: proc(rect: Rectangle($T), point: T) -> (result: b32) {
 
 dimension_contains :: proc(dimension: $V/[$N]$T, point: V) -> (result: b32) {
     result = true
-    #unroll for i in 0..<N {
+    #no_bounds_check #unroll for i in 0..<N {
         result &&= 0 <= point[i] && point[i] < dimension[i] 
     }
     return result
@@ -685,7 +701,7 @@ contains_rect :: proc(a: $R/Rectangle($T), b: R) -> (result: b32) {
 
 intersects :: proc(a, b: Rectangle($T)) -> (result: b32) {
     result = true
-    #unroll for i in 0..<len(T) {
+    #no_bounds_check #unroll for i in 0..<len(T) {
         result &&= !(b.max[i] <= a.min[i] || b.min[i] >= a.max[i])
     }
     
@@ -693,7 +709,7 @@ intersects :: proc(a, b: Rectangle($T)) -> (result: b32) {
 }
 
 get_intersection :: proc(a: $R/Rectangle($T), b: R) -> (result: R) {
-    #unroll for i in 0..<len(T) {
+    #no_bounds_check #unroll for i in 0..<len(T) {
         result.min[i] = max(a.min[i], b.min[i])
         result.max[i] = min(a.max[i], b.max[i])
     }
@@ -703,7 +719,7 @@ get_intersection :: proc(a: $R/Rectangle($T), b: R) -> (result: R) {
 }
 
 get_union :: proc(a: $R/Rectangle($T), b: R) -> (result: R) {
-    #unroll for i in 0..<len(T) {
+    #no_bounds_check #unroll for i in 0..<len(T) {
         result.min[i] = min(a.min[i], b.min[i])
         result.max[i] = max(a.max[i], b.max[i])
     }
@@ -711,7 +727,7 @@ get_union :: proc(a: $R/Rectangle($T), b: R) -> (result: R) {
     return result
 }
 get_union_point :: proc(a: $R/Rectangle($T), p: T) -> (result: R) {
-    #unroll for i in 0..<len(T) {
+    #no_bounds_check #unroll for i in 0..<len(T) {
         result.min[i] = min(a.min[i], p[i])
         result.max[i] = max(a.max[i], p[i])
     }
@@ -745,7 +761,7 @@ get_volume_or_zero :: get_area_or_zero
 get_area_or_zero :: proc(rect: $R/Rectangle($T)) -> (result: T) {
     dimension := get_dimension(rect)
     result = 1
-    #unroll for i in 0..<len(T) {
+    #no_bounds_check #unroll for i in 0..<len(T) {
         result *= max(0, dimension[i])
     }
     return result
@@ -762,7 +778,7 @@ get_volume_or_zero_inclusive :: get_area_or_zero_inclusive
 get_area_or_zero_inclusive :: proc(rect: $R/Rectangle($T)) -> (result: T) {
     dimension := get_dimension(rect) + 1
     result = 1
-    #unroll for i in 0..<len(T) {
+    #no_bounds_check #unroll for i in 0..<len(T) {
         result *= max(0, dimension[i])
     }
     return result

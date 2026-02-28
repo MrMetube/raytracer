@@ -1,26 +1,7 @@
 package main
 
-import "base:intrinsics"
 import os "core:os/os2"
-import os_old "core:os"
-import "core:simd"
-import "core:time"
 import "core:math"
-
-Color :: [4] u8
-
-Image:: struct {
-    data:   [] Color,
-    width:  i32,
-    height: i32,
-}
-
-BrdfTable :: struct {
-    count: [3] u32,
-    // @note(viktor): a view into the World.all_brdf_values array
-    values_index: u32,
-    values_count: u32,
-}
 
 Material :: struct {
     emit:    v3,
@@ -28,6 +9,13 @@ Material :: struct {
     scatter: f32, // 0 = mirror like, 1 = chalk like
     
     brdf: BrdfTable,
+}
+
+BrdfTable :: struct {
+    count: [3] u32,
+    // @note(viktor): a view into the World.all_brdf_values array
+    values_index: u32,
+    values_count: u32,
 }
 
 Plane :: struct {
@@ -48,132 +36,9 @@ Triangle :: struct {
     material: u32,
 }
 
-Sphere_Node :: struct {
-    using base: Base_Node,
-    sphere_index: u32,
-}
-
-Triangle_Node :: struct {
-    using base: Base_Node,
-    triangle_index: u32,
-}
-
-// @volatile also update the render's world copying
-World :: struct {
-    sphere_nodes:   [dynamic] Sphere_Node,
-    triangle_nodes: [dynamic] Triangle_Node,
-    
-    spheres:   [dynamic] Sphere,
-    triangles: [dynamic] Triangle,
-    planes:    [dynamic] Plane,
-    materials: [dynamic] Material,
-    all_brdf_values: [dynamic] v3,
-    
-    bounces_computed: u64,
-    loops_computed:   u64,
-    tiles_retired:    u32,
-    pixels_done:      u32,
-    
-    rays_per_pixel:   u32,
-    max_bounce_count: u32,
-}
-
-Camera :: struct {
-    x, y, z: v3,
-    p:       v3,
-}
-
-Ray :: struct {
-    o, d: v3,
-}
-
-////////////////////////////////////////////////
-
-do_one_render :: proc (render_allocator: Allocator, image: Image, core_count: i32, world: ^World, camera: Camera, work_queue: ^WorkQueue, create_infos: [] CreateThreadInfo) {
-    init_work_queue(work_queue, create_infos[:])
-
-    start := enqueue_render_work(render_allocator, image, core_count, world, camera, work_queue)
-    end := wait_for_one_render_to_end(image, world, work_queue)
-    
-    close_work_queue_and_wait_for_threads(work_queue)
-    
-    print_render_results(world, start, end)
-}
-
-enqueue_render_work :: proc (render_allocator: Allocator, image: Image, core_count: i32, world: ^World, camera: Camera, work_queue: ^WorkQueue) -> time.Time {
-    tile_size: v2i = image.width / core_count
-    
-    tile_cols  := (image.width  + tile_size.x - 1) / tile_size.x
-    tile_rows  := (image.height + tile_size.y - 1) / tile_size.y
-    tile_count := tile_cols * tile_rows
-    
-    // print("Configuration: %x% with % cores and % %x% (%/tile) tiles and lane width of % \n", image.width, image.height, core_count, tile_count, tile_size.x, tile_size.y, view_memory_size(tile_size.x * tile_size.y * size_of(Color)), LaneWidth)
-    // print("Quality: % rays per pixel with a maximum of % bounces\n", world.rays_per_pixel, world.max_bounce_count)
-    
-    Work :: struct {
-        world:   ^World,
-        camera:  Camera,
-        image:   Image, 
-        rect:    Rectangle2i, 
-        entropy: RandomSeries,
-    }
-    
-    works := make_slice(render_allocator, [] Work, tile_count)
-    work_index: u32
-    
-    start := time.now()
-    for row in 0..<tile_rows {
-        for col in 0..<tile_cols {
-            rect := rectangle_min_dimension(tile_size * {col, row}, tile_size)
-            rect  = get_intersection(rect, rectangle_min_dimension(i32(0), 0, image.width, image.height))
-            
-            entropy := seed_random_series(1842098778 + row * 984612097 + col * 237711 + cast(i32) work_index)
-            
-            work := &works[work_index]
-            work_index += 1
-            work ^= { world, camera, image, rect, entropy }
-            
-            enqueue_work_or_do_immediatly(work_queue, proc(work: ^Work) {
-                render_tile(work.world, work.camera, work.image, work.rect, &work.entropy)
-            }, work)
-        }
-    }
-    return start
-}
-
-wait_for_one_render_to_end :: proc (image: Image, world: ^World, work_queue: ^WorkQueue) -> time.Time {
-    {
-        total_pixels := image.width * image.height
-        for work_queue.completion_count != work_queue.completion_goal {
-            print_to_console("                                 \r % %% done", view_percentage_ratio(cast(f32) world.pixels_done / cast(f32) (total_pixels)), console = os_old.stderr)
-        }
-        print_to_console("\n", console = os_old.stderr)
-    }
-    complete_all_work(work_queue)
-    end := time.now()
-    
-    return end
-}
-
-print_render_results :: proc (world: ^World, start, end: time.Time) {
-    total_time := time.diff(start, end)
-    bounces_computed := volatile_load(&world.bounces_computed)
-    loops_computed   := volatile_load(&world.loops_computed)
-    wasted_bounces   := loops_computed - bounces_computed
-    nanoseconds := time.duration_nanoseconds(total_time) / cast(i64) bounces_computed
-    print("Raycasting time: %s\n  bounces %\n  total bounces %\n  wasted bounces % (% %%)\n  time per ray %\n", 
-    time.duration_seconds(total_time), 
-    view_magnitude(bounces_computed), 
-    view_magnitude(loops_computed), 
-    view_magnitude(wasted_bounces), view_percentage_ratio(cast(f32) wasted_bounces / cast(f32) loops_computed), 
-    cast(time.Duration) nanoseconds)
-}
-
 ////////////////////////////////////////////////
 
 load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, all_brdf_values: ^[dynamic] v3) {
-    spall_proc()
-    
     invalid := false
     data: [] u8
     if filename == "" {
@@ -268,7 +133,8 @@ render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle
             final_color *= 255
             pixel := V4(final_color, 255)
             
-            p := &image.data[(image.height - 1 - py) * image.width + px]
+            pixel_index := (image.height - 1 - py) * image.width + px
+            #no_bounds_check p := &image.data[pixel_index]
             p ^= round(u8, pixel)
         }
         atomic_add(&world.pixels_done, auto_cast get_dimension(rect).x)
@@ -280,8 +146,6 @@ render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle
 }
 
 cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  pixel_size: lane_v2, half_film_w, half_film_h: f32, film_center: lane_v3, camera: Camera) -> (final_color: v3, bounces_computed, loops_computed: u64) {
-    spall_proc()
-    
     final_color_lanes: lane_v3
     bounces_computed_lanes: lane_u32
     loops_computed_lanes: lane_u32
@@ -297,6 +161,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
     camera_y := vec_cast(lane_f32, camera.y)
     
     for _ in 0..<lane_ray_count {
+        spall_scope("ray accumulation")
         jitter := random_unilateral(entropy, lane_v2)
         offset := lane_v2{film_x, film_y} + jitter * pixel_size
         film_p := film_center + (offset.x*camera_x*half_film_w + offset.y*camera_y * half_film_h) 
@@ -310,6 +175,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
         sample: lane_v3
         
         for _ in 0..<max_bounce_count {
+            spall_scope("ray bounce")
             closest_t := cast(lane_f32) +Infinity
             
             hit_material_index: lane_u32
@@ -372,7 +238,8 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 spall_scope("triangles")
                 gather_all_possibly_hit_nodes_from_tree_wide(world.triangle_nodes[:], ray_o, ray_d, min_t, closest_t, world, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
             } else {
-                for index in 0 ..< cast(u32) len(world.triangles) {
+                // @note(viktor): skip nil triangle
+                for index in 1 ..< cast(u32) len(world.triangles) {
                     hit_triangle(world, index, ray_o, ray_d, min_t, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
                 }
             }
@@ -383,13 +250,15 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 spall_scope("spheres")
                 gather_all_possibly_hit_nodes_from_tree_wide(world.sphere_nodes[:], ray_o, ray_d, min_t, closest_t, world, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
             } else {
-                for index in 0 ..< cast(u32) len(world.spheres) {
+                // @note(viktor): skip nil sphere
+                for index in 1 ..< cast(u32) len(world.spheres) {
                     hit_sphere(world, index, ray_o, ray_d, min_t, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
                 }
             }
             
             ////////////////////////////////////////////////
             
+            spall_begin("color")
             materials_ok := less_than(hit_material_index, cast(lane_u32) len(world.materials))
             assert(materials_ok == lane_true)
             
@@ -404,10 +273,12 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
             
             // Color Accumulation
             sample += attenuation * hit_emit
+            spall_end()
             
             lane_mask &= did_hit
             if lane_mask == lane_false do break
             
+            spall_begin("reflect")
             // Bounce
             pure_bounce   := reflect(ray_d, normal)
             random_bounce := normalize_or_zero(normal + random_bilateral(entropy, lane_v3))
@@ -420,6 +291,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
             
             ray_o = next_o
             ray_d = next_d
+            spall_end()
         }
         
         final_color_lanes += sample_contribution_factor * sample
@@ -439,100 +311,100 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
 
 gather_all_possibly_hit_nodes_from_tree_wide :: proc (nodes: [] $Node, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32,
     world: ^World, closest_t: ^lane_f32, did_hit, hit_material_index: ^lane_u32, next_o, normal, tangent, binormal: ^lane_v3) {
-    spall_proc()
-    
-    safe_dir := ray_d
-    conditional_assign(approximate_equal(safe_dir.x, 0, 1e-15), &safe_dir.x, simd.signum(safe_dir.x) * 1e-15)
-    conditional_assign(approximate_equal(safe_dir.y, 0, 1e-15), &safe_dir.y, simd.signum(safe_dir.y) * 1e-15)
-    conditional_assign(approximate_equal(safe_dir.z, 0, 1e-15), &safe_dir.z, simd.signum(safe_dir.z) * 1e-15)
-    
-    inv_dir := 1.0 / safe_dir
+    inv_d := 1 / normalize_or_zero(ray_d)
     
     lane_Node_Index :: #simd [LaneWidth] Node_Index
+    
     stacks_: [64] lane_Node_Index
     stacks := stacks_[:]
     stacks[0] = Root_Index
     stack_lens: lane_u32 = 1
     
-    
+    // @note(viktor): currently the stacks grow and shrink in lockstep
+    // lanes without valid work, work on the nil node and nil values
+    skips: int
     for stack_lens != 0 {
-        process_mask := greater_than(stack_lens, 0)
-        stack_lens = simd.saturating_sub(stack_lens, 1)
+        stack_lens -= 1
         
-        it: lane_u32
-        assert(greater_equal(stack_lens, 0) == lane_true)
-        assert(less_than(stack_lens, cast(lane_u32) len(stacks)) == lane_true)
-        top := lane_gather(lane_index_wide(stacks, stack_lens))
-        conditional_assign(process_mask, &it, cast(lane_u32) top)
+        assert(greater_equal(stack_lens, 0) & less_than(stack_lens, cast(lane_u32) len(stacks)) == lane_true)
+        it_index := cast(lane_u32) lane_gather(lane_index_wide(stacks, stack_lens))
+        assert(it_index != 0, "if all lanes are zero we should not have appended the nodes")
         
-        it_base := lane_member(lane_index(nodes, it), "base", Base_Node)
-                
+        it_base := lane_member(lane_index(nodes, it_index), "base", Base_Node)
+        
         it_bounds := lane_member(it_base, "bounds", Rectangle3)
         b_min := lane_gather_v(lane_member(it_bounds, "min", v3))
         b_max := lane_gather_v(lane_member(it_bounds, "max", v3))
         
-        // @note(viktor): ray rectangle intersection
-        t1 := (b_min - ray_o) * inv_dir
-        t2 := (b_max - ray_o) * inv_dir
+        // @todo(viktor): should this update closest_t?
+        hit_mask := hit_rectangle(ray_o, inv_d, b_min, b_max, min_t, max_t)
         
-        tin := lane_v3{ minimum(t1.x, t2.x), minimum(t1.y, t2.y), minimum(t1.z, t2.z) }
-        tax := lane_v3{ maximum(t1.x, t2.x), maximum(t1.y, t2.y), maximum(t1.z, t2.z) }
-        
-        t_enter := maximum(min_t, maximum(tin.x, maximum(tin.y, tin.z)))
-        t_exit  := minimum(max_t, minimum(tax.x, minimum(tax.y, tax.z)))
-        // @todo(viktor): is this better now that hit tests are interleaved?
-        // t_exit  := minimum(closest_t^, minimum(tax.x, minimum(tax.y, tax.z)))
-        
-        hit_mask := process_mask & greater_equal(t_exit, t_enter)
         next_subnode  := lane_gather(lane_member(it_base, "next_subnode",  Node_Index))
         first_subnode := lane_gather(lane_member(it_base, "first_subnode", Node_Index))
+        first_value   := lane_gather(lane_member(it_base, "first_value",   Node_Index))
         
-        // @note(viktor): append sibling nodes
-        append_next := greater_than(next_subnode,  0)
-        lane_scatter(lane_index_wide(stacks, stack_lens), next_subnode, append_next)
-        conditional_assign(append_next, &stack_lens, stack_lens+1)
+        // @note(viktor): only if all lanes are zero do not push onto the stack, otherwise keep stacklens in sync and push zeros
+        append_next_subnode  := greater_than(next_subnode,  0)
+        append_first_subnode := greater_than(first_subnode, 0)
+        append_first_subnode &= hit_mask
         
-        // @note(viktor): append subnodes
-        append_first := greater_than(first_subnode, 0) & hit_mask
-        lane_scatter(lane_index_wide(stacks, stack_lens), first_subnode, append_first)
-        conditional_assign(append_first, &stack_lens, stack_lens+1)
+        push_next_mask  := append_next_subnode  == lane_false ? lane_false : lane_true
+        push_first_mask := append_first_subnode == lane_false ? lane_false : lane_true
         
-        // @note(viktor): append values
-        first_value := lane_gather(lane_member(it_base, "first_value", Node_Index))
-        link_mask := cast(lane_Node_Index) hit_mask
-        link := first_value
-        for link & link_mask != 0 {
+        lane_scatter(lane_index_wide(stacks, stack_lens), next_subnode, append_next_subnode)
+        conditional_assign(push_next_mask, &stack_lens, stack_lens+1)
+        lane_scatter(lane_index_wide(stacks, stack_lens), first_subnode, append_first_subnode)
+        conditional_assign(push_first_mask, &stack_lens, stack_lens+1)
+        
+        link := first_value & cast(lane_Node_Index) hit_mask
+        for link != 0 {
             member :: "sphere_index" when Node == Sphere_Node else "triangle_index"
-            node  := lane_index(nodes, cast(lane_u32) link)
-            value := lane_gather(lane_member(node, member, u32))
-            link = lane_gather(lane_member(node, "next_value", Node_Index)) 
+            
+            node := lane_index(nodes, cast(lane_u32) link)
+            value_index := lane_gather(lane_member(node, member, u32))
             
             when Node != Sphere_Node {
-                hit_triangle(world, value, ray_o, ray_d, min_t, closest_t, did_hit, hit_material_index, next_o, normal, tangent, binormal, hit_mask)
+                hit_triangle(world, value_index, ray_o, ray_d, min_t, closest_t, did_hit, hit_material_index, next_o, normal, tangent, binormal)
             } else {
-                hit_sphere(world, value, ray_o, ray_d, min_t, closest_t, did_hit, hit_material_index, next_o, normal, tangent, binormal, hit_mask)
+                hit_sphere(world, value_index, ray_o, ray_d, min_t, closest_t, did_hit, hit_material_index, next_o, normal, tangent, binormal)
             }
+            
+            link = lane_gather(lane_member(node, "next_value", Node_Index)) 
         }
     }
 }
 
 ////////////////////////////////////////////////
 
-hit_sphere :: proc (world: ^World, sphere_index: lane_u32, ray_o, ray_d: lane_v3, min_t: lane_f32, closest_t: ^lane_f32, did_hit, hit_material_index: ^lane_u32, next_o, normal, tangent, binormal: ^lane_v3, extra_mask := lane_true) {
-    spall_proc()
+hit_rectangle :: proc (ray_o, inv_d: lane_v3, min, max: lane_v3, t_min_init, t_max_init: lane_f32) -> lane_u32 {
+    t1 := (min - ray_o) * inv_d
+    t2 := (max - ray_o) * inv_d
+    
+    tin := lane_v3 { minimum(t1.x, t2.x), minimum(t1.y, t2.y), minimum(t1.z, t2.z) }
+    tax := lane_v3 { maximum(t1.x, t2.x), maximum(t1.y, t2.y), maximum(t1.z, t2.z) }
+    
+    tmin := maximum(maximum(t_min_init, tin.x), maximum(tin.y, tin.z))
+    tmax := minimum(minimum(t_max_init, tax.x), minimum(tax.y, tax.z))
+    
+    result := less_equal(tmin, tmax)
+    return result
+}
+
+hit_sphere :: proc (world: ^World, sphere_index: lane_u32, ray_o, ray_d: lane_v3, min_t: lane_f32, closest_t: ^lane_f32, did_hit, hit_material_index: ^lane_u32, next_o, normal, tangent, binormal: ^lane_v3) {
+    // @note(viktor): if sphere_index == 0 its the Nil sphere
+    // then the root will be NaN making the t_mask zero, so no hit can be registered
     center   := lane_gather_v(lane_member(lane_index(world.spheres, sphere_index), "center",   v3))
     radius   := lane_gather(  lane_member(lane_index(world.spheres, sphere_index), "radius",   f32))
     material := lane_gather(  lane_member(lane_index(world.spheres, sphere_index), "material", u32))
     
     local_origin := ray_o - center
-    
     a := dot(ray_d, ray_d)
     b := 2 * dot(local_origin, ray_d)
-    c := dot(local_origin, local_origin) - square(radius) 
-    
-    root := square_root(square(b) - 4*a*c)
-    root_mask := greater_equal(root, 0)
-    if root_mask & extra_mask == lane_false do return
+    c := dot(local_origin, local_origin) - square(radius)
+    root_term := square(b) - 4*a*c
+    root := square_root(root_term)
+    root_mask := greater_equal(root_term, 0)
+    if root_mask == lane_false do return
     
     t_pos := (-b + root) / (2 * a)
     t_neg := (-b - root) / (2 * a)
@@ -543,9 +415,9 @@ hit_sphere :: proc (world: ^World, sphere_index: lane_u32, ray_o, ray_d: lane_v3
     
     t_mask := greater_than(t, min_t) & less_than(t, closest_t^)
     
-    if t_mask & extra_mask == lane_false do return
+    if t_mask == lane_false do return
     
-    hit_mask := root_mask & t_mask & extra_mask
+    hit_mask := root_mask & t_mask
     
     conditional_assign(hit_mask, closest_t, t)
     conditional_assign(hit_mask, did_hit, lane_true)
@@ -563,8 +435,9 @@ hit_sphere :: proc (world: ^World, sphere_index: lane_u32, ray_o, ray_d: lane_v3
     conditional_assign(hit_mask, binormal, s_binormal)
 }
 
-hit_triangle :: proc (world: ^World, triangle_index: lane_u32, ray_o, ray_d: lane_v3, min_t: lane_f32, closest_t: ^lane_f32, did_hit, hit_material_index: ^lane_u32, next_o, normal, tangent, binormal: ^lane_v3, extra_mask := lane_true) {
-    spall_proc()
+hit_triangle :: proc (world: ^World, triangle_index: lane_u32, ray_o, ray_d: lane_v3, min_t: lane_f32, closest_t: ^lane_f32, did_hit, hit_material_index: ^lane_u32, next_o, normal, tangent, binormal: ^lane_v3) {
+    // @note(viktor): if triangle_index == 0 its the Nil triangle
+    // then determinant will be zero, so no hit can be registered
     a        := lane_gather_v(lane_member(lane_index(world.triangles, triangle_index), "a", v3))
     b        := lane_gather_v(lane_member(lane_index(world.triangles, triangle_index), "b", v3))
     c        := lane_gather_v(lane_member(lane_index(world.triangles, triangle_index), "c", v3))
@@ -578,27 +451,27 @@ hit_triangle :: proc (world: ^World, triangle_index: lane_u32, ray_o, ray_d: lan
     ray_cross_ac := cross(ray_d, ac)
     determinant  := dot(ab, ray_cross_ac)
     
-    not_parallel_mask := ~approximate_equal(determinant, 0, 0.0000001)
-    if not_parallel_mask & extra_mask == lane_false do return
+    not_parallel_mask := ~approximate_equal(determinant, 0, 1e-6) 
+    if not_parallel_mask == lane_false do return
     
     inv_determinant := 1.0 / determinant
     s := ray_o - a
     u := inv_determinant * dot(s, ray_cross_ac)
     
     u_mask := greater_equal(u, 0) & less_equal(u, 1)
-    if u_mask & extra_mask == lane_false do return
+    if u_mask== lane_false do return
     
     s_cross_ab := cross(s, ab)
     v := inv_determinant * dot(ray_d, s_cross_ab)
     
     v_mask := greater_equal(v, 0) & less_equal(u + v, 1)
-    if v_mask & extra_mask == lane_false do return
+    if v_mask == lane_false do return
     
     t := inv_determinant * dot(ac, s_cross_ab)
     t_mask := greater_than(t, min_t) & less_than(t, closest_t^)
-    if t_mask & extra_mask == lane_false do return
+    if t_mask == lane_false do return
     
-    hit_mask := not_parallel_mask & u_mask & v_mask & t_mask & extra_mask
+    hit_mask := not_parallel_mask & u_mask & v_mask & t_mask
     
     // @note(viktor): Assuming counter-clockwise winding order
     triangle_normal   := normalize_or_zero(cross(ab, ac))
@@ -642,29 +515,37 @@ brdf_lookup :: proc (all_brdf_values: [] v3, materials: [] Material, index: lane
     diff_y_inner := dot(diff_y, lw)
     diff_z_inner := dot(hw, lw)
     
-    // @note(viktor): materials[index].brdf.count
-    brdf := lane_member(lane_index(materials, index), "brdf", BrdfTable)
-    counts := lane_member(brdf, "count", [3] u32)
-    count: lane_uv3
-    count[0] = lane_gather(lane_index(counts, 0))
-    count[1] = lane_gather(lane_index(counts, 1))
-    count[2] = lane_gather(lane_index(counts, 2))
-    
+    // @speed this is the most expensive part of the whole brdf_lookup.
+    // we also know the exact allowed ranges for these lookups so we 
+    // could craft a specialized approximation that only needs to handle 
+    // those. or atleast make a copy and do it wide
     f: lane_v3
-    for lane in 0..<LaneWidth {
-        // @speed this is the most expensive part of the whole brdf_lookup
-        theta_half := acos(extract(hw.z, lane))
-        theta_diff := acos(extract(diff_z_inner, lane))
-        phi_diff   := atan2(extract(diff_y_inner, lane), extract(diff_x_inner, lane))
-        if phi_diff < 0 do phi_diff += Pi
-                
-        // @note(viktor): after the divide and clamp any NaNs will be zero in the scalar code, but Intels max_ps/min_ps do not work the same way, so we need to filter them out manually.
-        if math.is_nan(theta_half) do theta_half = 0
-        if math.is_nan(theta_diff) do theta_diff = 0
+    if true {
+        for lane in 0..<LaneWidth {
+            // @speed this is the most expensive part of the whole brdf_lookup
+            theta_half := acos(extract(hw.z, lane))
+            theta_diff := acos(extract(diff_z_inner, lane))
+            phi_diff   := atan2(extract(diff_y_inner, lane), extract(diff_x_inner, lane))
+            if phi_diff < 0 do phi_diff += Pi
+            
+            // @note(viktor): after the divide and clamp any NaNs will be zero in the scalar code, but Intels max_ps/min_ps do not work the same way, so we need to filter them out manually.
+            if math.is_nan(theta_half) do theta_half = 0
+            if math.is_nan(theta_diff) do theta_diff = 0
+            
+            replace(&f[0], lane, theta_half)
+            replace(&f[1], lane, theta_diff)
+            replace(&f[2], lane, phi_diff)
+        }
+    } else {
+        f[0] = acos_lane_f32(hw.z)
+        f[1] = acos_lane_f32(diff_z_inner)
+        f[2] = atan2_lane_f32(diff_y_inner, diff_x_inner)
         
-        replace(&f[0], lane, theta_half)
-        replace(&f[1], lane, theta_diff)
-        replace(&f[2], lane, phi_diff)
+        // @note(viktor): after the divide and clamp any NaNs will be zero in the scalar code, but Intels max_ps/min_ps do not work the same way, so we need to filter them out manually.
+        conditional_assign(is_nan(f[0]), &f[0], 0)
+        conditional_assign(is_nan(f[1]), &f[1], 0)
+        
+        conditional_assign(less_than(f[2], 0), &f[2], f[2] + Pi)
     }
     
     f[0] = square_root(clamp_01(f[0] / (.5 * Pi)))
@@ -675,6 +556,10 @@ brdf_lookup :: proc (all_brdf_values: [] v3, materials: [] Material, index: lane
         result := cast(T) (x + 0.5)
         return result
     }
+    
+    // @note(viktor): materials[index].brdf.count
+    brdf  := lane_member(lane_index(materials, index), "brdf", BrdfTable)
+    count := lane_gather_v(lane_member(brdf, "count", [3] u32))
     
     i: lane_uv3
     i[0] = round_positive(lane_u32, f[0] * cast(lane_f32) (count[0]-1))
@@ -690,12 +575,8 @@ brdf_lookup :: proc (all_brdf_values: [] v3, materials: [] Material, index: lane
     assert(less_than(indices, cast(lane_u32) len(all_brdf_values)) == lane_true)
     assert((equal(indices, 0) | less_than(indices, values_count))  == lane_true)
     
-    value := lane_index(lane_slice(all_brdf_values, values_index), indices)
-    
-    result: lane_v3
-    result.r = lane_gather(lane_index(value, 0))
-    result.g = lane_gather(lane_index(value, 1))
-    result.b = lane_gather(lane_index(value, 2))
+    value  := lane_index(lane_slice(all_brdf_values, values_index), indices)
+    result := lane_gather_v(value)
     
     return result
 }
