@@ -121,3 +121,30 @@ tree_append :: proc (temp_stack: ^[dynamic] Node_Index, tree: ^[dynamic] $Node, 
     
     return result
 }
+
+////////////////////////////////////////////////
+
+print_node :: proc (nodes: [dynamic] $T, level: int, it_index: Node_Index, count: ^i16) {
+    for _ in 0..<level * 4 do print(" ")
+    it := nodes[it_index]
+    print("node %\n", it_index)
+    count^ += it.value_count
+    if it.value_count != 0 {
+        for _ in 0..<level * 4 do print(" ")
+        print("values:\n")
+        for _ in 0..<(level+1) * 4 do print(" ")
+        for link := it.first_value; link != 0; link = nodes[link].next_value {
+            print("%, ", link)
+        }
+        print("\n")
+    }
+    if it.first_subnode != 0 {
+        for _ in 0..<level * 4 do print(" ")
+        print("subnodes:\n")
+        for link := it.first_subnode; link != 0; link = nodes[link].next_subnode {
+            print_node(nodes, level + 1, link, count)
+        }
+        for _ in 0..<level * 4 do print(" ")
+        print(";\n")
+    }
+}

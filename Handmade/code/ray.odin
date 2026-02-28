@@ -161,7 +161,6 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
     camera_y := vec_cast(lane_f32, camera.y)
     
     for _ in 0..<lane_ray_count {
-        spall_scope("ray accumulation")
         jitter := random_unilateral(entropy, lane_v2)
         offset := lane_v2{film_x, film_y} + jitter * pixel_size
         film_p := film_center + (offset.x*camera_x*half_film_w + offset.y*camera_y * half_film_h) 
@@ -175,7 +174,6 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
         sample: lane_v3
         
         for _ in 0..<max_bounce_count {
-            spall_scope("ray bounce")
             closest_t := cast(lane_f32) +Infinity
             
             hit_material_index: lane_u32
@@ -192,6 +190,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
             
             ////////////////////////////////////////////////
             
+            spall_begin("planes")
             for &plane in world.planes {
                 tolerance :: 0.00001
                 
@@ -231,6 +230,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                 conditional_assign(hit_mask, &tangent,  plane_tangent)
                 conditional_assign(hit_mask, &binormal, plane_binormal)
             }
+            spall_end()
             
             ////////////////////////////////////////////////
             
@@ -311,6 +311,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
 
 gather_all_possibly_hit_nodes_from_tree_wide :: proc (nodes: [] $Node, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32,
     world: ^World, closest_t: ^lane_f32, did_hit, hit_material_index: ^lane_u32, next_o, normal, tangent, binormal: ^lane_v3) {
+    spall_proc()
     inv_d := 1 / normalize_or_zero(ray_d)
     
     lane_Node_Index :: #simd [LaneWidth] Node_Index
@@ -322,7 +323,6 @@ gather_all_possibly_hit_nodes_from_tree_wide :: proc (nodes: [] $Node, ray_o, ra
     
     // @note(viktor): currently the stacks grow and shrink in lockstep
     // lanes without valid work, work on the nil node and nil values
-    skips: int
     for stack_lens != 0 {
         stack_lens -= 1
         
@@ -377,6 +377,7 @@ gather_all_possibly_hit_nodes_from_tree_wide :: proc (nodes: [] $Node, ray_o, ra
 ////////////////////////////////////////////////
 
 hit_rectangle :: proc (ray_o, inv_d: lane_v3, min, max: lane_v3, t_min_init, t_max_init: lane_f32) -> lane_u32 {
+    spall_proc()
     t1 := (min - ray_o) * inv_d
     t2 := (max - ray_o) * inv_d
     
@@ -391,6 +392,7 @@ hit_rectangle :: proc (ray_o, inv_d: lane_v3, min, max: lane_v3, t_min_init, t_m
 }
 
 hit_sphere :: proc (world: ^World, sphere_index: lane_u32, ray_o, ray_d: lane_v3, min_t: lane_f32, closest_t: ^lane_f32, did_hit, hit_material_index: ^lane_u32, next_o, normal, tangent, binormal: ^lane_v3) {
+    spall_proc()
     // @note(viktor): if sphere_index == 0 its the Nil sphere
     // then the root will be NaN making the t_mask zero, so no hit can be registered
     center   := lane_gather_v(lane_member(lane_index(world.spheres, sphere_index), "center",   v3))
@@ -436,6 +438,7 @@ hit_sphere :: proc (world: ^World, sphere_index: lane_u32, ray_o, ray_d: lane_v3
 }
 
 hit_triangle :: proc (world: ^World, triangle_index: lane_u32, ray_o, ray_d: lane_v3, min_t: lane_f32, closest_t: ^lane_f32, did_hit, hit_material_index: ^lane_u32, next_o, normal, tangent, binormal: ^lane_v3) {
+    spall_proc()
     // @note(viktor): if triangle_index == 0 its the Nil triangle
     // then determinant will be zero, so no hit can be registered
     a        := lane_gather_v(lane_member(lane_index(world.triangles, triangle_index), "a", v3))
@@ -519,8 +522,11 @@ brdf_lookup :: proc (all_brdf_values: [] v3, materials: [] Material, index: lane
     // we also know the exact allowed ranges for these lookups so we 
     // could craft a specialized approximation that only needs to handle 
     // those. or atleast make a copy and do it wide
-    f: lane_v3
-    if true {
+    spall_begin("acos atan math")
+    f0: lane_f32
+    f1: lane_f32
+    f2: lane_f32
+    if !true {
         for lane in 0..<LaneWidth {
             // @speed this is the most expensive part of the whole brdf_lookup
             theta_half := acos(extract(hw.z, lane))
@@ -532,25 +538,26 @@ brdf_lookup :: proc (all_brdf_values: [] v3, materials: [] Material, index: lane
             if math.is_nan(theta_half) do theta_half = 0
             if math.is_nan(theta_diff) do theta_diff = 0
             
-            replace(&f[0], lane, theta_half)
-            replace(&f[1], lane, theta_diff)
-            replace(&f[2], lane, phi_diff)
+            replace(&f0, lane, theta_half)
+            replace(&f1, lane, theta_diff)
+            replace(&f2, lane, phi_diff)
         }
     } else {
-        f[0] = acos_lane_f32(hw.z)
-        f[1] = acos_lane_f32(diff_z_inner)
-        f[2] = atan2_lane_f32(diff_y_inner, diff_x_inner)
+        f0 = acos_lane_f32(hw.z)
+        f1 = acos_lane_f32(diff_z_inner)
+        f2 = fast_atan2_lane_f32(diff_y_inner, diff_x_inner)
         
         // @note(viktor): after the divide and clamp any NaNs will be zero in the scalar code, but Intels max_ps/min_ps do not work the same way, so we need to filter them out manually.
-        conditional_assign(is_nan(f[0]), &f[0], 0)
-        conditional_assign(is_nan(f[1]), &f[1], 0)
+        conditional_assign(is_nan(f0), &f0, 0)
+        conditional_assign(is_nan(f1), &f1, 0)
         
-        conditional_assign(less_than(f[2], 0), &f[2], f[2] + Pi)
+        conditional_assign(less_than(f2, 0), &f2, f2 + Pi)
     }
+    spall_end()
     
-    f[0] = square_root(clamp_01(f[0] / (.5 * Pi)))
-    f[1] =             clamp_01(f[1] / (.5 * Pi))
-    f[2] =             clamp_01(f[2] / (     Pi))
+    f0 = square_root(clamp_01(f0 / (.5 * Pi)))
+    f1 =             clamp_01(f1 / (.5 * Pi))
+    f2 =             clamp_01(f2 / (     Pi))
     
     round_positive :: proc ($T: typeid, x: $X) -> T {
         result := cast(T) (x + 0.5)
@@ -561,12 +568,11 @@ brdf_lookup :: proc (all_brdf_values: [] v3, materials: [] Material, index: lane
     brdf  := lane_member(lane_index(materials, index), "brdf", BrdfTable)
     count := lane_gather_v(lane_member(brdf, "count", [3] u32))
     
-    i: lane_uv3
-    i[0] = round_positive(lane_u32, f[0] * cast(lane_f32) (count[0]-1))
-    i[1] = round_positive(lane_u32, f[1] * cast(lane_f32) (count[1]-1))
-    i[2] = round_positive(lane_u32, f[2] * cast(lane_f32) (count[2]-1))
+    i0 := round_positive(lane_u32, f0 * cast(lane_f32) (count[0]-1))
+    i1 := round_positive(lane_u32, f1 * cast(lane_f32) (count[1]-1))
+    i2 := round_positive(lane_u32, f2 * cast(lane_f32) (count[2]-1))
     
-    indices := (i[2]) + (i[1] * count[2]) + (i[0] * count[2] * count[1])
+    indices := (i2) + (i1 * count[2]) + (i0 * count[2] * count[1])
     // @todo(viktor): @important Before indices were interpreted as f32(stride=4), when correcting to v3(stride=12) the color of all surfaces is almost black. is this because i misused the brdfs or picked bad brdfs?
     indices = floor(lane_u32, cast(lane_f32) indices / 3)
     values_index := lane_gather(lane_member(brdf, "values_index", u32))

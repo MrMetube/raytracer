@@ -111,6 +111,7 @@ main :: proc() {
     
     stack := make_dynamic_array(context.temp_allocator, [dynamic] Node_Index, 0, 0)
     
+    // Currently the octtree is a ~30% gain compared to the straight array
     for sphere, index in world.spheres {
         value: Sphere_Node
         value.sphere_index = auto_cast index
@@ -159,51 +160,6 @@ main :: proc() {
         //    8 ~1000 ms
         ok := tree_append(&stack, &world.triangle_nodes, value, values_per_node = 4)
         assert(ok)
-    }
-    
-    if false {
-        print_node :: proc (nodes: [dynamic] $T, level: int, it_index: Node_Index, count: ^i16) {
-            for _ in 0..<level * 4 do print(" ")
-            it := nodes[it_index]
-            print("node %\n", it_index)
-            count^ += it.value_count
-            if it.value_count != 0 {
-                for _ in 0..<level * 4 do print(" ")
-                print("values:\n")
-                for _ in 0..<(level+1) * 4 do print(" ")
-                for link := it.first_value; link != 0; link = nodes[link].next_value {
-                    print("%, ", link)
-                }
-                print("\n")
-            }
-            if it.first_subnode != 0 {
-                for _ in 0..<level * 4 do print(" ")
-                print("subnodes:\n")
-                for link := it.first_subnode; link != 0; link = nodes[link].next_subnode {
-                    print_node(nodes, level + 1, link, count)
-                }
-                for _ in 0..<level * 4 do print(" ")
-                print(";\n")
-            }
-        }
-        
-        print("// Spheres\n")
-        {
-            total_count: i16
-            print_node(world.sphere_nodes, 0, Root_Index, &total_count)
-            
-            print("Total count %/%\n", total_count, len(world.spheres))
-            print("Total nodes %\n", len(world.sphere_nodes))
-        }
-        print("////////////////////////////////////////////////\n")
-        print("// Triangles\n")
-        {
-            total_count: i16
-            print_node(world.triangle_nodes, 0, Root_Index, &total_count)
-            
-            print("Total count %/%\n", total_count, len(world.triangles))
-            print("Total nodes %\n", len(world.triangle_nodes))
-        }
     }
     
     ////////////////////////////////////////////////
@@ -280,6 +236,9 @@ main :: proc() {
         if rl.IsKeyDown(.W) do dddp += { 0, 0, -1}
         if rl.IsKeyDown(.S) do dddp += { 0, 0,  1}
         
+        if rl.IsKeyDown(.SPACE)        do dddp += {0, 1,  0}
+        if rl.IsKeyDown(.LEFT_CONTROL) do dddp += {0,-1,  0}
+        
         if rl.IsMouseButtonPressed(.MIDDLE) {
             mouse_is_look = !mouse_is_look
         }
@@ -321,6 +280,7 @@ main :: proc() {
             fast_render.requested = true
         }
         
+        
         dddp = normalize_or_zero(dddp)
         dddp *= speed
         ddp += dddp
@@ -330,9 +290,9 @@ main :: proc() {
         if length_squared(dp) < square(cast(f32) 0.01) do dp = 0
         
         if dp != 0 {
-            camera.p += dp.x * camera.x * delta_time
-            camera.p += dp.y * camera.y * delta_time
-            camera.p += dp.z * camera.z * delta_time
+            camera.p += dp.x * camera.x    * delta_time
+            camera.p += dp.y * v3{0, 0, 1} * delta_time
+            camera.p += dp.z * camera.z    * delta_time
             
             fast_render.requested = true
         }
@@ -358,8 +318,11 @@ main :: proc() {
             fast_render.world.rays_per_pixel = clamp(fast_render.world.rays_per_pixel, LaneWidth, 128)
         }
         
-        if rl.IsKeyPressed(.SPACE) {
+        if rl.IsKeyPressed(.X) {
             quality_render.requested = true
+        }
+        if rl.IsKeyPressed(.C) {
+            fast_render.requested = true
         }
         
         for &render in renders {
