@@ -36,15 +36,8 @@ Camera :: struct {
     p:       v3,
 }
 
-Sphere_Node :: struct {
-    using base: Oct_Node,
-    value:      Sphere,
-}
-
-Triangle_Node :: struct {
-    using base: Oct_Node,
-    value:      Triangle,
-}
+Sphere_Node   :: #type Oct_Node(Sphere)
+Triangle_Node :: #type Oct_Node(Triangle)
 
 ////////////////////////////////////////////////
 

@@ -13,12 +13,14 @@ Base_Node :: struct {
     bounds: Rectangle3,
 }
 
-Oct_Node :: struct {
-    bounds:      Rectangle3,
+Oct_Node :: struct ($Value: typeid) {
     subnodes:    [8] Node_Index,
     first_value: Node_Index,
     next_value:  Node_Index,
     value_count: u8,
+    
+    bounds: Rectangle3,
+    value:  Value,
 }
 
 /* 
@@ -64,8 +66,6 @@ tree_append :: proc (temp_stack: ^[dynamic] Node_Index, tree: ^[dynamic] $Node, 
         node := &tree[node_index]
         if !contains_rect(node.bounds, value.bounds) do continue
         
-        // @todo(viktor): its seems to not matter how large a node is at the current scale of value nodes
-        // @todo(viktor): was this just because the subdivide was broken?
         if node.value_count < values_per_node {
             into_index = node_index
             break

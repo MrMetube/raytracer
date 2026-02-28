@@ -135,33 +135,13 @@ main :: proc() {
         value: Triangle_Node
         value.value = triangle
         
-        #assert(Todo, "either actually test this bounds or remove it from value nodes")
+        // @note(viktor): These bounds are currently only used in construction and not in the octtree traversal. if hit_rectangle + maybe hit_value is generally faster than just hit_value, it may be worth also testing the value bounds.
         value.bounds = rectangle_inverted_infinity(Rectangle3)
         value.bounds = get_union_point(value.bounds, triangle.a)
         value.bounds = get_union_point(value.bounds, triangle.b)
         value.bounds = get_union_point(value.bounds, triangle.c)
         append(&world.triangle_nodes, value)
         
-        // utah 0
-        //   1  629 ms | 
-        //   2  635 ms
-        //   4  657 ms
-        //   8  683 ms
-        
-        // utah 1 
-        // ~5.5 times as many as 0
-        //   1  1.46 s | 
-        //   2  1.46 s
-        //   4  1.49 s
-        //   8  1.54 s
-        
-        // utah 2 
-        // ~7.5 times as many as 1
-        // ~41  times as many as 0
-        //   1  4.23 ms | 
-        //   2  4.25 ms
-        //   4  4.31 ms
-        //   8  4.37 ms
         ok := octtree_append(&stack, &world.triangle_nodes, value, values_per_node = values_per_node)
         assert(ok)
     }
