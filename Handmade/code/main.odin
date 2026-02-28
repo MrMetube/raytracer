@@ -3,10 +3,13 @@ package main
 import os "core:os/os2"
 import os_old "core:os"
 import "core:time"
+import "core:fmt"
 import "core:math"
 
 import img "vendor:stb/image"
 import rl "vendor:raylib"
+
+Todo :: !true
 
 FontSize :: 20
 
@@ -27,6 +30,8 @@ Render :: struct {
 }
 
 ////////////////////////////////////////////////
+
+fast_factor :: 60
 
 main :: proc() {
     rl.SetTraceLogLevel(.WARNING)
@@ -106,24 +111,24 @@ main :: proc() {
     append(&world.triangles, ..teapot)
     
     ////////////////////////////////////////////////
-    
-    tree_init(&world.sphere_nodes, rectangle_center_dimension(v3{0, 0, 0}, 128))
+    values_per_node :: 4
     
     stack := make_dynamic_array(context.temp_allocator, [dynamic] Node_Index, 0, 0)
+    reserve(&world.sphere_nodes, len(world.spheres))
+    tree_init(&world.sphere_nodes, rectangle_center_dimension(v3{0, 0, 0}, 128))
     
     // Currently the octtree is a ~30% gain compared to the straight array
     for sphere, index in world.spheres {
         value: Sphere_Node
         value.sphere_index = auto_cast index
-        
         value.bounds = rectangle_center_dimension(sphere.center, sphere.radius)
         
-        ok := tree_append(&stack, &world.sphere_nodes, value, values_per_node = 32)
+        ok := octtree_append(&stack, &world.sphere_nodes, value, values_per_node)
         assert(ok)
     }
     
     clear(&stack)
-    
+    reserve(&world.triangle_nodes, len(world.triangles))
     tree_init(&world.triangle_nodes, rectangle_center_dimension(v3{}, 128))
     
     for triangle, index in world.triangles {
@@ -137,30 +142,35 @@ main :: proc() {
         append(&world.triangle_nodes, value)
         
         // utah 0
-        //    1   230 ms
-        //    2   239 ms
-        //    4   258 ms
-        //    8   281 ms
-        //   32   401 ms
-        //  128   855 ms
+        //   1  629 ms | 
+        //   2  635 ms
+        //   4  657 ms
+        //   8  683 ms
         
         // utah 1 
         // ~5.5 times as many as 0
-        //    1   462 ms
-        //    2   471 ms
-        //    4   494 ms
-        //    8   510 ms
+        //   1  1.46 s | 
+        //   2  1.46 s
+        //   4  1.49 s
+        //   8  1.54 s
         
         // utah 2 
         // ~7.5 times as many as 1
         // ~41  times as many as 0
-        //    1 ~1000 ms
-        //    2 ~1000 ms
-        //    4 ~1000 ms
-        //    8 ~1000 ms
-        ok := tree_append(&stack, &world.triangle_nodes, value, values_per_node = 4)
+        //   1  4.23 ms | 
+        //   2  4.25 ms
+        //   4  4.31 ms
+        //   8  4.37 ms
+        ok := octtree_append(&stack, &world.triangle_nodes, value, values_per_node = values_per_node)
         assert(ok)
     }
+    
+    info := inspect(world.triangle_nodes, Root_Index, values_per_node)
+    print("triangle tree info = %\n", info)
+    print("  values per node = %\n", values_per_node)
+    print("  density         = % %%\n", 100 * cast(f64) info.value_count / cast(f64) (info.node_count + info.value_count))
+    print("  overfullness    = % %%\n", 100 * cast(f64) info.overfull_nodes / cast(f64) (info.node_count))
+    print("\n")
     
     ////////////////////////////////////////////////
     
@@ -197,7 +207,6 @@ main :: proc() {
     show_spheres: bool
     
     
-    fast_factor :: 6
     quality_render: Render
     fast_render:    Render
     init_render(&quality_render, 64, 8, window_size.x, window_size.y, core_count)
@@ -400,7 +409,7 @@ main :: proc() {
         for &render in renders {
             layout_begin_horizontal(&layout)
             end := render.active ? time.now() : render.end
-            display_line(&layout, "Render took: %", time.diff(render.start, end))
+            display_line(&layout, "Render took: %", fmt.tprintf("%.2v", time.diff(render.start, end)))
             
             if render.active && !work_is_completed(&render.queue){
                 total_pixels := render.image.width * render.image.height

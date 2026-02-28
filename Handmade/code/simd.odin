@@ -63,7 +63,7 @@ lane_gather_mask :: #force_inline proc (lane: Lane($T), default: #simd [LaneWidt
     return result
 }
 lane_gather_no_mask :: #force_inline proc (lane: Lane($T)) -> #simd [LaneWidth] T {
-    result := lane_gather_mask(lane, 0, lane_true)
+    result := lane_gather_mask(lane, T{}, lane_true)
     return result
 }
 lane_gather_v :: #force_inline proc (lane: Lane($T/ [$N] $E)) -> [N] #simd [LaneWidth] E {

@@ -330,46 +330,109 @@ gather_all_possibly_hit_nodes_from_tree_wide :: proc (nodes: [] $Node, ray_o, ra
         it_index := cast(lane_u32) lane_gather(lane_index_wide(stacks, stack_lens))
         assert(it_index != 0, "if all lanes are zero we should not have appended the nodes")
         
-        it_base := lane_member(lane_index(nodes, it_index), "base", Base_Node)
-        
-        it_bounds := lane_member(it_base, "bounds", Rectangle3)
-        b_min := lane_gather_v(lane_member(it_bounds, "min", v3))
-        b_max := lane_gather_v(lane_member(it_bounds, "max", v3))
-        
-        // @todo(viktor): should this update closest_t?
-        hit_mask := hit_rectangle(ray_o, inv_d, b_min, b_max, min_t, max_t)
-        
-        next_subnode  := lane_gather(lane_member(it_base, "next_subnode",  Node_Index))
-        first_subnode := lane_gather(lane_member(it_base, "first_subnode", Node_Index))
-        first_value   := lane_gather(lane_member(it_base, "first_value",   Node_Index))
-        
-        // @note(viktor): only if all lanes are zero do not push onto the stack, otherwise keep stacklens in sync and push zeros
-        append_next_subnode  := greater_than(next_subnode,  0)
-        append_first_subnode := greater_than(first_subnode, 0)
-        append_first_subnode &= hit_mask
-        
-        push_next_mask  := append_next_subnode  == lane_false ? lane_false : lane_true
-        push_first_mask := append_first_subnode == lane_false ? lane_false : lane_true
-        
-        lane_scatter(lane_index_wide(stacks, stack_lens), next_subnode, append_next_subnode)
-        conditional_assign(push_next_mask, &stack_lens, stack_lens+1)
-        lane_scatter(lane_index_wide(stacks, stack_lens), first_subnode, append_first_subnode)
-        conditional_assign(push_first_mask, &stack_lens, stack_lens+1)
-        
-        link := first_value & cast(lane_Node_Index) hit_mask
-        for link != 0 {
-            member :: "sphere_index" when Node == Sphere_Node else "triangle_index"
+        is_octtree :: type_of(nodes[0].base) == Oct_Node
+        when is_octtree {
+            it_base := lane_member(lane_index(nodes, it_index), "base", Oct_Node)
             
-            node := lane_index(nodes, cast(lane_u32) link)
-            value_index := lane_gather(lane_member(node, member, u32))
+            it_bounds := lane_member(it_base, "bounds", Rectangle3)
+            b_min := lane_gather_v(lane_member(it_bounds, "min", v3))
+            b_max := lane_gather_v(lane_member(it_bounds, "max", v3))
             
-            when Node != Sphere_Node {
-                hit_triangle(world, value_index, ray_o, ray_d, min_t, closest_t, did_hit, hit_material_index, next_o, normal, tangent, binormal)
-            } else {
-                hit_sphere(world, value_index, ray_o, ray_d, min_t, closest_t, did_hit, hit_material_index, next_o, normal, tangent, binormal)
+            // @todo(viktor): should this update closest_t?
+            hit_mask := hit_rectangle(ray_o, inv_d, b_min, b_max, min_t, max_t)
+            
+            spall_begin("subnodes")
+            first_value   := lane_gather(lane_member(it_base, "first_value", Node_Index))
+            subnodes      := lane_member(it_base, "subnodes", [8] Node_Index)
+            first_subnode := lane_gather(lane_index(subnodes, 0))
+            
+            // @note(viktor): only if all lanes are zero do not push onto the stack, otherwise keep stacklens in sync and push zeros
+            append_first_subnode := greater_than(first_subnode, 0)
+            append_first_subnode &= hit_mask
+            
+            push_subnodes := append_first_subnode == lane_false ? lane_false : lane_true
+            
+            for i in cast(u32) 0..<8 {
+                lane_scatter(lane_index_wide(stacks, stack_lens+i), lane_gather(lane_index(subnodes, i)), append_first_subnode)
             }
+            conditional_assign(push_subnodes, &stack_lens, stack_lens+8)
+            spall_end()
             
-            link = lane_gather(lane_member(node, "next_value", Node_Index)) 
+            
+            spall_begin("value loop")
+            // @speed what is a better data layout for the values, we spend a lot of time in here, a lot of the time many lanes are emtpy
+            link := first_value & cast(lane_Node_Index) hit_mask
+            for link != 0 {
+                member :: "sphere_index" when Node == Sphere_Node else "triangle_index"
+                
+                node := lane_index(nodes, cast(lane_u32) link)
+                value_index := lane_gather(lane_member(node, member, u32))
+                
+                when Node != Sphere_Node {
+                    hit_triangle(world, value_index, ray_o, ray_d, min_t, closest_t, did_hit, hit_material_index, next_o, normal, tangent, binormal)
+                } else {
+                    hit_sphere(world, value_index, ray_o, ray_d, min_t, closest_t, did_hit, hit_material_index, next_o, normal, tangent, binormal)
+                }
+                
+                link = lane_gather(lane_member(node, "next_value", Node_Index)) 
+                #assert(Todo, "fewer empty lanes")
+                empties := horizontal_add(1 & equal(link, 0))
+                switch empties {
+                case 0: spall_begin("empty 0")
+                case 1: spall_begin("empty 1")
+                case 2: spall_begin("empty 2")
+                case 3: spall_begin("empty 3")
+                case 4: spall_begin("empty 4")
+                case 5: spall_begin("empty 5")
+                case 6: spall_begin("empty 6")
+                case 7: spall_begin("empty 7")
+                case 8: spall_begin("empty 8")
+                }
+                spall_end()
+            }
+            spall_end()
+        } else {
+            it_base := lane_member(lane_index(nodes, it_index), "base", Base_Node)
+            
+            it_bounds := lane_member(it_base, "bounds", Rectangle3)
+            b_min := lane_gather_v(lane_member(it_bounds, "min", v3))
+            b_max := lane_gather_v(lane_member(it_bounds, "max", v3))
+            
+            // @todo(viktor): should this update closest_t?
+            hit_mask := hit_rectangle(ray_o, inv_d, b_min, b_max, min_t, max_t)
+            
+            next_subnode  := lane_gather(lane_member(it_base, "next_subnode",  Node_Index))
+            first_subnode := lane_gather(lane_member(it_base, "first_subnode", Node_Index))
+            first_value   := lane_gather(lane_member(it_base, "first_value",   Node_Index))
+            
+            // @note(viktor): only if all lanes are zero do not push onto the stack, otherwise keep stacklens in sync and push zeros
+            append_next_subnode  := greater_than(next_subnode,  0)
+            append_first_subnode := greater_than(first_subnode, 0)
+            append_first_subnode &= hit_mask
+            
+            push_next_mask  := append_next_subnode  == lane_false ? lane_false : lane_true
+            push_first_mask := append_first_subnode == lane_false ? lane_false : lane_true
+            
+            lane_scatter(lane_index_wide(stacks, stack_lens), next_subnode, append_next_subnode)
+            conditional_assign(push_next_mask, &stack_lens, stack_lens+1)
+            lane_scatter(lane_index_wide(stacks, stack_lens), first_subnode, append_first_subnode)
+            conditional_assign(push_first_mask, &stack_lens, stack_lens+1)
+            
+            link := first_value & cast(lane_Node_Index) hit_mask
+            for link != 0 {
+                member :: "sphere_index" when Node == Sphere_Node else "triangle_index"
+                
+                node := lane_index(nodes, cast(lane_u32) link)
+                value_index := lane_gather(lane_member(node, member, u32))
+                
+                when Node != Sphere_Node {
+                    hit_triangle(world, value_index, ray_o, ray_d, min_t, closest_t, did_hit, hit_material_index, next_o, normal, tangent, binormal)
+                } else {
+                    hit_sphere(world, value_index, ray_o, ray_d, min_t, closest_t, did_hit, hit_material_index, next_o, normal, tangent, binormal)
+                }
+                
+                link = lane_gather(lane_member(node, "next_value", Node_Index)) 
+            }
         }
     }
 }

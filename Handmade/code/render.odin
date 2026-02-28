@@ -11,6 +11,7 @@ Image:: struct {
     height: i32,
 }
 
+#assert(Todo, "inline sphere and triangle into node, no double indexing")
 // @volatile also update the render's world copying
 World :: struct {
     sphere_nodes:   [dynamic] Sphere_Node,
@@ -37,12 +38,12 @@ Camera :: struct {
 }
 
 Sphere_Node :: struct {
-    using base: Base_Node,
+    using base:   Oct_Node,
     sphere_index: u32,
 }
 
 Triangle_Node :: struct {
-    using base: Base_Node,
+    using base:     Oct_Node,
     triangle_index: u32,
 }
 
