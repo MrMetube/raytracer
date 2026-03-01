@@ -123,10 +123,12 @@ main :: proc() {
     }
     
     inspection := inspect(triangle_info, world.triangle_nodes[:], Root_Index)
-    print("triangle tree info = %\n", inspection)
+    print("triangle tree info:\n")
+    print("            depth: max = %, avg = %\n", inspection.depth.max, view_float(inspection.depth.avg, precision = 2))
+    print("  values per node: min = %, max = %, avg = %\n", inspection.values_per_node.min, inspection.values_per_node.max, view_float(inspection.values_per_node.avg, precision = 2))
     print("  values per node = %\n", triangle_info.values_per_node)
-    print("  density         = % %%\n", 100 * cast(f64) inspection.value_count / cast(f64) (inspection.node_count + inspection.value_count))
-    print("  overfullness    = % %%\n", 100 * cast(f64) inspection.overfull_nodes / cast(f64) (inspection.node_count))
+    print("          density = % %%\n", 100 * cast(f64) inspection.values_per_node.sum / cast(f64) (inspection.node_count + inspection.values_per_node.sum))
+    print("     overfullness = % %%\n", 100 * cast(f64) inspection.overfull_nodes / cast(f64) (inspection.node_count))
     print("\n")
     
     ////////////////////////////////////////////////
@@ -299,10 +301,10 @@ main :: proc() {
                 if work_is_completed(&render.queue) {
                     complete_all_work(&render.queue)
                     
-                    print_render_results(&render.world, render.start, render.end)
-                    
                     render.active = false
                     render.end = time.now()
+                    print_render_results(&render.world, render.start, render.end)
+                    
                     free_all(render.allocator)
                     load_image_into_texture(&render.texture, render.image)
                 }

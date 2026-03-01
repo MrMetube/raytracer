@@ -180,10 +180,11 @@ print_node :: proc (nodes: [dynamic] $T, level: int, it_index: Node_Index) -> u3
 }
 
 Tree_Info :: struct {
-    value_count: u32, 
-    node_count:  u32,
+    values_per_node: Stat,
+    depth: Stat,
+    
+    node_count:     u32,
     overfull_nodes: u32, 
-    max_depth: u32,
 }
 
 inspect :: proc (info: Tree_Build_Info, nodes: [] Oct_Node($Value), it_index: Node_Index, depth : u32 = 0) -> Tree_Info {
@@ -191,8 +192,9 @@ inspect :: proc (info: Tree_Build_Info, nodes: [] Oct_Node($Value), it_index: No
     value_count := info.value_counts[it_index]
     
     result: Tree_Info
-    result.value_count = value_count
-    result.max_depth = depth
+    
+    result.depth = stat_init(depth)
+    result.values_per_node = stat_init(value_count)
     result.node_count = 1
     if value_count > info.values_per_node {
         result.overfull_nodes += 1
@@ -202,12 +204,43 @@ inspect :: proc (info: Tree_Build_Info, nodes: [] Oct_Node($Value), it_index: No
         for sub_index in it.node.first_subnode..< it.node.first_subnode + Subnodes_Per_Node {
             sub_info := inspect(info, nodes, sub_index, depth + 1)
             
-            result.value_count    += sub_info.value_count
             result.overfull_nodes += sub_info.overfull_nodes
             result.node_count     += sub_info.node_count
-            result.max_depth       = max(result.max_depth, sub_info.max_depth)
+            
+            stat_update(&result.values_per_node, sub_info.values_per_node)
+            stat_update(&result.depth, sub_info.depth)
         }
     }
     
+    stat_finalize(&result.values_per_node)
+    stat_finalize(&result.depth)
+    
     return result
+}
+
+Stat :: struct {
+    min, max, sum, count: u32,
+    avg: f64,
+}
+
+stat_init :: proc (value: u32) -> Stat {
+    result: Stat
+    result.sum += value
+    result.min = value
+    result.max = value
+    result.count = 1
+    return result
+}
+
+stat_update :: proc (stat: ^Stat, other: Stat) {
+    stat.min    = min(stat.min, other.min)
+    stat.max    = max(stat.max, other.max)
+    stat.sum   += other.sum
+    stat.count += other.count
+}
+
+stat_finalize :: proc (stat: ^Stat) {
+    if stat.count > 0 {
+        stat.avg = cast(f64) stat.sum / cast(f64) stat.count
+    }
 }
