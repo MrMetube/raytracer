@@ -11,18 +11,7 @@ Oct_Value :: struct ($Value: typeid) {
     next_value: Node_Index,
     value:      Value,
 }
-
-/// oct_node = 4 + 4 + (2 * 3 * 4)
-/// sphere   = (3 * 4 + 4 + 4) + 4
-/// triangle = (3 * 3 * 4 + 4) + 4
-/// oct_node
-///   sphere
-/// triangle
-
-#assert(size_of(Oct_Node(Sphere)) == 32)
-#assert(size_of(Oct_Value(Triangle)) == 44)
-#assert(size_of(Oct_Node(Triangle)) == 64)
-#assert(size_of(Oct_Node_X) == 32)
+// @note(viktor): A sphere node currently fits into 32 bytes, whilst a triangle node is a bit too large at 44 bytes and requires 64 bytes(with alignment).
 Oct_Node_X :: struct #align(32) {
     // @note(viktor): the other 7 subnodes must follow directly after the first
     first_subnode: Node_Index,
@@ -118,6 +107,9 @@ octtree_append :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Oct_Node($Value
                 
                 subnode_bounds := rectangle_min_dimension(node.bounds.min + factor * half, half)
                 tree_append_node(info, tree, subnode_bounds)
+                // @cleanup tree may have been reallocated
+                it = &tree[it_index]
+                node = &it.node
             }
         }
         

@@ -4,17 +4,16 @@ import os "core:os/os2"
 import "core:strings"
 import "core:strconv"
 
-load_teapot :: proc (utah: u32, material: u32) -> [] Triangle {
+load_teapot :: proc (triangles: ^[dynamic] Triangle, utah: u32, material: u32) {
     data, err := os.read_entire_file_from_path(tprint("./teapot_bezier%.tris", utah), context.temp_allocator)
     assert(err == nil)
+    
     text := cast(string) data
     count_text: string
     count_text, _, text = strings.partition(text, "\n")
     
     count, count_ok := strconv.parse_int(count_text)
     assert(count_ok)
-    
-    triangles := make([dynamic] Triangle, 0, count)
     
     for _ in 0..<count {
         vs: [3] v3
@@ -29,10 +28,8 @@ load_teapot :: proc (utah: u32, material: u32) -> [] Triangle {
         }
         chop(&text, "\n")
         
-        append(&triangles, Triangle{ a = vs[0], b = vs[1], c = vs[2], material = material})
+        append(triangles, Triangle{ a = vs[0], b = vs[1], c = vs[2], material = material})
     }
-    
-    return triangles[:]
 }
 
 parse_f32 :: proc(str: string) -> f32 {

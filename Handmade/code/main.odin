@@ -12,7 +12,7 @@ FontSize :: 20
 
 ////////////////////////////////////////////////
 
-fast_factor :: 6 when SpallDisabled else 60
+fast_factor :: 6 when SpallDisabled else 30
 Use_Octtree := true
 
 Is_Optimized :: ODIN_OPTIMIZATION_MODE == .Speed
@@ -87,17 +87,16 @@ main :: proc() {
     } else {
         append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 6 })
         append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size-0.1}, radius = area_size/5, material = 3 })
-    
-        teapot := load_teapot(0, 2)
-        append(&world.triangles, ..teapot)
+        
+        load_teapot(&world.triangles, 0, 2)
     }
     
     ////////////////////////////////////////////////
     
     reserve(&world.sphere_nodes, len(world.spheres))
-    sphere_info := tree_init(&world.sphere_nodes, rectangle_center_dimension(v3{0, 0, 0}, 128), 1, context.temp_allocator)
+    sphere_info := tree_init(&world.sphere_nodes, rectangle_center_dimension(v3{0, 0, 0}, 256), 1, context.temp_allocator)
     
-    // @speed Currently the octtree is a ~73% gain compared to the straight array
+    // @speed Currently the octtree is a ~79% less work compared to the straight array
     for sphere in world.spheres {
         bounds := rectangle_center_dimension(sphere.center, sphere.radius)
         octtree_append(&sphere_info, &world.sphere_nodes, sphere, bounds)
@@ -127,8 +126,6 @@ main :: proc() {
     print("          density = % %%\n", 100 * cast(f64) inspection.values_per_node.sum / cast(f64) (inspection.node_count + inspection.values_per_node.sum))
     print("     overfullness = % %%\n", 100 * cast(f64) inspection.overfull_nodes / cast(f64) (inspection.node_count))
     print("\n")
-    
-    print_node(world.triangle_nodes[:], 0, Root_Index)
     
     ////////////////////////////////////////////////
     
@@ -205,7 +202,7 @@ main :: proc() {
         if rl.IsKeyDown(.W) do dddp += { 0, 0, -1}
         if rl.IsKeyDown(.S) do dddp += { 0, 0,  1}
         
-        if rl.IsKeyDown(.SPACE)        do dddp += {0, 1,  0}
+        if rl.IsKeyDown(.SPACE)      do dddp += {0, 1,  0}
         if rl.IsKeyDown(.LEFT_SHIFT) do dddp += {0,-1,  0}
         
         if rl.IsMouseButtonPressed(.MIDDLE) {
@@ -252,10 +249,10 @@ main :: proc() {
         
         dddp = normalize_or_zero(dddp)
         dddp *= speed
-        ddp += dddp
-        ddp *= 0.9
-        dp += ddp * delta_time
-        dp *= 0.9
+        ddp  += dddp
+        ddp  *= 0.9
+        dp   += ddp * delta_time
+        dp   *= 0.9
         if length_squared(dp) < square(cast(f32) 0.01) do dp = 0
         
         if dp != 0 {
@@ -265,22 +262,6 @@ main :: proc() {
             
             fast_render.requested = true
         }
-        
-        if rl.IsKeyPressed(.J) {
-            quality_render.rays_per_pixel /= 2
-        }
-        if rl.IsKeyPressed(.K) {
-            quality_render.rays_per_pixel *= 2
-        }
-        quality_render.rays_per_pixel = clamp(quality_render.rays_per_pixel, LaneWidth, 2048)
-        
-        if rl.IsKeyPressed(.N) {
-            fast_render.rays_per_pixel /= 2
-        }
-        if rl.IsKeyPressed(.M) {
-            fast_render.rays_per_pixel *= 2
-        }
-        fast_render.rays_per_pixel = clamp(fast_render.rays_per_pixel, LaneWidth, 128)
         
         if rl.IsKeyPressed(.X) {
             quality_render.requested = true
@@ -336,7 +317,42 @@ main :: proc() {
         }
         
         display_line(&layout, "Camera: % : % ", camera.p, camera.z)
-        display_line(&layout, "rays per pixel: quality % / fast % ", quality_render.rays_per_pixel, fast_render.rays_per_pixel)
+        
+        display_line(&layout, "rays per pixel:")
+        button_width :: 30
+        { 
+            layout_begin_horizontal(&layout)
+            
+            layout_advance(&layout, 30)
+            if display_button(&layout, "-", {button_width, FontSize}) do quality_render.rays_per_pixel /= 2 
+            
+            layout_advance(&layout, 10)
+            if display_button(&layout, "+", {button_width, FontSize}) do quality_render.rays_per_pixel *= 2
+            quality_render.rays_per_pixel = clamp(quality_render.rays_per_pixel, LaneWidth, 2048)
+            
+            layout_advance(&layout, 10)
+            display_line(&layout, "quality %", quality_render.rays_per_pixel)
+            
+            layout_end_horizontal(&layout)
+            layout_advance(&layout, FontSize)
+        }
+        
+        { 
+            layout_begin_horizontal(&layout)
+            
+            layout_advance(&layout, 30)
+            if display_button(&layout, "-", {button_width, FontSize}) do fast_render.rays_per_pixel /= 2 
+            
+            layout_advance(&layout, 10)
+            if display_button(&layout, "+", {button_width, FontSize}) do fast_render.rays_per_pixel *= 2
+            fast_render.rays_per_pixel = clamp(fast_render.rays_per_pixel, LaneWidth, 2048)
+            
+            layout_advance(&layout, 10)
+            display_line(&layout, "fast %", fast_render.rays_per_pixel)
+            
+            layout_end_horizontal(&layout)
+            layout_advance(&layout, FontSize)
+        }
         
         for &render in renders {
             layout_begin_horizontal(&layout)
@@ -636,6 +652,12 @@ display_list :: proc (layout: ^Layout, is_open: ^bool, format: string) -> bool {
     return is_open^
 }
 
+display_button :: proc (layout: ^Layout, text: string, size: v2) -> bool {
+    bounds := rectangle_min_dimension(layout.at, size)
+    result := rl.GuiButton(to_rl_rect(bounds), ctprint("%", text))
+    layout_advance(layout, size)
+    return result
+}
 ////////////////////////////////////////////////
 
 to_rl_rect :: proc (rect: Rectangle2) -> rl.Rectangle {

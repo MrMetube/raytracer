@@ -146,7 +146,18 @@ render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle
     atomic_add(&world.tiles_retired, 1)
 }
 
+Hit_Info :: struct {
+    closest_t: lane_f32,
+    did_hit:   lane_u32,
+    material:  lane_u32,
+    next_o:    lane_v3,
+    normal:    lane_v3,
+    tangent:   lane_v3,
+    binormal:  lane_v3,
+}
+
 cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries,  pixel_size: lane_v2, half_film_size: lane_v2, film_center: lane_v3, camera: Camera, rays_per_pixel, max_bounce_count: u32) -> (final_color: v3, bounces_computed, loops_computed: u64) {
+    spall_proc()
     final_color_lanes: lane_v3
     bounces_computed_lanes: lane_u32
     loops_computed_lanes: lane_u32
@@ -176,16 +187,8 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
         sample: lane_v3
         
         for _ in 0..<max_bounce_count {
-            closest_t := cast(lane_f32) +Infinity
-            
-            hit_material_index: lane_u32
-            did_hit: lane_u32
-            
-            next_o: lane_v3
-            
-            normal:   lane_v3
-            tangent:  lane_v3
-            binormal: lane_v3
+            hit: Hit_Info
+            hit.closest_t = +Infinity
             
             bounces_computed_lanes += 1 & lane_mask
             loops_computed_lanes   += 1
@@ -195,7 +198,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
             for &plane in world.planes {
                 tolerance :: 0.00001
                 
-                plane_normal   := vec_cast(lane_f32, plane.normal)
+                plane_normal   := normalize_or_zero(vec_cast(lane_f32, plane.normal))
                 plane_tangent  := vec_cast(lane_f32, plane.tangent)
                 plane_binormal := vec_cast(lane_f32, plane.binormal)
                 
@@ -207,7 +210,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                 if denom_mask == lane_false do continue
                 
                 t := dot(plane_normal, center - ray_o) / denom
-                t_mask := greater_than(t, min_t) & less_than(t, closest_t)
+                t_mask := greater_than(t, min_t) & less_than(t, hit.closest_t)
                 if t_mask == lane_false do continue
                 
                 hit_point := ray_o + t * ray_d
@@ -219,16 +222,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                 
                 hit_mask := denom_mask & t_mask
                 
-                conditional_assign(hit_mask, &closest_t, t)
-                conditional_assign(hit_mask, &did_hit, lane_true)
-                
-                conditional_assign(hit_mask, &hit_material_index, plane.material)
-                
-                conditional_assign(hit_mask, &next_o, ray_o + t*ray_d)
-                
-                conditional_assign(hit_mask, &normal,   normalize_or_zero(plane_normal))
-                conditional_assign(hit_mask, &tangent,  plane_tangent)
-                conditional_assign(hit_mask, &binormal, plane_binormal)
+                update_hit(&hit, hit_mask, t, plane.material, ray_o + t*ray_d, plane_normal, plane_tangent, plane_binormal)
             }
             
             ////////////////////////////////////////////////
@@ -238,11 +232,9 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                 local_nil_value_lanes_tested: [8] u32
                 nodes := world.triangle_nodes[:]
                 
-                traverse_tree_and_collect_values(values, &values_len, nodes, ray_o, ray_d, min_t, closest_t, world)
-                
+                traverse_tree_and_collect_values(values, &values_len, nodes, ray_o, ray_d, min_t, hit.closest_t, world)
                 
                 Check :: false
-                triangle_tests: u32
                 for {
                     values_len = simd.saturating_sub(values_len, 1)
                     if values_len == 0 do break
@@ -250,6 +242,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                     value_index := lane_gather(lane_index_wide(values, values_len), greater_than(values_len, 0), cast(lane_Node_Index) Nil_Index)
                     when Check do assert(value_index != 0, "should not have been appended")
                     
+                    // @note(viktor): Test: with and without loading all triangle data, check just the compute work
                     // baseline - nil triangle
                     // 455ms - 220ms
                     // no early outs in hit_triangle
@@ -264,31 +257,23 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                     as_value := lane_member(node, "value", Oct_Value(Triangle))
                     value    := lane_member(as_value, "value", Triangle)
                     
-                    hit_triangle(value, ray_o, ray_d, min_t, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
+                    hit_triangle(value, ray_o, ray_d, min_t, &hit)
                     
                     empties := horizontal_add(1 & equal(value_index, 0))
                     when Check do assert(empties != 8)
                     #no_bounds_check local_nil_value_lanes_tested[empties] += 1
-                    
-                    present := horizontal_add(1 & not_equal(value_index, 0))
-                    triangle_tests += 8
                 }
                 
                 for i in 0..<len(local_nil_value_lanes_tested) {
                     atomic_add(&world.nil_value_lanes_tested[i], local_nil_value_lanes_tested[i])
                 }
-                
-                atomic_add(&world.triangle_tests, triangle_tests)
             } else {
                 // @note(viktor): skip nil triangle
                 for index in 1 ..< cast(u32) len(world.triangles) {
                     triangle := lane_index(world.triangles, index)
-                    hit_triangle(triangle, ray_o, ray_d, min_t, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
+                    hit_triangle(triangle, ray_o, ray_d, min_t, &hit)
                 }
-                
-                atomic_add(&world.triangle_tests, (cast(u32) len(world.triangles)-1) * LaneWidth)
             }
-            atomic_add(&world.max_triangle_tests, (cast(u32) len(world.triangles)-1) * LaneWidth)
             
             ////////////////////////////////////////////////
             
@@ -297,7 +282,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                 local_nil_value_lanes_tested: [8] u32
                 
                 nodes := world.sphere_nodes[:]
-                traverse_tree_and_collect_values(values, &values_len, nodes, ray_o, ray_d, min_t, closest_t, world)
+                traverse_tree_and_collect_values(values, &values_len, nodes, ray_o, ray_d, min_t, hit.closest_t, world)
                 
                 for {
                     values_len = simd.saturating_sub(values_len, 1)
@@ -310,7 +295,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                     as_value := lane_member(node, "value", Oct_Value(Sphere))
                     value    := lane_member(as_value, "value", Sphere)
                     
-                    hit_sphere(value, ray_o, ray_d, min_t, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
+                    hit_sphere(value, ray_o, ray_d, min_t, &hit)
                     
                     empties := horizontal_add(1 & equal(value_index, 0))
                     assert(empties != 8)
@@ -324,18 +309,18 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                 // @note(viktor): skip nil sphere
                 for index in 1 ..< cast(u32) len(world.spheres) {
                     sphere := lane_index(world.spheres, index)
-                    hit_sphere(sphere, ray_o, ray_d, min_t, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
+                    hit_sphere(sphere, ray_o, ray_d, min_t, &hit)
                 }
             }
             
             ////////////////////////////////////////////////
             
-            materials_ok := less_than(hit_material_index, cast(lane_u32) len(world.materials))
+            materials_ok := less_than(hit.material, cast(lane_u32) len(world.materials))
             assert(materials_ok == lane_true)
             
-            hit_emit    := lane_gather_v(lane_member(lane_index(world.materials, hit_material_index), "emit",    type_of(Material{}.emit)))
-            hit_reflect := lane_gather_v(lane_member(lane_index(world.materials, hit_material_index), "reflect", type_of(Material{}.reflect)))
-            hit_scatter := lane_gather(  lane_member(lane_index(world.materials, hit_material_index), "scatter", type_of(Material{}.scatter)))
+            hit_emit    := lane_gather_v(lane_member(lane_index(world.materials, hit.material), "emit",    type_of(Material{}.emit)))
+            hit_reflect := lane_gather_v(lane_member(lane_index(world.materials, hit.material), "reflect", type_of(Material{}.reflect)))
+            hit_scatter := lane_gather(  lane_member(lane_index(world.materials, hit.material), "scatter", type_of(Material{}.scatter)))
             
             // only allow world.no_hit on the first time we didnt hit anything
             hit_emit.r *= cast(lane_f32) (1 & lane_mask)
@@ -345,20 +330,20 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
             // Color Accumulation
             sample += attenuation * hit_emit
             
-            lane_mask &= did_hit
+            lane_mask &= hit.did_hit
             if lane_mask == lane_false do break
             
             // Bounce
-            pure_bounce   := reflect(ray_d, normal)
-            random_bounce := normalize_or_zero(normal + random_bilateral(entropy, lane_v3))
+            pure_bounce   := reflect(ray_d, hit.normal)
+            random_bounce := normalize_or_zero(hit.normal + random_bilateral(entropy, lane_v3))
             
             next_d := linear_blend(pure_bounce, random_bounce, hit_scatter)
             
-            reflectance := brdf_lookup(world.all_brdf_values[:], world.materials[:], hit_material_index, -ray_d, normal, tangent, binormal, next_d)
+            reflectance := brdf_lookup(world.all_brdf_values[:], world.materials[:], hit.material, -ray_d, hit.normal, hit.tangent, hit.binormal, next_d)
             reflectance *= hit_reflect
-            conditional_assign(did_hit, &attenuation, attenuation * reflectance)
+            conditional_assign(hit.did_hit, &attenuation, attenuation * reflectance)
             
-            ray_o = next_o
+            ray_o = hit.next_o
             ray_d = next_d
         }
         
@@ -378,6 +363,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
 ////////////////////////////////////////////////
 
 traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len: ^lane_u32, nodes: [] Oct_Node($Value), ray_o, ray_d: lane_v3, min_t, max_t: lane_f32, world: ^World) {
+    spall_proc()
     inv_d := 1 / normalize_or_zero(ray_d)
     
     stacks_: [64] lane_Node_Index
@@ -411,6 +397,7 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
         
         // @todo(viktor): @important if viewed almost directly along an axis, the bounds seems to make cracks in my triangles
         
+        spall_begin("append subnodes")
         // @speed What order should they be appended? along the ray direction probably, then also update the closest_t/max_t for all bounds
         first_subnode := lane_gather(lane_member(node, "first_subnode", Node_Index))
         // @note(viktor): only if all lanes are zero do not push onto the stack, otherwise keep counts in sync and push zeros
@@ -431,8 +418,10 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
             }
             counts += added
         }
+        spall_end()
         
         link := first_value & cast(lane_Node_Index) hit_mask
+        spall_scope("append values")
         for link != 0 {
             length := values_len^
             
@@ -450,6 +439,7 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
 ////////////////////////////////////////////////
 
 hit_rectangle :: proc (ray_o, inv_d: lane_v3, min, max: lane_v3, t_min_init, t_max_init: lane_f32) -> lane_u32 {
+    spall_proc()
     t1 := (min - ray_o) * inv_d
     t2 := (max - ray_o) * inv_d
     
@@ -464,59 +454,14 @@ hit_rectangle :: proc (ray_o, inv_d: lane_v3, min, max: lane_v3, t_min_init, t_m
     return result
 }
 
-hit_sphere :: proc (sphere: Lane(Sphere), ray_o, ray_d: lane_v3, min_t: lane_f32, closest_t: ^lane_f32, did_hit, hit_material_index: ^lane_u32, next_o, normal, tangent, binormal: ^lane_v3) {
-    // @note(viktor): if sphere_index == 0 its the Nil sphere
-    // then the root will be NaN making the t_mask zero, so no hit can be registered
-    center   := lane_gather_v(lane_member(sphere, "center",   v3))
-    radius   := lane_gather(  lane_member(sphere, "radius",   f32))
-    material := lane_gather(  lane_member(sphere, "material", u32))
-    
-    local_origin := ray_o - center
-    a := dot(ray_d, ray_d)
-    b := 2 * dot(local_origin, ray_d)
-    c := dot(local_origin, local_origin) - square(radius)
-    root_term := square(b) - 4*a*c
-    root := square_root(root_term)
-    root_mask := greater_equal(root_term, 0)
-    if root_mask == lane_false do return
-    
-    t_pos := (-b + root) / (2 * a)
-    t_neg := (-b - root) / (2 * a)
-    
-    t := t_pos
-    pick_mask := greater_than(t_neg, min_t) & less_than(t_neg, t)
-    conditional_assign(pick_mask, &t, t_neg)
-    
-    t_mask := greater_than(t, min_t) & less_than(t, closest_t^)
-    
-    if t_mask == lane_false do return
-    
-    hit_mask := root_mask & t_mask
-    
-    conditional_assign(hit_mask, closest_t, t)
-    conditional_assign(hit_mask, did_hit, lane_true)
-    
-    conditional_assign(hit_mask, hit_material_index, material)
-    
-    // @todo(viktor): reuse the next_origin calculation
-    conditional_assign(hit_mask, next_o, ray_o + t*ray_d)
-    conditional_assign(hit_mask, normal, normalize_or_zero(next_o^ - center))
-    
-    s_tangent  := normalize_or_zero(cross(lane_v3{0, 0, 1}, normal^))
-    s_binormal := cross(normal^, s_tangent)
-    
-    conditional_assign(hit_mask, tangent,   s_tangent)
-    conditional_assign(hit_mask, binormal, s_binormal)
-}
-
-hit_triangle :: proc (triangle: Lane(Triangle), ray_o, ray_d: lane_v3, min_t: lane_f32, closest_t: ^lane_f32, did_hit, hit_material_index: ^lane_u32, next_o, normal, tangent, binormal: ^lane_v3) {
+hit_triangle :: proc (triangle: Lane(Triangle), ray_o, ray_d: lane_v3, min_t: lane_f32, hit: ^Hit_Info) {
+    spall_proc()
     // @note(viktor): if triangle_index == 0 its the Nil triangle
     // then determinant will be zero, so no hit can be registered
     a        := lane_gather_v(lane_member(triangle, "a", v3))
     b        := lane_gather_v(lane_member(triangle, "b", v3))
     c        := lane_gather_v(lane_member(triangle, "c", v3))
     material := lane_gather(  lane_member(triangle, "material", u32))
-    
     
     ab := b - a
     ac := c - a
@@ -540,31 +485,74 @@ hit_triangle :: proc (triangle: Lane(Triangle), ray_o, ray_d: lane_v3, min_t: la
     if v_mask == lane_false do return
     
     t := inv_determinant * dot(ac, s_cross_ab)
-    t_mask := greater_than(t, min_t) & less_than(t, closest_t^)
+    t_mask := greater_than(t, min_t) & less_than(t, hit.closest_t)
     if t_mask == lane_false do return
     
     hit_mask := not_parallel_mask & u_mask & v_mask & t_mask
     
     // @note(viktor): Assuming counter-clockwise winding order
-    triangle_normal   := normalize_or_zero(cross(ab, ac))
-    triangle_tangent  := normalize_or_zero(ab)
-    triangle_binormal := normalize_or_zero(cross(triangle_normal, triangle_tangent))
+    normal   := normalize_or_zero(cross(ab, ac))
+    tangent  := normalize_or_zero(ab)
+    binormal := normalize_or_zero(cross(normal, tangent))
     
-    conditional_assign(hit_mask, closest_t, t)
-    conditional_assign(hit_mask, did_hit, lane_true)
+    update_hit(hit, hit_mask, t, material, ray_o + t*ray_d, normal, tangent, binormal)
+}
+
+hit_sphere :: proc (sphere: Lane(Sphere), ray_o, ray_d: lane_v3, min_t: lane_f32, hit: ^Hit_Info) {
+    // @note(viktor): if sphere_index == 0 its the Nil sphere
+    // then the root will be NaN making the t_mask zero, so no hit can be registered
+    center   := lane_gather_v(lane_member(sphere, "center",   v3))
+    radius   := lane_gather(  lane_member(sphere, "radius",   f32))
+    material := lane_gather(  lane_member(sphere, "material", u32))
     
-    conditional_assign(hit_mask, hit_material_index, material)
+    local_origin := ray_o - center
+    a := dot(ray_d, ray_d)
+    b := 2 * dot(local_origin, ray_d)
+    c := dot(local_origin, local_origin) - square(radius)
+    root_term := square(b) - 4*a*c
+    root := square_root(root_term)
+    root_mask := greater_equal(root_term, 0)
+    if root_mask == lane_false do return
     
-    conditional_assign(hit_mask, next_o, ray_o + t*ray_d)
+    t_pos := (-b + root) / (2 * a)
+    t_neg := (-b - root) / (2 * a)
     
-    conditional_assign(hit_mask, normal,   triangle_normal)
-    conditional_assign(hit_mask, tangent,  triangle_tangent)
-    conditional_assign(hit_mask, binormal, triangle_binormal)
+    t := t_pos
+    pick_mask := greater_than(t_neg, min_t) & less_than(t_neg, t)
+    conditional_assign(pick_mask, &t, t_neg)
+    
+    t_mask := greater_than(t, min_t) & less_than(t, hit.closest_t)
+    
+    if t_mask == lane_false do return
+    
+    hit_mask := root_mask & t_mask
+    
+    next_o := ray_o + t*ray_d
+    normal   := normalize_or_zero(next_o - center)
+    tangent  := normalize_or_zero(cross(lane_v3{0, 0, 1}, normal))
+    binormal := cross(normal, tangent)
+    
+    update_hit(hit, hit_mask, t, material, next_o, normal, tangent, binormal)
+}
+
+update_hit :: proc (hit: ^Hit_Info, hit_mask: lane_u32, t: lane_f32, material: lane_u32, next_o: lane_v3, normal, tangent, binormal: lane_v3) {
+    conditional_assign(hit_mask, &hit.closest_t, t)
+    conditional_assign(hit_mask, &hit.did_hit, lane_true)
+    
+    conditional_assign(hit_mask, &hit.material, material)
+    
+    conditional_assign(hit_mask, &hit.next_o, next_o)
+    conditional_assign(hit_mask, &hit.normal, normal)
+    
+    conditional_assign(hit_mask, &hit.tangent,   tangent)
+    conditional_assign(hit_mask, &hit.binormal, binormal)
 }
 
 ////////////////////////////////////////////////
 
 brdf_lookup :: proc (all_brdf_values: [] v3, materials: [] Material, index: lane_u32, view_direction, normal, tangent, binormal, light_direction: lane_v3) -> lane_v3 {
+    spall_proc()
+    
     half_vector := normalize_or_zero(.5 * (view_direction + light_direction))
     
     lw := lane_v3 {

@@ -5,7 +5,7 @@ package main
 import "core:prof/spall"
 import "core:time"
 
-SpallDisabled :: true
+SpallDisabled   :: true
 SpallBufferSize :: 1 * Gigabyte
 
 spall_ctx: spall.Context

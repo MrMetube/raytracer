@@ -47,10 +47,6 @@ World :: struct {
         tiles_retired:    u32,
         pixels_done:      u32,
         nil_value_lanes_tested: [8] u32,
-        
-        // @todo(viktor): also measure other primitives
-        max_triangle_tests: u32,
-        triangle_tests:     u32,
     },
 }
 
@@ -153,8 +149,8 @@ print_render_results :: proc (world: ^World, start, end: time.Time) {
         print("% = % %%", i, view_percentage_ratio(safe_ratio_0(cast(f64) e, cast(f64) total_lanes)))
     }
     print("]\n")
+    
     print("  Wasted lanes: % % %%\n", view_magnitude(wasted_lanes), view_percentage_ratio(safe_ratio_0(cast(f64) wasted_lanes, cast(f64) (total_lanes * 8))))
-    print("Hit tests:\n")
-    print("  Triangles: % / % = % %%\n", view_magnitude(world.triangle_tests), view_magnitude(world.max_triangle_tests), view_percentage_ratio(cast(f64) world.triangle_tests / cast(f64) (world.max_triangle_tests)))
+    
     print("\n\n")
 }
