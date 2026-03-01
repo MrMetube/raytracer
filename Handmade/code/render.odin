@@ -1,6 +1,26 @@
 package main
 
 import "core:time"
+import rl "vendor:raylib"
+
+Render :: struct {
+    requested: bool,
+    active:    bool,
+    
+    start, end: time.Time,
+    
+    world: World,
+    
+    image:   Image,
+    texture: rl.Texture,
+    queue:   WorkQueue,
+    
+    arena:     Arena,
+    allocator: Allocator,
+    
+    rays_per_pixel:   u32,
+    max_bounce_count: u32,
+}
 
 Color :: [4] u8
 
@@ -26,20 +46,19 @@ World :: struct {
         loops_computed:   u64,
         tiles_retired:    u32,
         pixels_done:      u32,
-        nil_value_lanes_tested: [9] u32,
+        nil_value_lanes_tested: [8] u32,
         
         // @todo(viktor): also measure other primitives
         max_triangle_tests: u32,
         triangle_tests:     u32,
     },
-    
-    rays_per_pixel:   u32,
-    max_bounce_count: u32,
 }
 
 Camera :: struct {
-    x, y, z: v3,
-    p:       v3,
+    x: v3,
+    y: v3,
+    z: v3,
+    p: v3,
 }
 
 ////////////////////////////////////////////////
@@ -79,6 +98,8 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: i32, camera: C
         image:   Image, 
         rect:    Rectangle2i, 
         entropy: RandomSeries,
+        rays_per_pixel:   u32,
+        max_bounce_count: u32,
     }
     
     works := make_slice(render.allocator, [] Work, tile_count)
@@ -94,10 +115,10 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: i32, camera: C
             
             work := &works[work_index]
             work_index += 1
-            work ^= { &render.world, camera, image, rect, entropy }
+            work ^= { &render.world, camera, image, rect, entropy, render.rays_per_pixel, render.max_bounce_count }
             
             enqueue_work_or_do_immediatly(&render.queue, proc(work: ^Work) {
-                render_tile(work.world, work.camera, work.image, work.rect, &work.entropy)
+                render_tile(work.world, work.camera, work.image, work.rect, &work.entropy, work.rays_per_pixel, work.max_bounce_count)
             }, work)
         }
     }
@@ -119,20 +140,21 @@ print_render_results :: proc (world: ^World, start, end: time.Time) {
     )
     
     total_lanes: u32
-    wasted: u32
+    wasted_lanes: u32
     for e, i in world.nil_value_lanes_tested {
         total_lanes += e
-        wasted += e * cast(u32) i
+        wasted_lanes += e * cast(u32) i
     }
     
     print("Lane utilization for hit tests:\n")
-    print("  [")
+    print("  Empty lanes: [")
     for e, i in world.nil_value_lanes_tested {
         if i > 0 do print(", ")
         print("% = % %%", i, view_percentage_ratio(safe_ratio_0(cast(f64) e, cast(f64) total_lanes)))
     }
     print("]\n")
-    print("  Wasted lanes: % % %%\n", view_magnitude(wasted), view_percentage_ratio(safe_ratio_0(cast(f64) wasted, cast(f64) (total_lanes * 8))))
+    print("  Wasted lanes: % % %%\n", view_magnitude(wasted_lanes), view_percentage_ratio(safe_ratio_0(cast(f64) wasted_lanes, cast(f64) (total_lanes * 8))))
     print("Hit tests:\n")
     print("  Triangles: % / % = % %%\n", view_magnitude(world.triangle_tests), view_magnitude(world.max_triangle_tests), view_percentage_ratio(cast(f64) world.triangle_tests / cast(f64) (world.max_triangle_tests)))
+    print("\n\n")
 }

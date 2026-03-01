@@ -13,22 +13,6 @@ Todo :: true
 
 FontSize :: 20
 
-Render :: struct {
-    requested: bool,
-    active:    bool,
-    
-    start, end: time.Time,
-    
-    world: World,
-    
-    image:   Image,
-    texture: rl.Texture,
-    queue:   WorkQueue,
-    
-    arena:     Arena,
-    allocator: Allocator,
-}
-
 ////////////////////////////////////////////////
 
 fast_factor :: 6 when SpallDisabled else 60
@@ -44,9 +28,6 @@ main :: proc() {
     core_count := cast(i32) os_old.processor_core_count() - 1
     
     world: World
-    world.rays_per_pixel   = 8
-    world.max_bounce_count = 8
-    
     // nil sphere, triangle, and plane
     append(&world.spheres,   Sphere{})
     append(&world.triangles, Triangle{})
@@ -119,13 +100,16 @@ main :: proc() {
     reserve(&world.sphere_nodes, len(world.spheres))
     sphere_info := tree_init(&world.sphere_nodes, rectangle_center_dimension(v3{0, 0, 0}, 128), 1, context.temp_allocator)
     
-    // @speed Currently the octtree is a ~62% gain compared to the straight array
+    // @speed Currently the octtree is a ~73% gain compared to the straight array
     for sphere in world.spheres {
         bounds := rectangle_center_dimension(sphere.center, sphere.radius)
-        ok := octtree_append(&sphere_info, &world.sphere_nodes, sphere, bounds)
-        assert(ok)
+        octtree_append(&sphere_info, &world.sphere_nodes, sphere, bounds)
     }
     
+    // @todo(viktor): think about the layout of nodes and values
+    // currently we append nil, root,
+    // then each value + new nodes if needed, 
+    // then the next value ...
     reserve(&world.triangle_nodes, len(world.triangles))
     triangle_info := tree_init(&world.triangle_nodes, rectangle_center_dimension(v3{}, 128), 1, context.temp_allocator)
     
@@ -135,8 +119,7 @@ main :: proc() {
         bounds = get_union_point(bounds, triangle.b)
         bounds = get_union_point(bounds, triangle.c)
         
-        ok := octtree_append(&triangle_info, &world.triangle_nodes, triangle, bounds)
-        assert(ok)
+        octtree_append(&triangle_info, &world.triangle_nodes, triangle, bounds)
     }
     
     inspection := inspect(triangle_info, world.triangle_nodes[:], Root_Index)
@@ -282,26 +265,21 @@ main :: proc() {
             fast_render.requested = true
         }
         
-        // @todo(viktor): set in render and only copy on render start, check that noone is using render.world.raysperpixel
-        if !quality_render.active {
-            if rl.IsKeyPressed(.J) {
-                quality_render.world.rays_per_pixel /= 2
-            }
-            if rl.IsKeyPressed(.K) {
-                quality_render.world.rays_per_pixel *= 2
-            }
-            quality_render.world.rays_per_pixel = clamp(quality_render.world.rays_per_pixel, LaneWidth, 2048)
+        if rl.IsKeyPressed(.J) {
+            quality_render.rays_per_pixel /= 2
         }
+        if rl.IsKeyPressed(.K) {
+            quality_render.rays_per_pixel *= 2
+        }
+        quality_render.rays_per_pixel = clamp(quality_render.rays_per_pixel, LaneWidth, 2048)
         
-        if !fast_render.active {
-            if rl.IsKeyPressed(.N) {
-                fast_render.world.rays_per_pixel /= 2
-            }
-            if rl.IsKeyPressed(.M) {
-                fast_render.world.rays_per_pixel *= 2
-            }
-            fast_render.world.rays_per_pixel = clamp(fast_render.world.rays_per_pixel, LaneWidth, 128)
+        if rl.IsKeyPressed(.N) {
+            fast_render.rays_per_pixel /= 2
         }
+        if rl.IsKeyPressed(.M) {
+            fast_render.rays_per_pixel *= 2
+        }
+        fast_render.rays_per_pixel = clamp(fast_render.rays_per_pixel, LaneWidth, 128)
         
         if rl.IsKeyPressed(.X) {
             quality_render.requested = true
@@ -357,7 +335,7 @@ main :: proc() {
         }
         
         display_line(&layout, "Camera: % : % ", camera.p, camera.p + -camera.z)
-        display_line(&layout, "rays per pixel: quality % / fast % ", quality_render.world.rays_per_pixel, fast_render.world.rays_per_pixel)
+        display_line(&layout, "rays per pixel: quality % / fast % ", quality_render.rays_per_pixel, fast_render.rays_per_pixel)
         
         for &render in renders {
             layout_begin_horizontal(&layout)
@@ -486,8 +464,8 @@ main :: proc() {
 }
 
 init_render :: proc (render: ^Render, rays_per_pixel: u32, max_bounce_count: u32, image_width: i32, image_height: i32, core_count: i32) {
-    render.world.rays_per_pixel = rays_per_pixel
-    render.world.max_bounce_count = max_bounce_count
+    render.rays_per_pixel   = rays_per_pixel
+    render.max_bounce_count = max_bounce_count
     
     render.allocator = arena_allocator(&render.arena)
     

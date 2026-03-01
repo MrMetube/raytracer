@@ -454,6 +454,20 @@ when LaneWidth == 1 {
         }
     }
     
+    min_max :: proc (a: $T, b: T) -> (min, max: T) {
+        when intrinsics.type_is_simd_vector(T) {
+            min, max = b, a
+            mask := less_than(a, b)
+            conditional_assign(mask, &min, a)
+            conditional_assign(mask, &max, b)
+            return min, max
+        } else {
+            min, max = b, a
+            if a < b do min, max = a, b
+            return min, max
+        }
+    }
+    
     extract_v3 :: proc (a: lane_v3, #any_int n: u32) -> (result: v3) {
         result.x = extract(a.x, n)
         result.y = extract(a.y, n)

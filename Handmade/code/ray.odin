@@ -104,31 +104,29 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, all_brdf_values: ^[d
 
 ////////////////////////////////////////////////
 
-render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle2i, entropy: ^RandomSeries) {
+render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle2i, entropy: ^RandomSeries, rays_per_pixel, max_bounce_count: u32) {
     film_distance :: 1
     film_center := vec_cast(lane_f32, camera.p - film_distance * camera.z)
     
-    film_w: f32 = 1
-    film_h: f32 = 1
+    film_size := cast(v2) 1
     
-    if image.width > image.height {
-        film_w = film_h * cast(f32) image.width / cast(f32) image.height
-    } else if image.width < image.height {
-        film_h = film_w * cast(f32) image.height / cast(f32) image.width
+    image_size := vec_cast(f32, image.width, image.height)
+    if image_size.x > image_size.y {
+        film_size.x = film_size.y * image_size.x / image_size.y
+    } else if image_size.x < image_size.y {
+        film_size.y = film_size.x * image_size.y / image_size.x
     }
     
-    half_film_w: f32 = .5 * film_w
-    half_film_h: f32 = .5 * film_h
-    
-    pixel_size := 1. / vec_cast(lane_f32, image.width, image.height)
+    half_film_size := vec_cast(lane_f32, .5 * film_size)
+    pixel_size := 1. / vec_cast(lane_f32, image_size)
     
     bounces_computed, loops_computed: u64
     for py in rect.min.y ..< rect.max.y {
-        film_y := -1 + 2 * cast(f32) py / cast(f32) image.height
+        film_y := -1 + 2 * cast(f32) py / image_size.y
         for px in rect.min.x ..< rect.max.x {
-            film_x := -1 + 2 * cast(f32) px / cast(f32) image.width
-            
-            final_color, bounces_computed_now, loops_computed_now := cast_rays(world, film_x, film_y, entropy, pixel_size, half_film_w, half_film_h, film_center, camera)
+            film_x := -1 + 2 * cast(f32) px / image_size.x
+            film_p := vec_cast(lane_f32, film_x, film_y)
+            final_color, bounces_computed_now, loops_computed_now := cast_rays(world, film_p, entropy, pixel_size, half_film_size, film_center, camera, rays_per_pixel, max_bounce_count)
             bounces_computed += bounces_computed_now
             loops_computed   += loops_computed_now
             
@@ -148,13 +146,10 @@ render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle
     atomic_add(&world.tiles_retired, 1)
 }
 
-cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  pixel_size: lane_v2, half_film_w, half_film_h: f32, film_center: lane_v3, camera: Camera) -> (final_color: v3, bounces_computed, loops_computed: u64) {
+cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries,  pixel_size: lane_v2, half_film_size: lane_v2, film_center: lane_v3, camera: Camera, rays_per_pixel, max_bounce_count: u32) -> (final_color: v3, bounces_computed, loops_computed: u64) {
     final_color_lanes: lane_v3
     bounces_computed_lanes: lane_u32
     loops_computed_lanes: lane_u32
-    
-    max_bounce_count := world.max_bounce_count
-    rays_per_pixel   := world.rays_per_pixel
     
     lane_ray_count := rays_per_pixel / LaneWidth
     sample_contribution_factor := 1.0 / cast(f32) rays_per_pixel
@@ -168,9 +163,10 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
     
     for _ in 0..<lane_ray_count {
         jitter := random_unilateral(entropy, lane_v2)
-        offset := lane_v2{film_x, film_y} + jitter * pixel_size
-        film_p := film_center + (offset.x*camera_x*half_film_w + offset.y*camera_y * half_film_h) 
+        offset := init_film_p + jitter * pixel_size
+        film_p := film_center + (offset.x*camera_x*half_film_size.x + offset.y*camera_y * half_film_size.y) 
         
+        // @todo(viktor): depth blur can be added here by jittering the ray_o
         ray_o := camera_p
         ray_d := normalize_or_zero(film_p - camera_p)
         
@@ -239,7 +235,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
             
             if Use_Octtree {
                 values_len: lane_u32
-                local_nil_value_lanes_tested: [9] u32
+                local_nil_value_lanes_tested: [8] u32
                 nodes := world.triangle_nodes[:]
                 
                 traverse_tree_and_collect_values(values, &values_len, nodes, ray_o, ray_d, min_t, closest_t, world)
@@ -249,8 +245,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                     values_len = simd.saturating_sub(values_len, 1)
                     if values_len == 0 do break
                     
-                    value_index := lane_gather(lane_index_wide(values, values_len), greater_than(values_len, 0), cast(lane_Node_Index) Nil_Index
-                )
+                    value_index := lane_gather(lane_index_wide(values, values_len), greater_than(values_len, 0), cast(lane_Node_Index) Nil_Index)
                     assert(value_index != 0, "should not have been appended")
                     
                     node     := lane_index(nodes, cast(lane_u32) value_index)
@@ -287,7 +282,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
             
             if Use_Octtree {
                 values_len: lane_u32
-                local_nil_value_lanes_tested: [9] u32
+                local_nil_value_lanes_tested: [8] u32
                 
                 nodes := world.sphere_nodes[:]
                 traverse_tree_and_collect_values(values, &values_len, nodes, ray_o, ray_d, min_t, closest_t, world)
@@ -299,9 +294,9 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                     value_index := lane_gather(lane_index_wide(values, values_len), greater_than(values_len, 0), cast(lane_Node_Index) Nil_Index)
                     assert(value_index != 0, "should not have been appended")
                     
-                    node  := lane_index(nodes, cast(lane_u32) value_index)
+                    node     := lane_index(nodes, cast(lane_u32) value_index)
                     as_value := lane_member(node, "value", Oct_Value(Sphere))
-                    value := lane_member(as_value, "value", Sphere)
+                    value    := lane_member(as_value, "value", Sphere)
                     
                     hit_sphere(value, ray_o, ray_d, min_t, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
                     
@@ -402,6 +397,8 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
         
         first_value   := lane_gather(lane_member(node, "first_value", Node_Index))
         first_subnode := lane_gather(lane_member(node, "first_subnode", Node_Index))
+        
+        // @speed What order should they be appended? along the ray direction probably, then also update the closest_t/max_t for all bounds
         
         // @note(viktor): only if all lanes are zero do not push onto the stack, otherwise keep counts in sync and push zeros
         append_first_subnode := greater_than(first_subnode, 0)

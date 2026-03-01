@@ -8,8 +8,8 @@ Oct_Node :: struct ($Value: typeid) #raw_union {
 }
 
 Oct_Value :: struct ($Value: typeid) {
-    value:      Value,
     next_value: Node_Index,
+    value:      Value,
 }
 
 /// oct_node = 4 + 4 + (2 * 3 * 4)
@@ -83,7 +83,7 @@ tree_append_node :: proc (build_info: ^Tree_Build_Info, tree: ^[dynamic] Oct_Nod
     append_nothing(&build_info.value_counts)
 }
 
-octtree_append :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Oct_Node($Value), value: Value, value_bounds: Rectangle3) -> bool {
+octtree_append :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Oct_Node($Value), value: Value, value_bounds: Rectangle3) {
     clear(&info.temp_stack)
     append(&info.temp_stack, Root_Index)
     
@@ -137,19 +137,14 @@ octtree_append :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Oct_Node($Value
         }
     }
     
-    result: bool
-    if into_index != Nil_Index {
-        result = true
-        
-        into  := &tree[into_index]
-        value := &tree[value_index]
-        value.value.next_value = into.node.first_value
-        into.node.first_value = value_index
-        
-        info.value_counts[into_index] += 1
-    }
+    assert(into_index != Nil_Index)
     
-    return result
+    into  := &tree[into_index]
+    value := &tree[value_index]
+    value.value.next_value = into.node.first_value
+    into.node.first_value = value_index
+    
+    info.value_counts[into_index] += 1
 }
 
 ////////////////////////////////////////////////
