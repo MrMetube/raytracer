@@ -12,8 +12,8 @@ Image:: struct {
 
 // @volatile also update the render's world copying
 World :: struct {
-    sphere_nodes:   [dynamic] Sphere_Node,
-    triangle_nodes: [dynamic] Triangle_Node,
+    sphere_nodes:   [dynamic] Oct_Node(Sphere),
+    triangle_nodes: [dynamic] Oct_Node(Triangle),
     
     spheres:   [dynamic] Sphere,
     triangles: [dynamic] Triangle,
@@ -35,9 +35,6 @@ Camera :: struct {
     x, y, z: v3,
     p:       v3,
 }
-
-Sphere_Node   :: #type Oct_Node(Sphere)
-Triangle_Node :: #type Oct_Node(Triangle)
 
 ////////////////////////////////////////////////
 
@@ -94,7 +91,7 @@ print_render_results :: proc (world: ^World, start, end: time.Time) {
         view_magnitude(loops_computed), 
         view_magnitude(wasted_bounces), 
         view_percentage_ratio(cast(f32) wasted_bounces / cast(f32) loops_computed), 
-        cast(time.Duration) nanoseconds
+        cast(time.Duration) nanoseconds,
     )
     
     total_lanes: u32

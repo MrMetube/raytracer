@@ -32,6 +32,9 @@ Render :: struct {
 ////////////////////////////////////////////////
 
 fast_factor :: 6 when SpallDisabled else 60
+Use_Octtree := true
+
+Is_Optimized :: ODIN_OPTIMIZATION_MODE == .Speed
 
 main :: proc() {
     rl.SetTraceLogLevel(.WARNING)
@@ -67,14 +70,14 @@ main :: proc() {
     load_brdf_merl("./BRDFDatabase/brdfs/purple-paint.binary", &world.materials[5].brdf, &world.all_brdf_values); material_names[5] = "purple-paint"
     load_brdf_merl("./BRDFDatabase/brdfs/white-marble.binary", &world.materials[6].brdf, &world.all_brdf_values); material_names[6] = "white-marble"
     
-    // append(&world.spheres, Sphere { center = { 0, 0, 0},   radius = 1,  material = 2 })
-    // append(&world.spheres, Sphere { center = { 3,-2, 0.4}, radius = .1, material = 3 })
-    // append(&world.spheres, Sphere { center = {-2,-1, 2},   radius = 1,  material = 1 })
-    // append(&world.spheres, Sphere { center = { 1,-1, 3},   radius = 1,  material = 5 })
-    // append(&world.spheres, Sphere { center = {-2, 3, 0},   radius = 2,  material = 6 })
-    
     area_size := cast(f32) 20
-    if false {
+    when false {
+        append(&world.spheres, Sphere { center = { 0, 0, 0},   radius = 1,  material = 2 })
+        append(&world.spheres, Sphere { center = { 3,-2, 0.4}, radius = .1, material = 3 })
+        append(&world.spheres, Sphere { center = {-2,-1, 2},   radius = 1,  material = 1 })
+        append(&world.spheres, Sphere { center = { 1,-1, 3},   radius = 1,  material = 5 })
+        append(&world.spheres, Sphere { center = {-2, 3, 0},   radius = 2,  material = 6 })
+    
         gen_entropy := seed_random_series(565)
         for _ in 0..< square(area_size) * 1.2 {
             radius := random_between_f32(&gen_entropy, 0.1, 0.4)
@@ -96,61 +99,51 @@ main :: proc() {
             material := random_between_u32(&gen_entropy, 1, auto_cast len(world.materials) - 1)
             append(&world.spheres, Sphere { center, radius, material })
         }
+    
+        append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 6 })
+        append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
+        append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size-0.1}, radius = area_size/5, material = 3 })
+        append(&world.planes, Plane { normal = { 1, 0, 0}, tangent = {}, binormal = {}, center = {-area_size, 0, 0},     radius = area_size,   material = 2 })
+        append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 2 })
+        append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
+    } else {
+        append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 6 })
+        append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size-0.1}, radius = area_size/5, material = 3 })
+    
+        teapot := load_teapot(0, 2)
+        append(&world.triangles, ..teapot)
     }
     
-    append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 6 })
-    // append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
-    append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size-0.1}, radius = area_size/5, material = 3 })
-    // append(&world.planes, Plane { normal = { 1, 0, 0}, tangent = {}, binormal = {}, center = {-area_size, 0, 0},     radius = area_size,   material = 2 })
-    // append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 2 })
-    // append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
-    
     ////////////////////////////////////////////////
     
-    teapot := load_teapot(0, 2)
-    append(&world.triangles, ..teapot)
-    
-    ////////////////////////////////////////////////
-    values_per_node :: 1
-    
-    stack := make_dynamic_array(context.temp_allocator, [dynamic] Node_Index, 0, 0)
     reserve(&world.sphere_nodes, len(world.spheres))
-    tree_init(&world.sphere_nodes, rectangle_center_dimension(v3{0, 0, 0}, 128))
+    sphere_info := tree_init(&world.sphere_nodes, rectangle_center_dimension(v3{0, 0, 0}, 128), 1, context.temp_allocator)
     
-    // Currently the octtree is a ~30% gain compared to the straight array
-    for sphere, index in world.spheres {
-        value: Sphere_Node
-        value.value = sphere
-        value.bounds = rectangle_center_dimension(sphere.center, sphere.radius)
-        
-        ok := octtree_append(&stack, &world.sphere_nodes, value, values_per_node)
+    // @speed Currently the octtree is a ~62% gain compared to the straight array
+    for sphere in world.spheres {
+        bounds := rectangle_center_dimension(sphere.center, sphere.radius)
+        ok := octtree_append(&sphere_info, &world.sphere_nodes, sphere, bounds)
         assert(ok)
     }
     
-    clear(&stack)
     reserve(&world.triangle_nodes, len(world.triangles))
-    tree_init(&world.triangle_nodes, rectangle_center_dimension(v3{}, 128))
+    triangle_info := tree_init(&world.triangle_nodes, rectangle_center_dimension(v3{}, 128), 1, context.temp_allocator)
     
     for triangle in world.triangles {
-        value: Triangle_Node
-        value.value = triangle
+        bounds := rectangle_inverted_infinity(Rectangle3)
+        bounds = get_union_point(bounds, triangle.a)
+        bounds = get_union_point(bounds, triangle.b)
+        bounds = get_union_point(bounds, triangle.c)
         
-        // @note(viktor): These bounds are currently only used in construction and not in the octtree traversal. if hit_rectangle + maybe hit_value is generally faster than just hit_value, it may be worth also testing the value bounds.
-        value.bounds = rectangle_inverted_infinity(Rectangle3)
-        value.bounds = get_union_point(value.bounds, triangle.a)
-        value.bounds = get_union_point(value.bounds, triangle.b)
-        value.bounds = get_union_point(value.bounds, triangle.c)
-        append(&world.triangle_nodes, value)
-        
-        ok := octtree_append(&stack, &world.triangle_nodes, value, values_per_node = values_per_node)
+        ok := octtree_append(&triangle_info, &world.triangle_nodes, triangle, bounds)
         assert(ok)
     }
     
-    info := inspect(world.triangle_nodes, Root_Index, values_per_node)
-    print("triangle tree info = %\n", info)
-    print("  values per node = %\n", values_per_node)
-    print("  density         = % %%\n", 100 * cast(f64) info.value_count / cast(f64) (info.node_count + info.value_count))
-    print("  overfullness    = % %%\n", 100 * cast(f64) info.overfull_nodes / cast(f64) (info.node_count))
+    inspection := inspect(triangle_info, world.triangle_nodes[:], Root_Index)
+    print("triangle tree info = %\n", inspection)
+    print("  values per node = %\n", triangle_info.values_per_node)
+    print("  density         = % %%\n", 100 * cast(f64) inspection.value_count / cast(f64) (inspection.node_count + inspection.value_count))
+    print("  overfullness    = % %%\n", 100 * cast(f64) inspection.overfull_nodes / cast(f64) (inspection.node_count))
     print("\n")
     
     ////////////////////////////////////////////////
@@ -170,7 +163,7 @@ main :: proc() {
         
     window_size := v2i { 1920, 1080 }
     
-    rl.InitWindow(window_size.x, window_size.y, "Handmade Ray")
+    rl.InitWindow(window_size.x, window_size.y, ctprint("Handmade Ray %", (Is_Optimized ? "Optimized" :  "Debug")))
     rl.SetTargetFPS(144)
     
     font := rl.LoadFontEx("./fonts/VictorMono-Bold.otf", FontSize, nil, 0)
@@ -216,9 +209,11 @@ main :: proc() {
         delta_time := rl.GetFrameTime()
         
         speed: f32 = 60
-        if !rl.IsKeyDown(.LEFT_SHIFT) {
+        if !rl.IsMouseButtonDown(.RIGHT) {
             ddp *= 0.1
         }
+        
+        if rl.IsKeyPressed(.Q) do Use_Octtree = !Use_Octtree
         
         dddp: v3
         if rl.IsKeyDown(.A) do dddp += {-1, 0,  0}
@@ -227,7 +222,7 @@ main :: proc() {
         if rl.IsKeyDown(.S) do dddp += { 0, 0,  1}
         
         if rl.IsKeyDown(.SPACE)        do dddp += {0, 1,  0}
-        if rl.IsKeyDown(.LEFT_CONTROL) do dddp += {0,-1,  0}
+        if rl.IsKeyDown(.LEFT_SHIFT) do dddp += {0,-1,  0}
         
         if rl.IsMouseButtonPressed(.MIDDLE) {
             mouse_is_look = !mouse_is_look
