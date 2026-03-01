@@ -149,34 +149,31 @@ octtree_append :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Oct_Node($Value
 
 ////////////////////////////////////////////////
 
-print_node :: proc (nodes: [dynamic] $T, level: int, it_index: Node_Index) -> u32 {
+print_node :: proc (nodes: [] $T, level: int, it_index: Node_Index) {
     it := nodes[it_index]
-    count := it.value_count
     
     for _ in 0..<level * 4 do print(" ")
     print("node %\n", it_index)
     
-    if it.value_count != 0 {
+    if it.node.first_value != 0 {
         for _ in 0..<level * 4 do print(" ")
         print("values:\n")
         for _ in 0..<(level+1) * 4 do print(" ")
-        for link := it.first_value; link != 0; link = nodes[link].next_value {
+        for link := it.node.first_value; link != 0; link = nodes[link].value.next_value {
             print("%, ", link)
         }
         print("\n")
     }
     
-    if it.first_subnode != 0 {
+    if it.node.first_subnode != 0 {
         for _ in 0..<level * 4 do print(" ")
         print("subnodes:\n")
-        for link := it.first_subnode; link != 0; link = nodes[link].next_subnode {
-            count += print_node(nodes, level + 1, link)
+        for subnode in it.node.first_subnode ..< it.node.first_subnode + Subnodes_Per_Node {
+            print_node(nodes, level + 1, subnode)
         }
         for _ in 0..<level * 4 do print(" ")
         print(";\n")
     }
-    
-    return count
 }
 
 Tree_Info :: struct {

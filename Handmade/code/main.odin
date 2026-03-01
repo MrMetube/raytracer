@@ -3,13 +3,10 @@ package main
 import os "core:os/os2"
 import os_old "core:os"
 import "core:time"
-import "core:fmt"
 import "core:math"
 
 import img "vendor:stb/image"
 import rl "vendor:raylib"
-
-Todo :: true
 
 FontSize :: 20
 
@@ -125,18 +122,20 @@ main :: proc() {
     inspection := inspect(triangle_info, world.triangle_nodes[:], Root_Index)
     print("triangle tree info:\n")
     print("            depth: max = %, avg = %\n", inspection.depth.max, view_float(inspection.depth.avg, precision = 2))
-    print("  values per node: min = %, max = %, avg = %\n", inspection.values_per_node.min, inspection.values_per_node.max, view_float(inspection.values_per_node.avg, precision = 2))
+    print("  values per node: max = %, avg = %\n", inspection.values_per_node.max, view_float(inspection.values_per_node.avg, precision = 2))
     print("  values per node = %\n", triangle_info.values_per_node)
     print("          density = % %%\n", 100 * cast(f64) inspection.values_per_node.sum / cast(f64) (inspection.node_count + inspection.values_per_node.sum))
     print("     overfullness = % %%\n", 100 * cast(f64) inspection.overfull_nodes / cast(f64) (inspection.node_count))
     print("\n")
     
+    print_node(world.triangle_nodes[:], 0, Root_Index)
+    
     ////////////////////////////////////////////////
     
     camera: Camera
-    if false {
-        camera.p = {2.33, -4.22, 3.8}
-        camera.z = normalize_or_zero(camera.p - {0.3, 0.8, 0.5})
+    if !false {
+        camera.p = {0, -7, 2.149546}
+        camera.z = {-0.064219, -0.991897, 0.109620}
     } else {
         camera.p = {0, -7, 1}
         camera.z = normalize_or_zero(camera.p)
@@ -336,13 +335,13 @@ main :: proc() {
             rl.DrawTextureEx(fast_render.texture, vec_cast(f32, window_size.x - fast_render.texture.width, 0), 0, 1, rl.WHITE)
         }
         
-        display_line(&layout, "Camera: % : % ", camera.p, camera.p + -camera.z)
+        display_line(&layout, "Camera: % : % ", camera.p, camera.z)
         display_line(&layout, "rays per pixel: quality % / fast % ", quality_render.rays_per_pixel, fast_render.rays_per_pixel)
         
         for &render in renders {
             layout_begin_horizontal(&layout)
             end := render.active ? time.now() : render.end
-            display_line(&layout, "Render took: %", fmt.tprintf("%.2v", time.diff(render.start, end)))
+            display_line(&layout, "Render took: %", view_time_duration(time.diff(render.start, end), precision = 2))
             
             if render.active && !work_is_completed(&render.queue){
                 total_pixels := render.image.width * render.image.height

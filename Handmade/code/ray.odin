@@ -240,13 +240,25 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                 
                 traverse_tree_and_collect_values(values, &values_len, nodes, ray_o, ray_d, min_t, closest_t, world)
                 
+                
+                Check :: false
                 triangle_tests: u32
                 for {
                     values_len = simd.saturating_sub(values_len, 1)
                     if values_len == 0 do break
                     
                     value_index := lane_gather(lane_index_wide(values, values_len), greater_than(values_len, 0), cast(lane_Node_Index) Nil_Index)
-                    assert(value_index != 0, "should not have been appended")
+                    when Check do assert(value_index != 0, "should not have been appended")
+                    
+                    // baseline - nil triangle
+                    // 455ms - 220ms
+                    // no early outs in hit_triangle
+                    // 535ms - 285ms
+                    // -> ~46% of the work is loading triangles
+                    
+                    // pretend_to_read(&value_index)
+                    // value_index = 0
+                    // pretend_to_write(&value_index)
                     
                     node     := lane_index(nodes, cast(lane_u32) value_index)
                     as_value := lane_member(node, "value", Oct_Value(Triangle))
@@ -255,7 +267,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                     hit_triangle(value, ray_o, ray_d, min_t, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
                     
                     empties := horizontal_add(1 & equal(value_index, 0))
-                    assert(empties != 8)
+                    when Check do assert(empties != 8)
                     #no_bounds_check local_nil_value_lanes_tested[empties] += 1
                     
                     present := horizontal_add(1 & not_equal(value_index, 0))
@@ -375,9 +387,9 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
     
     Check :: false
     
-    // @note(viktor): currently the stacks grow and shrink in lockstep
-    // lanes without valid work, work on the nil node and nil values
-    #assert(Todo, "measure wasted lanes here as well")
+    // @note(viktor): currently the stacks grow and shrink in lockstep.
+    // lanes without valid work, work on the nil node and nil values.
+    // @todo(viktor): measure wasted lanes here as well
     for counts != 0 {
         counts -= 1
         
@@ -385,9 +397,10 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
         it_index := cast(lane_u32) lane_gather(lane_index_wide(stacks, counts))
         when Check do assert(it_index != 0, "should not have been appended")
         
-        it := lane_index(nodes, it_index)
+        node        := lane_member(lane_index(nodes, it_index), "node", Oct_Node_X)
+        first_value := lane_gather(lane_member(node, "first_value", Node_Index))
+        when Check do assert(first_value != Nil_Index)
         
-        node := lane_member(it, "node", Oct_Node_X)
         it_bounds := lane_member(node, "bounds", Rectangle3)
         b_min := lane_gather_v(lane_member(it_bounds, "min", v3))
         b_max := lane_gather_v(lane_member(it_bounds, "max", v3))
@@ -395,22 +408,30 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
         // @todo(viktor): should this update closest_t?
         hit_mask := hit_rectangle(ray_o, inv_d, b_min, b_max, min_t, max_t)
         
-        first_value   := lane_gather(lane_member(node, "first_value", Node_Index))
-        first_subnode := lane_gather(lane_member(node, "first_subnode", Node_Index))
+        
+        // @todo(viktor): @important if viewed almost directly along an axis, the bounds seems to make cracks in my triangles
         
         // @speed What order should they be appended? along the ray direction probably, then also update the closest_t/max_t for all bounds
-        
+        first_subnode := lane_gather(lane_member(node, "first_subnode", Node_Index))
         // @note(viktor): only if all lanes are zero do not push onto the stack, otherwise keep counts in sync and push zeros
-        append_first_subnode := greater_than(first_subnode, 0)
+        append_first_subnode := not_equal(first_subnode, 0)
         append_first_subnode &= hit_mask
         if append_first_subnode != lane_false {
+            added: u32
             for i in cast(u32) 0..<Subnodes_Per_Node {
-                lane_scatter(lane_index_wide(stacks, counts+i), first_subnode + cast(Node_Index) i, append_first_subnode)
+                subnode_index := first_subnode + cast(Node_Index) i
+                
+                subnode             := lane_member(lane_index(nodes, cast(lane_u32) subnode_index), "node", Oct_Node_X)
+                subnode_first_value := lane_gather(lane_member(subnode, "first_value", Node_Index))
+                
+                if subnode_first_value != Nil_Index { // @note(viktor): skip if all subnodes are empty
+                    lane_scatter(lane_index_wide(stacks, counts+added), subnode_index, append_first_subnode)
+                    added += 1
+                }
             }
-            counts += Subnodes_Per_Node
+            counts += added
         }
         
-        // @speed what is a better data layout for the values, we spend a lot of time in here, a lot of the time many lanes are emtpy
         link := first_value & cast(lane_Node_Index) hit_mask
         for link != 0 {
             length := values_len^
