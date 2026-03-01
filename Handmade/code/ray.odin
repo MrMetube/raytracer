@@ -2,6 +2,7 @@ package main
 
 import os "core:os/os2"
 import "core:math"
+import "core:simd"
 
 Material :: struct {
     emit:    v3,
@@ -35,6 +36,8 @@ Triangle :: struct {
     a, b, c: v3,
     material: u32,
 }
+
+lane_Node_Index :: #simd [LaneWidth] Node_Index
 
 ////////////////////////////////////////////////
 
@@ -160,7 +163,7 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
     camera_x := vec_cast(lane_f32, camera.x)
     camera_y := vec_cast(lane_f32, camera.y)
     
-    backing_values: [1024] lane_Node_Index
+    backing_values: [4096] lane_Node_Index
     values := backing_values[:]
     
     for _ in 0..<lane_ray_count {
@@ -235,62 +238,66 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
             ////////////////////////////////////////////////
             
             if Use_Octtree {
-                values_write: lane_u32
+                values_len: lane_u32
                 local_nil_value_lanes_tested: [9] u32
-                
                 nodes := world.triangle_nodes[:]
-                traverse_tree_and_test_hits(values, &values_write, nodes, ray_o, ray_d, min_t, closest_t, world)
                 
-                values_read:  lane_u32
-                for values_read != values_write {
-                    value_index := lane_gather(lane_index_wide(values, values_read))
-                    conditional_assign(not_equal(values_read, values_write), &values_read, values_read + 1)
+                traverse_tree_and_collect_values(values, &values_len, nodes, ray_o, ray_d, min_t, closest_t, world)
+                
+                triangle_tests: u32
+                for {
+                    values_len = simd.saturating_sub(values_len, 1)
+                    if values_len == 0 do break
                     
-                    if value_index == 0 do continue
+                    value_index := lane_gather(lane_index_wide(values, values_len), greater_than(values_len, 0), cast(lane_Node_Index) Nil_Index
+                )
+                    assert(value_index != 0, "should not have been appended")
                     
-                    node  := lane_index(nodes, cast(lane_u32) value_index)
+                    node     := lane_index(nodes, cast(lane_u32) value_index)
                     as_value := lane_member(node, "value", Oct_Value(Triangle))
-                    value := lane_member(as_value, "value", Triangle)
+                    value    := lane_member(as_value, "value", Triangle)
                     
                     hit_triangle(value, ray_o, ray_d, min_t, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
                     
                     empties := horizontal_add(1 & equal(value_index, 0))
                     assert(empties != 8)
                     #no_bounds_check local_nil_value_lanes_tested[empties] += 1
+                    
+                    present := horizontal_add(1 & not_equal(value_index, 0))
+                    triangle_tests += 8
                 }
                 
-                atomic_add(&world.nil_value_lanes_tested[0], local_nil_value_lanes_tested[0])
-                atomic_add(&world.nil_value_lanes_tested[1], local_nil_value_lanes_tested[1])
-                atomic_add(&world.nil_value_lanes_tested[2], local_nil_value_lanes_tested[2])
-                atomic_add(&world.nil_value_lanes_tested[3], local_nil_value_lanes_tested[3])
-                atomic_add(&world.nil_value_lanes_tested[4], local_nil_value_lanes_tested[4])
-                atomic_add(&world.nil_value_lanes_tested[5], local_nil_value_lanes_tested[5])
-                atomic_add(&world.nil_value_lanes_tested[6], local_nil_value_lanes_tested[6])
-                atomic_add(&world.nil_value_lanes_tested[7], local_nil_value_lanes_tested[7])
-                atomic_add(&world.nil_value_lanes_tested[8], local_nil_value_lanes_tested[8])
+                for i in 0..<len(local_nil_value_lanes_tested) {
+                    atomic_add(&world.nil_value_lanes_tested[i], local_nil_value_lanes_tested[i])
+                }
+                
+                atomic_add(&world.triangle_tests, triangle_tests)
             } else {
                 // @note(viktor): skip nil triangle
                 for index in 1 ..< cast(u32) len(world.triangles) {
                     triangle := lane_index(world.triangles, index)
                     hit_triangle(triangle, ray_o, ray_d, min_t, &closest_t, &did_hit, &hit_material_index, &next_o, &normal, &tangent, &binormal)
                 }
+                
+                atomic_add(&world.triangle_tests, (cast(u32) len(world.triangles)-1) * LaneWidth)
             }
+            atomic_add(&world.max_triangle_tests, (cast(u32) len(world.triangles)-1) * LaneWidth)
             
             ////////////////////////////////////////////////
             
             if Use_Octtree {
-                values_write: lane_u32
-                values_read:  lane_u32
+                values_len: lane_u32
                 local_nil_value_lanes_tested: [9] u32
                 
                 nodes := world.sphere_nodes[:]
-                traverse_tree_and_test_hits(values, &values_write, nodes, ray_o, ray_d, min_t, closest_t, world)
+                traverse_tree_and_collect_values(values, &values_len, nodes, ray_o, ray_d, min_t, closest_t, world)
                 
-                for values_read != values_write {
-                    value_index := lane_gather(lane_index_wide(values, values_read))
-                    conditional_assign(not_equal(values_read, values_write), &values_read, values_read + 1)
+                for {
+                    values_len = simd.saturating_sub(values_len, 1)
+                    if values_len == 0 do break
                     
-                    if value_index == 0 do continue
+                    value_index := lane_gather(lane_index_wide(values, values_len), greater_than(values_len, 0), cast(lane_Node_Index) Nil_Index)
+                    assert(value_index != 0, "should not have been appended")
                     
                     node  := lane_index(nodes, cast(lane_u32) value_index)
                     as_value := lane_member(node, "value", Oct_Value(Sphere))
@@ -303,15 +310,9 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
                     #no_bounds_check local_nil_value_lanes_tested[empties] += 1
                 }
                 
-                atomic_add(&world.nil_value_lanes_tested[0], local_nil_value_lanes_tested[0])
-                atomic_add(&world.nil_value_lanes_tested[1], local_nil_value_lanes_tested[1])
-                atomic_add(&world.nil_value_lanes_tested[2], local_nil_value_lanes_tested[2])
-                atomic_add(&world.nil_value_lanes_tested[3], local_nil_value_lanes_tested[3])
-                atomic_add(&world.nil_value_lanes_tested[4], local_nil_value_lanes_tested[4])
-                atomic_add(&world.nil_value_lanes_tested[5], local_nil_value_lanes_tested[5])
-                atomic_add(&world.nil_value_lanes_tested[6], local_nil_value_lanes_tested[6])
-                atomic_add(&world.nil_value_lanes_tested[7], local_nil_value_lanes_tested[7])
-                atomic_add(&world.nil_value_lanes_tested[8], local_nil_value_lanes_tested[8])
+                for i in 0..<len(local_nil_value_lanes_tested) {
+                    atomic_add(&world.nil_value_lanes_tested[i], local_nil_value_lanes_tested[i])
+                }
             } else {
                 // @note(viktor): skip nil sphere
                 for index in 1 ..< cast(u32) len(world.spheres) {
@@ -369,25 +370,25 @@ cast_rays :: proc (world: ^World, film_x, film_y: f32, entropy: ^RandomSeries,  
 
 ////////////////////////////////////////////////
 
-lane_Node_Index :: #simd [LaneWidth] Node_Index
-
-traverse_tree_and_test_hits :: proc (values: [] lane_Node_Index, values_write: ^lane_u32, nodes: [] Oct_Node($Value), ray_o, ray_d: lane_v3, min_t, max_t: lane_f32, world: ^World) {
+traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len: ^lane_u32, nodes: [] Oct_Node($Value), ray_o, ray_d: lane_v3, min_t, max_t: lane_f32, world: ^World) {
     inv_d := 1 / normalize_or_zero(ray_d)
     
     stacks_: [64] lane_Node_Index
     stacks := stacks_[:]
     stacks[0] = Root_Index
-    stack_lens: lane_u32 = 1
+    counts: lane_u32 = 1
+    
+    Check :: false
     
     // @note(viktor): currently the stacks grow and shrink in lockstep
     // lanes without valid work, work on the nil node and nil values
     #assert(Todo, "measure wasted lanes here as well")
-    for stack_lens != 0 {
-        stack_lens -= 1
+    for counts != 0 {
+        counts -= 1
         
-        assert(greater_equal(stack_lens, 0) & less_than(stack_lens, cast(lane_u32) len(stacks)) == lane_true)
-        it_index := cast(lane_u32) lane_gather(lane_index_wide(stacks, stack_lens))
-        assert(it_index != 0, "if all lanes are zero we should not have appended the nodes")
+        when Check do assert(greater_equal(counts, 0) & less_than(counts, cast(lane_u32) len(stacks)) == lane_true)
+        it_index := cast(lane_u32) lane_gather(lane_index_wide(stacks, counts))
+        when Check do assert(it_index != 0, "should not have been appended")
         
         it := lane_index(nodes, it_index)
         
@@ -399,33 +400,31 @@ traverse_tree_and_test_hits :: proc (values: [] lane_Node_Index, values_write: ^
         // @todo(viktor): should this update closest_t?
         hit_mask := hit_rectangle(ray_o, inv_d, b_min, b_max, min_t, max_t)
         
-        Subnodes_Len :: len(Oct_Node_X{}.subnodes)
-        
         first_value   := lane_gather(lane_member(node, "first_value", Node_Index))
-        subnodes      := lane_member(node, "subnodes", [Subnodes_Len] Node_Index)
-        first_subnode := lane_gather(lane_index(subnodes, 0))
+        first_subnode := lane_gather(lane_member(node, "first_subnode", Node_Index))
         
-        // @note(viktor): only if all lanes are zero do not push onto the stack, otherwise keep stacklens in sync and push zeros
+        // @note(viktor): only if all lanes are zero do not push onto the stack, otherwise keep counts in sync and push zeros
         append_first_subnode := greater_than(first_subnode, 0)
         append_first_subnode &= hit_mask
-        
-        push_subnodes := append_first_subnode == lane_false ? lane_false : lane_true
-        
-        for i in cast(u32) 0..<Subnodes_Len {
-            lane_scatter(lane_index_wide(stacks, stack_lens+i), lane_gather(lane_index(subnodes, i)), append_first_subnode)
+        if append_first_subnode != lane_false {
+            for i in cast(u32) 0..<Subnodes_Per_Node {
+                lane_scatter(lane_index_wide(stacks, counts+i), first_subnode + cast(Node_Index) i, append_first_subnode)
+            }
+            counts += Subnodes_Per_Node
         }
-        conditional_assign(push_subnodes, &stack_lens, stack_lens+Subnodes_Len)
         
         // @speed what is a better data layout for the values, we spend a lot of time in here, a lot of the time many lanes are emtpy
         link := first_value & cast(lane_Node_Index) hit_mask
         for link != 0 {
-            lane_scatter(lane_index_wide(values, values_write^), link)
-            conditional_assign(not_equal(link, 0), values_write, values_write^+1)
-            assert(less_than(values_write^, auto_cast len(values)) == lane_true)
+            length := values_len^
             
-            node := lane_index(nodes, cast(lane_u32) link)
-            value := lane_member(node, "value", Oct_Value(Value))
-            link = lane_gather(lane_member(value, "next_value", Node_Index)) 
+            mask := not_equal(link, 0)
+            lane_scatter(lane_index_wide(values, length), link, mask)
+            conditional_assign(mask, values_len, length+1)
+            when Check do assert(less_than(length, auto_cast len(values)) == lane_true)
+            
+            value := lane_member(lane_index(nodes, cast(lane_u32) link), "value", Oct_Value(Value))
+            link   = lane_gather(lane_member(value, "next_value", Node_Index)) 
         }
     }
 }

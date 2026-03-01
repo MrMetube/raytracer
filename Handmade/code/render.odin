@@ -21,11 +21,17 @@ World :: struct {
     materials: [dynamic] Material,
     all_brdf_values: [dynamic] v3,
     
-    bounces_computed: u64,
-    loops_computed:   u64,
-    tiles_retired:    u32,
-    pixels_done:      u32,
-    nil_value_lanes_tested: [9] u32,
+    using render_stats: struct {
+        bounces_computed: u64,
+        loops_computed:   u64,
+        tiles_retired:    u32,
+        pixels_done:      u32,
+        nil_value_lanes_tested: [9] u32,
+        
+        // @todo(viktor): also measure other primitives
+        max_triangle_tests: u32,
+        triangle_tests:     u32,
+    },
     
     rays_per_pixel:   u32,
     max_bounce_count: u32,
@@ -38,16 +44,34 @@ Camera :: struct {
 
 ////////////////////////////////////////////////
 
-begin_render :: proc (render: ^Render, core_count: i32, camera: Camera) {
+begin_render :: proc (render: ^Render, world: ^World, core_count: i32, camera: Camera) {
+    render.active = true
+    
+    render.world.render_stats = {}
+    
+    render.world.all_brdf_values = world.all_brdf_values
+    
+    // @volatile
+    make_by_pointer(&render.world.spheres,        len(world.spheres),        render.allocator)
+    make_by_pointer(&render.world.planes,         len(world.planes),         render.allocator)
+    make_by_pointer(&render.world.sphere_nodes,   len(world.sphere_nodes),   render.allocator)
+    make_by_pointer(&render.world.triangle_nodes, len(world.triangle_nodes), render.allocator)
+    make_by_pointer(&render.world.triangles,      len(world.triangles),      render.allocator)
+    make_by_pointer(&render.world.materials,      len(world.materials),      render.allocator)
+    
+    copy(render.world.spheres[:],        world.spheres[:])
+    copy(render.world.sphere_nodes[:],   world.sphere_nodes[:])
+    copy(render.world.triangle_nodes[:], world.triangle_nodes[:])
+    copy(render.world.planes[:],         world.planes[:])
+    copy(render.world.materials[:],      world.materials[:])
+    copy(render.world.triangles[:],      world.triangles[:])
+    
     image := render.image
     tile_size: v2i = image.width / core_count
     
     tile_cols  := (image.width  + tile_size.x - 1) / tile_size.x
     tile_rows  := (image.height + tile_size.y - 1) / tile_size.y
     tile_count := tile_cols * tile_rows
-    
-    // print("Configuration: %x% with % cores and % %x% (%/tile) tiles and lane width of % \n", image.width, image.height, core_count, tile_count, tile_size.x, tile_size.y, view_memory_size(tile_size.x * tile_size.y * size_of(Color)), LaneWidth)
-    // print("Quality: % rays per pixel with a maximum of % bounces\n", world.rays_per_pixel, world.max_bounce_count)
     
     Work :: struct {
         world:   ^World,
@@ -105,8 +129,10 @@ print_render_results :: proc (world: ^World, start, end: time.Time) {
     print("  [")
     for e, i in world.nil_value_lanes_tested {
         if i > 0 do print(", ")
-        print("% = % %%", i, view_percentage_ratio(cast(f64) e / cast(f64) total_lanes))
+        print("% = % %%", i, view_percentage_ratio(safe_ratio_0(cast(f64) e, cast(f64) total_lanes)))
     }
     print("]\n")
-    print("  Wasted lanes: % % %%\n", view_magnitude(wasted), view_percentage_ratio(cast(f64) wasted / cast(f64) (total_lanes * 8)))
+    print("  Wasted lanes: % % %%\n", view_magnitude(wasted), view_percentage_ratio(safe_ratio_0(cast(f64) wasted, cast(f64) (total_lanes * 8))))
+    print("Hit tests:\n")
+    print("  Triangles: % / % = % %%\n", view_magnitude(world.triangle_tests), view_magnitude(world.max_triangle_tests), view_percentage_ratio(cast(f64) world.triangle_tests / cast(f64) (world.max_triangle_tests)))
 }

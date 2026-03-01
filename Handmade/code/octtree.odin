@@ -3,8 +3,8 @@ package main
 Node_Index :: distinct u32
 
 Oct_Node :: struct ($Value: typeid) #raw_union {
-    value: Oct_Value(Value),
     node:  Oct_Node_X,
+    value: Oct_Value(Value),
 }
 
 Oct_Value :: struct ($Value: typeid) {
@@ -12,15 +12,29 @@ Oct_Value :: struct ($Value: typeid) {
     next_value: Node_Index,
 }
 
-// @note(viktor): there are currently 4 bytes of padding
-Oct_Node_X :: struct #align(64) {
-    subnodes:    [8] Node_Index,
-    first_value: Node_Index,
-    bounds:      Rectangle3,
+/// oct_node = 4 + 4 + (2 * 3 * 4)
+/// sphere   = (3 * 4 + 4 + 4) + 4
+/// triangle = (3 * 3 * 4 + 4) + 4
+/// oct_node
+///   sphere
+/// triangle
+
+#assert(size_of(Oct_Node(Sphere)) == 32)
+#assert(size_of(Oct_Value(Triangle)) == 44)
+#assert(size_of(Oct_Node(Triangle)) == 64)
+#assert(size_of(Oct_Node_X) == 32)
+Oct_Node_X :: struct #align(32) {
+    // @note(viktor): the other 7 subnodes must follow directly after the first
+    first_subnode: Node_Index,
+    first_value:   Node_Index,
+    bounds:        Rectangle3,
 }
 
 Nil_Index  :: 0
 Root_Index :: 1
+
+OctTree_Dimensions :: 3
+Subnodes_Per_Node  :: 1 << OctTree_Dimensions
 
 /* 
   @todo(viktor): Again update once the layout has been settled.
@@ -69,9 +83,7 @@ tree_append_node :: proc (build_info: ^Tree_Build_Info, tree: ^[dynamic] Oct_Nod
     append_nothing(&build_info.value_counts)
 }
 
-octtree_append :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Oct_Node($Value), value: Value, value_bounds: Rectangle3, Dimesions := 3) -> bool {
-    Dimensions :: cast(u32) 3
-    
+octtree_append :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Oct_Node($Value), value: Value, value_bounds: Rectangle3) -> bool {
     clear(&info.temp_stack)
     append(&info.temp_stack, Root_Index)
     
@@ -92,32 +104,25 @@ octtree_append :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Oct_Node($Value
         }
         
         // @note(viktor): subdivide node
-        if node.subnodes[0] == Nil_Index {
-            first_subnode_index := cast(Node_Index) len(tree)
-            
-            count :: 1 << Dimensions
-            
+        if node.first_subnode == Nil_Index {
+            node.first_subnode = cast(Node_Index) len(tree)
             half := get_dimension(node.bounds) * 0.5
             
-            for sector_index in 0 ..< count {
+            for sector_index in 0 ..< Subnodes_Per_Node {
                 // @note(viktor): spread the bits into a vector like 0b101 -> {1, 0, 1}
-                factor: [Dimensions] f32
-                for axis in 0 ..< Dimensions {
+                factor: [OctTree_Dimensions] f32
+                for axis in cast(u32) 0 ..< len(factor) {
                     mask := 1 << axis
                     factor[axis] = (sector_index & mask) == 0 ? 0 : 1
                 }
                 
-                
                 subnode_bounds := rectangle_min_dimension(node.bounds.min + factor * half, half)
                 tree_append_node(info, tree, subnode_bounds)
-                
-                subnode_index := first_subnode_index + cast(Node_Index) sector_index
-                node.subnodes[sector_index] = subnode_index
             }
         }
         
         sub_could_contain: bool
-        subs: for &sub_index in node.subnodes {
+        subs: for sub_index in node.first_subnode ..< node.first_subnode + Subnodes_Per_Node {
             sub := tree[sub_index]
             if contains_rect(sub.node.bounds, value_bounds) {
                 sub_could_contain = true
@@ -198,8 +203,8 @@ inspect :: proc (info: Tree_Build_Info, nodes: [] Oct_Node($Value), it_index: No
         result.overfull_nodes += 1
     }
     
-    if it.node.subnodes[0] != Nil_Index {
-        for sub_index in it.node.subnodes {
+    if it.node.first_subnode != Nil_Index {
+        for sub_index in it.node.first_subnode..< it.node.first_subnode + Subnodes_Per_Node {
             sub_info := inspect(info, nodes, sub_index, depth + 1)
             
             result.value_count    += sub_info.value_count

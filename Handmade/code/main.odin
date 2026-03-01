@@ -314,32 +314,8 @@ main :: proc() {
             if !render.active {
                 if render.requested {
                     render.requested = false
-                    render.active = true
                     
-                    render.world.bounces_computed = 0
-                    render.world.loops_computed   = 0
-                    render.world.tiles_retired    = 0
-                    render.world.pixels_done      = 0
-                    render.world.nil_value_lanes_tested = 0
-                    
-                    render.world.all_brdf_values = world.all_brdf_values
-                    
-                    // @volatile
-                    make_by_pointer(&render.world.spheres,        len(world.spheres),        render.allocator)
-                    make_by_pointer(&render.world.planes,         len(world.planes),         render.allocator)
-                    make_by_pointer(&render.world.sphere_nodes,   len(world.sphere_nodes),   render.allocator)
-                    make_by_pointer(&render.world.triangle_nodes, len(world.triangle_nodes), render.allocator)
-                    make_by_pointer(&render.world.triangles,      len(world.triangles),      render.allocator)
-                    make_by_pointer(&render.world.materials,      len(world.materials),      render.allocator)
-                    
-                    copy(render.world.spheres[:],        world.spheres[:])
-                    copy(render.world.sphere_nodes[:],   world.sphere_nodes[:])
-                    copy(render.world.triangle_nodes[:], world.triangle_nodes[:])
-                    copy(render.world.planes[:],         world.planes[:])
-                    copy(render.world.materials[:],      world.materials[:])
-                    copy(render.world.triangles[:],      world.triangles[:])
-                    
-                    begin_render(render, core_count, camera)
+                    begin_render(render, &world, core_count, camera)
                 }
             } else {
                 if work_is_completed(&render.queue) {

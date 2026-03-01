@@ -59,12 +59,12 @@ lane_slice :: #force_inline proc (slice: $T / [] $E, start: lane_u32) -> Lane([]
 }
 
 lane_gather :: proc { lane_gather_mask, lane_gather_no_mask, lane_gather_v }
-lane_gather_mask :: #force_inline proc (lane: Lane($T), default: #simd [LaneWidth] T, mask: lane_u32) -> #simd [LaneWidth] T {
+lane_gather_mask :: #force_inline proc (lane: Lane($T), mask: lane_u32, default: #simd [LaneWidth] T) -> #simd [LaneWidth] T {
     result := simd.gather(lane.p, default, mask)
     return result
 }
 lane_gather_no_mask :: #force_inline proc (lane: Lane($T)) -> #simd [LaneWidth] T {
-    result := lane_gather_mask(lane, T{}, lane_true)
+    result := lane_gather_mask(lane, lane_true, T{})
     return result
 }
 lane_gather_v :: #force_inline proc (lane: Lane($T/ [$N] $E)) -> [N] #simd [LaneWidth] E {
