@@ -59,6 +59,20 @@ Camera :: struct {
 
 ////////////////////////////////////////////////
 
+init_render :: proc (render: ^Render, rays_per_pixel: u32, max_bounce_count: u32, image_size: v2i, core_count: i32) {
+    render.rays_per_pixel   = rays_per_pixel
+    render.max_bounce_count = max_bounce_count
+    
+    render.allocator = arena_allocator(&render.arena)
+    
+    render.image.width  = image_size.x
+    render.image.height = image_size.y
+    render.image.data   = make_slice(context.allocator, [] Color, render.image.width * render.image.height)
+    
+    create_infos := make_slice(context.allocator, [] CreateThreadInfo, core_count) // @leak
+    init_work_queue(&render.queue, create_infos)
+}
+
 begin_render :: proc (render: ^Render, world: ^World, core_count: i32, camera: Camera) {
     render.active = true
     

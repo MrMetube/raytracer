@@ -183,8 +183,8 @@ print_node :: proc (nodes: [] $T, level: int, it_index: Node_Index) {
 }
 
 Tree_Info :: struct {
-    values_per_node: Stat,
-    depth: Stat,
+    values_per_node: Stat(u32),
+    depth: Stat(u32),
     
     node_count:     u32,
     overfull_nodes: u32, 
@@ -221,28 +221,32 @@ inspect :: proc (info: Tree_Build_Info, nodes: [] Tree_Node($Value), it_index: N
     return result
 }
 
-Stat :: struct {
-    min, max, sum, count: u32,
+Stat :: struct ($T: typeid) {
+    min, max, sum, count: T,
     avg: f64,
 }
 
-stat_init :: proc (value: u32) -> Stat {
-    result: Stat
-    result.sum += value
-    result.min = value
-    result.max = value
-    result.count = 1
+stat_init :: proc (value: $T) -> Stat(T) {
+    result: Stat(T)
+    stat_update(&result, value)
     return result
 }
 
-stat_update :: proc (stat: ^Stat, other: Stat) {
+stat_update :: proc { stat_update_stat, stat_update_value }
+stat_update_stat :: proc (stat: ^Stat($T), other: Stat(T)) {
     stat.min    = min(stat.min, other.min)
     stat.max    = max(stat.max, other.max)
     stat.sum   += other.sum
     stat.count += other.count
 }
+stat_update_value :: proc (stat: ^Stat($T), other: T) {
+    stat.min    = min(stat.min, other)
+    stat.max    = max(stat.max, other)
+    stat.sum   += other
+    stat.count += 1
+}
 
-stat_finalize :: proc (stat: ^Stat) {
+stat_finalize :: proc (stat: ^Stat($T)) {
     if stat.count > 0 {
         stat.avg = cast(f64) stat.sum / cast(f64) stat.count
     }

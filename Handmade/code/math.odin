@@ -779,16 +779,16 @@ rectangle_modulus :: proc (rect: $R/Rectangle($T), p: T) -> (result: T) {
 
 // @note(viktor): Area without the points at the maximum
 get_volume_or_zero :: get_area_or_zero
-get_area_or_zero :: proc(rect: $R/Rectangle($T)) -> (result: T) {
+get_area_or_zero :: proc(rect: $R/Rectangle($V/[$N] $T)) -> (result: T) {
     dimension := get_dimension(rect)
     result = 1
-    #no_bounds_check #unroll for i in 0..<len(T) {
+    #no_bounds_check #unroll for i in 0..<len(V) {
         result *= max(0, dimension[i])
     }
     return result
 }
 
-has_area :: proc(rect: $R/Rectangle($T)) -> (result: b32) {
+has_area :: proc(rect: $R/Rectangle($T)) -> (result: bool) {
     area := get_area_or_zero(rect)
     result = area != 0
     return result
@@ -796,16 +796,16 @@ has_area :: proc(rect: $R/Rectangle($T)) -> (result: b32) {
 
 // @note(viktor): Area with the points at the maximum
 get_volume_or_zero_inclusive :: get_area_or_zero_inclusive
-get_area_or_zero_inclusive :: proc(rect: $R/Rectangle($T)) -> (result: T) {
+get_area_or_zero_inclusive :: proc(rect: $R/Rectangle($V/ [$N] $T)) -> (result: T) {
     dimension := get_dimension(rect) + 1
     result = 1
-    #no_bounds_check #unroll for i in 0..<len(T) {
+    #no_bounds_check #unroll for i in 0..<len(V) {
         result *= max(0, dimension[i])
     }
     return result
 }
 
-has_area_inclusive :: proc(rect: $R/Rectangle($T)) -> (result: b32) {
+has_area_inclusive :: proc(rect: $R/Rectangle($T)) -> (result: bool) {
     area := get_area_or_zero_inclusive(rect)
     result = area != 0
     return result

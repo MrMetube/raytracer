@@ -12,7 +12,8 @@ FontSize :: 20
 
 ////////////////////////////////////////////////
 
-fast_factor :: 6 when SpallDisabled else 30
+fast_factor    :: 6 when SpallDisabled else 30
+quality_factor :: 2 when SpallDisabled else 30
 Use_Octtree := true
 
 Is_Optimized :: ODIN_OPTIMIZATION_MODE == .Speed
@@ -126,6 +127,44 @@ main :: proc() {
         tree_append(&triangle_info, &world.triangle_nodes, triangle, bounds)
     }
     
+    {
+        compacted: Stat(f32)
+        
+        nodes := world.triangle_nodes
+        backing: [1024] Node_Index
+        stack := dynamic_array_from_parts(Node_Index, raw_data(&backing), 0, len(backing))
+        append(&stack, Root_Index)
+        for len(stack) != 0 {
+            it_index := pop(&stack)
+            assert(it_index != Nil_Index)
+            it := nodes[it_index]
+            if it.node.first_subnode != Nil_Index {
+                append(&stack, it.node.first_subnode+0)
+                append(&stack, it.node.first_subnode+1)
+            }
+            
+            if it.node.first_value != Nil_Index {
+                bounds := rectangle_inverted_infinity(Rectangle3)
+                for link := it.node.first_value; link != Nil_Index; link = nodes[link].value.next_value {
+                    value := nodes[link].value
+                    bounds = get_union_point(bounds, value.value.a)
+                    bounds = get_union_point(bounds, value.value.b)
+                    bounds = get_union_point(bounds, value.value.c)
+                }
+                
+                if it.node.bounds != bounds {
+                    stat_update(&compacted, get_volume_or_zero(bounds) / get_volume_or_zero(it.node.bounds))
+                    it.node.bounds = bounds
+                }
+            } else {
+                it.node.bounds = {}
+            }
+        }
+        
+        stat_finalize(&compacted)
+        print("compacting nodes: average size afterwards = % %%\n", view_percentage_ratio(compacted.avg))
+    }
+    
     inspection := inspect(triangle_info, world.triangle_nodes[:], Root_Index)
     print("triangle tree info:\n")
     print("            nodes: %\n", inspection.node_count)
@@ -165,9 +204,6 @@ main :: proc() {
     rl.GuiSetStyle(.DEFAULT, auto_cast rl.GuiDefaultProperty.TEXT_SIZE, FontSize)
     rl.GuiSetStyle(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_NORMAL, auto_cast rl.ColorToInt(rl.WHITE))
     
-    ui_rect := rectangle_min_dimension(v2{}, vec_cast(f32, window_size))
-    ui_rect = add_radius(ui_rect, -10)
-    
     show_materials: bool
     show_planes: bool
     show_spheres: bool
@@ -175,8 +211,10 @@ main :: proc() {
     
     quality_render: Render
     fast_render:    Render
-    init_render(&quality_render, 64, 8, window_size.x, window_size.y, core_count)
-    init_render(&fast_render,    8,  4, window_size.x / fast_factor, window_size.y / fast_factor, core_count)
+    quality_size := window_size / quality_factor
+    fast_size    := window_size / fast_factor
+    init_render(&quality_render, 64, 16, quality_size, core_count)
+    init_render(&fast_render,     8,  4, fast_size,    core_count)
     defer close_work_queue_and_wait_for_threads(&quality_render.queue)
     defer close_work_queue_and_wait_for_threads(&fast_render.queue)
     
@@ -276,10 +314,7 @@ main :: proc() {
             fast_render.requested = true
         }
         
-        if rl.IsKeyPressed(.X) {
-            quality_render.requested = true
-        }
-        if rl.IsKeyPressed(.C) {
+        if rl.IsKeyPressed(.R) {
             fast_render.requested = true
         }
         
@@ -326,153 +361,97 @@ main :: proc() {
         
         ////////////////////////////////////////////////
         
-        layout: Layout
+        _layout: Layout
+        layout := &_layout
         layout.font = font
-        layout.at = ui_rect.min
+        layout.at = 10
         
         if fast_image_is_focussed {
             rl.DrawTextureEx(fast_render.texture, 0, 0, fast_factor, rl.WHITE)
-            rl.DrawTextureEx(quality_render.texture, vec_cast(f32, window_size.x - quality_render.texture.width / fast_factor, 0), 0, 1.0 / fast_factor, rl.WHITE)
+            rl.DrawTextureEx(quality_render.texture, vec_cast(f32, window_size.x - quality_render.texture.width, 0), 0, 1.0, rl.WHITE)
         } else {
-            rl.DrawTextureEx(quality_render.texture, 0, 0, 1, rl.WHITE)
+            rl.DrawTextureEx(quality_render.texture, 0, 0, quality_factor, rl.WHITE)
             rl.DrawTextureEx(fast_render.texture, vec_cast(f32, window_size.x - fast_render.texture.width, 0), 0, 1, rl.WHITE)
         }
         
-        display_line(&layout, "Camera: % : % ", camera.p, camera.z)
+        display_line(layout, "Camera: % : % ", camera.p, camera.z)
+        layout_advance(layout, 10)
         
-        display_line(&layout, "rays per pixel:")
-        { 
-            layout_indent(&layout)
-            
-            layout_begin_horizontal(&layout)
-            if display_button(&layout, "-") do quality_render.rays_per_pixel /= 2 
-            
-            layout_advance(&layout, 10)
-            if display_button(&layout, "+") do quality_render.rays_per_pixel *= 2
-            quality_render.rays_per_pixel = clamp(quality_render.rays_per_pixel, LaneWidth, 2048)
-            
-            layout_advance(&layout, 10)
-            display_line(&layout, "quality %", quality_render.rays_per_pixel)
-            layout_end_horizontal(&layout)
-            
-            layout_unindent(&layout)
-            layout_advance(&layout, FontSize)
-        }
+        display_toggle(layout, "Display Progress", &render_display_progress)
+        layout_advance(layout, 10)
         
-        { 
-            layout_indent(&layout)
-            
-            layout_begin_horizontal(&layout)
-            if display_button(&layout, "-") do fast_render.rays_per_pixel /= 2 
-            
-            layout_advance(&layout, 10)
-            if display_button(&layout, "+") do fast_render.rays_per_pixel *= 2
-            fast_render.rays_per_pixel = clamp(fast_render.rays_per_pixel, LaneWidth, 2048)
-            
-            layout_advance(&layout, 10)
-            display_line(&layout, "fast %", fast_render.rays_per_pixel)
-            
-            layout_end_horizontal(&layout)
-            layout_unindent(&layout)
-            layout_advance(&layout, FontSize)
-        }
-        
-        layout_advance(&layout, 10)
-        display_toggle(&layout, "Display Progress", &render_display_progress)
-        layout_advance(&layout, 10)
-        
-        for &render in renders {
-            layout_begin_horizontal(&layout)
-            end := render.active ? time.now() : render.end
-            display_line(&layout, "Render took: %", view_time_duration(time.diff(render.start, end), precision = 2))
-            
-            if render.active && !work_is_completed(&render.queue){
-                total_pixels := render.image.width * render.image.height
-                done_percentage := cast(f32) render.world.pixels_done / cast(f32) total_pixels
-                
-                layout_advance(&layout, 10)
-                bar_p := layout.at
-                bar_width  := get_dimension(ui_rect).x / 10
-                bar_height := cast(f32) FontSize * 0.8
-                
-                rect     := rectangle_min_dimension(bar_p, v2{bar_width,                                             bar_height})
-                progress := rectangle_min_dimension(bar_p, v2{linear_blend(cast(f32) 0, bar_width, done_percentage), bar_height})
-                rl.DrawRectangleRec(to_rl_rect(add_radius(rect, 1)), rl.BLACK)
-                rl.DrawRectangleLinesEx(to_rl_rect(rect), 2, rl.WHITE)
-                rl.DrawRectangleRec(to_rl_rect(progress), rl.WHITE)
-                layout_advance(&layout, bar_width)
-            }
-            
-            layout_end_horizontal(&layout)
-            layout_advance(&layout, FontSize)
-        }
+        xx := !fast_image_is_focussed
+        display_render(layout, &quality_render, "Quality", &xx)
+        fast_image_is_focussed = !xx
+        display_render(layout, &fast_render, "Fast", &fast_image_is_focussed)
+        layout_advance(layout, 10)
         
         // @todo(viktor): Rebuild the octtree if the spheres are edited in any way
-        layout_advance(&layout, FontSize)
-        if display_list(&layout, &show_spheres, "Spheres") {
-            layout_indent(&layout)
-            defer layout_unindent(&layout)
+        layout_advance(layout, FontSize)
+        if display_list(layout, &show_spheres, "Spheres") {
+            layout_indent(layout)
+            defer layout_unindent(layout)
             
             for &sphere, index in world.spheres[1:] {
                 material := cast(f32) sphere.material
-                display_line(&layout, "Sphere %: %", index, material_names[sphere.material])
+                display_line(layout, "Sphere %: %", index, material_names[sphere.material])
                 
-                layout_indent(&layout)
-                defer layout_unindent(&layout)
+                layout_indent(layout)
+                defer layout_unindent(layout)
                 
-                display_slider(&layout, 360, &material, 0, cast(f32) len(material_names)-0.51, "Material Index")
+                display_slider(layout, 360, &material, 0, cast(f32) len(material_names)-0.51, "Material Index")
                 if sphere.material != round(u32, material) do fast_render.requested = true
                 sphere.material = round(u32, material)
-                if display_slider  (&layout, 240, &sphere.radius, 0.001, 10, "Radius")                      do fast_render.requested = true
-                if display_slider_v(&layout, 240, &sphere.center, -10, 10, "Center", flags = { .relative }) do fast_render.requested = true
+                if display_slider  (layout, 240, &sphere.radius, 0.001, 10, "Radius")                      do fast_render.requested = true
+                if display_slider_v(layout, 240, &sphere.center, -10, 10, "Center", flags = { .relative }) do fast_render.requested = true
                 
-                layout_advance(&layout, 10)
+                layout_advance(layout, 10)
             }
         }
         
-        layout_advance(&layout, FontSize)
-        if display_list(&layout, &show_planes, "Planes") {
-            layout_indent(&layout)
-            defer layout_unindent(&layout)
+        layout_advance(layout, FontSize)
+        if display_list(layout, &show_planes, "Planes") {
+            layout_indent(layout)
+            defer layout_unindent(layout)
             
             for &plane, index in world.planes[1:] {
                 material := cast(f32) plane.material
-                display_line(&layout, "Plane %: %", index, material_names[plane.material])
+                display_line(layout, "Plane %: %", index, material_names[plane.material])
                 
-                layout_indent(&layout)
-                defer layout_unindent(&layout)
+                layout_indent(layout)
+                defer layout_unindent(layout)
                 
-                display_slider(&layout, 360, &material, 0, cast(f32) len(material_names)-0.51, "Material Index")
+                display_slider(layout, 360, &material, 0, cast(f32) len(material_names)-0.51, "Material Index")
                 if plane.material != round(u32, material) do fast_render.requested = true
                 plane.material = round(u32, material)
                 
-                if display_slider  (&layout, 240, &plane.radius, 0.1, 1000, "Radius", flags = { .logarithmic }) do fast_render.requested = true
-                if display_slider_v(&layout, 240, &plane.center, -10, 10,   "Center", flags = { .relative })    do fast_render.requested = true
+                if display_slider  (layout, 240, &plane.radius, 0.1, 1000, "Radius", flags = { .logarithmic }) do fast_render.requested = true
+                if display_slider_v(layout, 240, &plane.center, -10, 10,   "Center", flags = { .relative })    do fast_render.requested = true
                 
-                layout_advance(&layout, 10)
+                layout_advance(layout, 10)
             }
         }
         
-        layout_advance(&layout, FontSize)
-        if display_list(&layout, &show_materials, "Materials") {
-            layout_indent(&layout)
-            defer layout_unindent(&layout)
+        layout_advance(layout, FontSize)
+        if display_list(layout, &show_materials, "Materials") {
+            layout_indent(layout)
+            defer layout_unindent(layout)
             
             for &material, index in world.materials {
                 if index == 0 do continue
-                display_line(&layout, "Material %: material %", index, material_names[index])
+                display_line(layout, "Material %: material %", index, material_names[index])
                 
-                layout_indent(&layout)
-                defer layout_unindent(&layout)
+                layout_indent(layout)
+                defer layout_unindent(layout)
                 
-                if display_slider(&layout, 240, &material.scatter, 0, 1, "Scatter")  do fast_render.requested = true
+                if display_slider(layout, 240, &material.scatter, 0, 1, "Scatter")  do fast_render.requested = true
                 
-                layout_advance(&layout, 10)
-                layout_begin_horizontal(&layout)
+                layout_advance(layout, 10)
+                layout_begin_horizontal(layout)
                 color_size :: 50
                 {
-                    display_line(&layout, "Emit")
-                    layout_advance(&layout, 10)
+                    display_line(layout, "Emit")
+                    layout_advance(layout, 10)
                     
                     // @todo(viktor): emittance could be larger than 1
                     color  := rl.ColorFromNormalized(V4(material.emit, 1))
@@ -482,13 +461,13 @@ main :: proc() {
                     if color != before do fast_render.requested = true
                     material.emit = rl.ColorNormalize(color).rgb
                     
-                    layout_advance(&layout, color_size + 50)
-                    layout_advance(&layout, 10)
+                    layout_advance(layout, color_size + 50)
+                    layout_advance(layout, 10)
                 }
                 
                 {
-                    display_line(&layout, "Reflect")
-                    layout_advance(&layout, 10)
+                    display_line(layout, "Reflect")
+                    layout_advance(layout, 10)
                     
                     color := rl.ColorFromNormalized(V4(material.reflect, 0))
                     before := color
@@ -497,9 +476,9 @@ main :: proc() {
                     if color != before do fast_render.requested = true
                     material.reflect = rl.ColorNormalize(color).rgb
                 }
-                layout_end_horizontal(&layout)
-                layout_advance(&layout, color_size)
-                layout_advance(&layout, 10)
+                layout_end_horizontal(layout)
+                layout_advance(layout, color_size)
+                layout_advance(layout, 10)
             }
         }
         
@@ -507,18 +486,63 @@ main :: proc() {
     }
 }
 
-init_render :: proc (render: ^Render, rays_per_pixel: u32, max_bounce_count: u32, image_width: i32, image_height: i32, core_count: i32) {
-    render.rays_per_pixel   = rays_per_pixel
-    render.max_bounce_count = max_bounce_count
+////////////////////////////////////////////////
+
+display_render :: proc (layout: ^Layout, render: ^Render, name: string, focus: ^bool) { 
+    display_line(layout, name)
     
-    render.allocator = arena_allocator(&render.arena)
+    layout_indent(layout)
+    defer layout_unindent(layout)
     
-    render.image.width  = image_width
-    render.image.height = image_height
-    render.image.data   = make_slice(context.allocator, [] Color, render.image.width * render.image.height)
+    layout_begin_horizontal(layout)
+        display_toggle(layout, "Render", &render.requested)
+        layout_advance(layout, 5)
+        display_toggle(layout, "Focus", focus)
+    layout_end_horizontal(layout)
+    layout_advance(layout, FontSize)
     
-    create_infos := make_slice(context.allocator, [] CreateThreadInfo, core_count) // @leak
-    init_work_queue(&render.queue, create_infos)
+    layout_begin_horizontal(layout)
+        display_line(layout, "rays per_pixel %", render.rays_per_pixel)
+        layout_advance(layout, 20)
+        if display_button(layout, "-") do render.rays_per_pixel /= 2 
+        layout_advance(layout, 5)
+        if display_button(layout, "+") do render.rays_per_pixel *= 2
+        render.rays_per_pixel = clamp(render.rays_per_pixel, LaneWidth, 2048)
+    layout_end_horizontal(layout)
+    layout_advance(layout, FontSize)
+    
+    layout_begin_horizontal(layout)
+        display_line(layout, "bounces %", render.max_bounce_count)
+        layout_advance(layout, 20)
+        if display_button(layout, "-") do render.max_bounce_count -= render.max_bounce_count <= 8 ? 1 : 2
+        layout_advance(layout, 5)
+        if display_button(layout, "+") do render.max_bounce_count += render.max_bounce_count  < 8 ? 1 : 2
+        render.max_bounce_count = clamp(render.max_bounce_count, 1, 16)
+    layout_end_horizontal(layout)
+    layout_advance(layout, FontSize)
+    
+    layout_begin_horizontal(layout)
+        end := render.active ? time.now() : render.end
+        display_line(layout, "Render took: %", view_time_duration(time.diff(render.start, end), precision = 2))
+        
+        if render.active && !work_is_completed(&render.queue){
+            total_pixels := render.image.width * render.image.height
+            done_percentage := cast(f32) render.world.pixels_done / cast(f32) total_pixels
+            
+            layout_advance(layout, 10)
+            bar_p := layout.at
+            bar_width  :: 300
+            bar_height := cast(f32) FontSize * 0.8
+            
+            rect     := rectangle_min_dimension(bar_p, v2{bar_width,                                             bar_height})
+            progress := rectangle_min_dimension(bar_p, v2{linear_blend(cast(f32) 0, bar_width, done_percentage), bar_height})
+            rl.DrawRectangleRec(to_rl_rect(add_radius(rect, 1)), rl.BLACK)
+            rl.DrawRectangleLinesEx(to_rl_rect(rect), 2, rl.WHITE)
+            rl.DrawRectangleRec(to_rl_rect(progress), rl.WHITE)
+            layout_advance(layout, bar_width)
+        }
+    layout_end_horizontal(layout)
+    layout_advance(layout, FontSize)
 }
 
 load_image_into_texture :: proc (texture: ^rl.Texture, image: Image) {
