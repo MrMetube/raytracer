@@ -123,8 +123,14 @@ vec_cast :: proc { vcast_2, vcast_3, vcast_4, vcast_vec }
     return result
 }
 @(require_results) abs_vec :: proc (a: [$N] $E) -> (result: [N] E) {
-    #no_bounds_check #unroll for i in 0..<N {
-        result[i] = abs(a[i])
+    when intrinsics.type_is_simd_vector(E) {
+        #no_bounds_check #unroll for i in 0..<N {
+            result[i] = absolute(a[i])
+        }
+    } else {
+        #no_bounds_check #unroll for i in 0..<N {
+            result[i] = abs(a[i])
+        }
     }
     return result
 }

@@ -1,5 +1,6 @@
 ## To be done
 
+- make some debug visualization of Tree hit test count and such
 - Do we keep the other primitives(spheres, planes) or should we simplify to only do triangles
 - Investigate the BRDF table usage and why the indices seem to be working better when seemingly wrong
 

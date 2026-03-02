@@ -364,6 +364,8 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
 
 traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len: ^lane_u32, nodes: [] Tree_Node($Value), ray_o, ray_d: lane_v3, min_t, max_t: lane_f32, world: ^World) {
     spall_proc()
+    if nodes[Root_Index].node.first_value == Nil_Index do return
+    
     inv_d := 1 / normalize_or_zero(ray_d)
     
     stacks_: [64] lane_Node_Index
@@ -371,11 +373,13 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
     stacks[0] = Root_Index
     counts: lane_u32 = 1
     
-    Check :: false
+    Check :: !false
     
     // @note(viktor): currently the stacks grow and shrink in lockstep.
     // lanes without valid work, work on the nil node and nil values.
     // @todo(viktor): measure wasted lanes here as well
+    closest_t := max_t
+    
     for counts != 0 {
         counts -= 1
         
@@ -392,29 +396,34 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
         b_max := lane_gather_v(lane_member(it_bounds, "max", v3))
         
         // @todo(viktor): should this update closest_t?
-        hit_mask := hit_rectangle(ray_o, inv_d, b_min, b_max, min_t, max_t)
-        
+        hit_mask, _ := hit_rectangle(ray_o, inv_d, b_min, b_max, min_t, closest_t)
+        // @todo(viktor): this requires that the subnodes are appended in the order from nearest to farthest
+        // conditional_assign(hit_mask, &closest_t, t)
         
         // @todo(viktor): @important if viewed almost directly along an axis, the bounds seems to make cracks in my triangles
         
         spall_begin("append subnodes")
-        // @speed What order should they be appended? along the ray direction probably, then also update the closest_t/max_t for all bounds
+        
         first_subnode := lane_gather(lane_member(node, "first_subnode", Node_Index))
         // @note(viktor): only if all lanes are zero do not push onto the stack, otherwise keep counts in sync and push zeros
         append_first_subnode := not_equal(first_subnode, 0)
         append_first_subnode &= hit_mask
         if append_first_subnode != lane_false {
+            // @todo(viktor): push the closer subnode first once we also correctly update the closest_t
             added: u32
-            for i in cast(u32) 0..<Subnodes_Per_Node {
-                subnode_index := first_subnode + cast(Node_Index) i
-                
-                subnode             := lane_member(lane_index(nodes, cast(lane_u32) subnode_index), "node", Tree_Node_X)
-                subnode_first_value := lane_gather(lane_member(subnode, "first_value", Node_Index))
-                
-                if subnode_first_value != Nil_Index { // @note(viktor): skip if all subnodes are empty
-                    lane_scatter(lane_index_wide(stacks, counts+added), subnode_index, append_first_subnode)
-                    added += 1
-                }
+        
+            subnode_0             := lane_member(lane_index(nodes, cast(lane_u32) first_subnode+0), "node", Tree_Node_X)
+            subnode_1             := lane_member(lane_index(nodes, cast(lane_u32) first_subnode+1), "node", Tree_Node_X)
+            subnode_0_first_value := lane_gather(lane_member(subnode_0, "first_value", Node_Index))
+            subnode_1_first_value := lane_gather(lane_member(subnode_1, "first_value", Node_Index))
+            
+            if subnode_0_first_value != Nil_Index { // @note(viktor): skip if all subnodes are empty
+                lane_scatter(lane_index_wide(stacks, counts+added), first_subnode+0, append_first_subnode)
+                added += 1
+            }
+            if subnode_1_first_value != Nil_Index { // @note(viktor): skip if all subnodes are empty
+                lane_scatter(lane_index_wide(stacks, counts+added), first_subnode+1, append_first_subnode)
+                added += 1
             }
             counts += added
         }
@@ -438,7 +447,7 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
 
 ////////////////////////////////////////////////
 
-hit_rectangle :: proc (ray_o, inv_d: lane_v3, min, max: lane_v3, t_min_init, t_max_init: lane_f32) -> lane_u32 {
+hit_rectangle :: proc (ray_o, inv_d: lane_v3, min, max: lane_v3, t_min_init, t_max_init: lane_f32) -> (lane_u32, lane_f32) {
     spall_proc()
     t1 := (min - ray_o) * inv_d
     t2 := (max - ray_o) * inv_d
@@ -451,7 +460,7 @@ hit_rectangle :: proc (ray_o, inv_d: lane_v3, min, max: lane_v3, t_min_init, t_m
     
     result := less_equal(tmin, tmax)
     
-    return result
+    return result, tmax
 }
 
 hit_triangle :: proc (triangle: Lane(Triangle), ray_o, ray_d: lane_v3, min_t: lane_f32, hit: ^Hit_Info) {

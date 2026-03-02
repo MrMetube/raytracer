@@ -106,6 +106,7 @@ tree_append :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Tree_Node($Value),
                 }
             }
             
+            // @todo(viktor): this is a heuristic, maybe iterate through other options and measure their quality for a better split point
             sub_dim := dimension
             sub_dim[max_axis] *= .5
             offset: v3
