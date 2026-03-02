@@ -364,6 +364,13 @@ linear_to_srgb :: proc(l: v3) -> (s: v3) {
     return s
 }
 
+color_to_u8 :: proc (color: v3) -> Color {
+    v: v4 = 255
+    v.rgb *= color
+    result := round(u8, v)
+    return result
+}
+
 ////////////////////////////////////////////////
 // Simd operations
 

@@ -186,6 +186,8 @@ main :: proc() {
     
     ////////////////////////////////////////////////
     
+    render_display_progress := false
+    
     fast_render.requested = true
     fast_image_is_focussed: bool = true
     
@@ -289,6 +291,7 @@ main :: proc() {
                     begin_render(render, &world, core_count, camera)
                 }
             } else {
+                reload := false
                 if work_is_completed(&render.queue) {
                     complete_all_work(&render.queue)
                     
@@ -297,12 +300,20 @@ main :: proc() {
                     print_render_results(&render.world, render.start, render.end)
                     
                     free_all(render.allocator)
+                    reload = true
+                }
+                
+                if render_display_progress {
+                    reload = true
+                }
+                
+                if reload {
                     load_image_into_texture(&render.texture, render.image)
                 }
             }
         }
         
-        if rl.IsKeyPressed(.R) {
+        if rl.IsKeyPressed(.TAB) && !(rl.IsKeyDown(.LEFT_ALT) || rl.IsKeyDown(.RIGHT_ALT)) {
             fast_image_is_focussed = !fast_image_is_focussed
         }
         
@@ -330,40 +341,45 @@ main :: proc() {
         display_line(&layout, "Camera: % : % ", camera.p, camera.z)
         
         display_line(&layout, "rays per pixel:")
-        button_width :: 30
         { 
-            layout_begin_horizontal(&layout)
+            layout_indent(&layout)
             
-            layout_advance(&layout, 30)
-            if display_button(&layout, "-", {button_width, FontSize}) do quality_render.rays_per_pixel /= 2 
+            layout_begin_horizontal(&layout)
+            if display_button(&layout, "-") do quality_render.rays_per_pixel /= 2 
             
             layout_advance(&layout, 10)
-            if display_button(&layout, "+", {button_width, FontSize}) do quality_render.rays_per_pixel *= 2
+            if display_button(&layout, "+") do quality_render.rays_per_pixel *= 2
             quality_render.rays_per_pixel = clamp(quality_render.rays_per_pixel, LaneWidth, 2048)
             
             layout_advance(&layout, 10)
             display_line(&layout, "quality %", quality_render.rays_per_pixel)
-            
             layout_end_horizontal(&layout)
+            
+            layout_unindent(&layout)
             layout_advance(&layout, FontSize)
         }
         
         { 
-            layout_begin_horizontal(&layout)
+            layout_indent(&layout)
             
-            layout_advance(&layout, 30)
-            if display_button(&layout, "-", {button_width, FontSize}) do fast_render.rays_per_pixel /= 2 
+            layout_begin_horizontal(&layout)
+            if display_button(&layout, "-") do fast_render.rays_per_pixel /= 2 
             
             layout_advance(&layout, 10)
-            if display_button(&layout, "+", {button_width, FontSize}) do fast_render.rays_per_pixel *= 2
+            if display_button(&layout, "+") do fast_render.rays_per_pixel *= 2
             fast_render.rays_per_pixel = clamp(fast_render.rays_per_pixel, LaneWidth, 2048)
             
             layout_advance(&layout, 10)
             display_line(&layout, "fast %", fast_render.rays_per_pixel)
             
             layout_end_horizontal(&layout)
+            layout_unindent(&layout)
             layout_advance(&layout, FontSize)
         }
+        
+        layout_advance(&layout, 10)
+        display_toggle(&layout, "Display Progress", &render_display_progress)
+        layout_advance(&layout, 10)
         
         for &render in renders {
             layout_begin_horizontal(&layout)
@@ -397,7 +413,7 @@ main :: proc() {
             layout_indent(&layout)
             defer layout_unindent(&layout)
             
-            for &sphere, index in world.spheres {
+            for &sphere, index in world.spheres[1:] {
                 material := cast(f32) sphere.material
                 display_line(&layout, "Sphere %: %", index, material_names[sphere.material])
                 
@@ -419,7 +435,7 @@ main :: proc() {
             layout_indent(&layout)
             defer layout_unindent(&layout)
             
-            for &plane, index in world.planes {
+            for &plane, index in world.planes[1:] {
                 material := cast(f32) plane.material
                 display_line(&layout, "Plane %: %", index, material_names[plane.material])
                 
@@ -655,20 +671,36 @@ display_line :: proc (layout: ^Layout, format: string, args: ..any) -> f32 {
 }
 
 display_list :: proc (layout: ^Layout, is_open: ^bool, format: string) -> bool {
-    bounds := to_rl_rect(rectangle_min_dimension(layout.at, v2{100, FontSize}))
-    if rl.GuiButton(bounds, ctprint(format)) {
-        is_open^ = !is_open^
-    }
-    layout_advance(layout, FontSize)
+    display_toggle(layout, format, is_open)
     return is_open^
 }
 
-display_button :: proc (layout: ^Layout, text: string, size: v2) -> bool {
-    bounds := rectangle_min_dimension(layout.at, size)
-    result := rl.GuiButton(to_rl_rect(bounds), ctprint("%", text))
+display_button :: proc (layout: ^Layout, text: string, size := v2{}) -> bool {
+    text := ctprint("%", text)
+    size := size
+    if size == 0 {
+        size = rl.MeasureTextEx(layout.font, text, FontSize, 1)
+        size.x += 20
+    }
+    bounds := to_rl_rect(rectangle_min_dimension(layout.at, size))
+    result := rl.GuiButton(bounds, text)
     layout_advance(layout, size)
     return result
 }
+
+display_toggle :: proc (layout: ^Layout, text: string, condition: ^bool, size := v2{}) -> bool {
+    text := ctprint("%", text)
+    size := size
+    if size == 0 {
+        size = rl.MeasureTextEx(layout.font, text, FontSize, 1)
+        size.x += 20
+    }
+    bounds := to_rl_rect(rectangle_min_dimension(layout.at, size))
+    result := rl.GuiToggle(bounds, text, condition)
+    layout_advance(layout, size)
+    return result
+}
+
 ////////////////////////////////////////////////
 
 to_rl_rect :: proc (rect: Rectangle2) -> rl.Rectangle {

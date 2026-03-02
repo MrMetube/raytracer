@@ -82,7 +82,8 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: i32, camera: C
     copy(render.world.triangles[:],      world.triangles[:])
     
     image := render.image
-    tile_size: v2i = image.width / core_count
+    zero_slice(image.data)
+    tile_size: v2i = max(image.width, image.height) / core_count
     
     tile_cols  := (image.width  + tile_size.x - 1) / tile_size.x
     tile_rows  := (image.height + tile_size.y - 1) / tile_size.y

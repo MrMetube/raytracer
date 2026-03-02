@@ -131,12 +131,12 @@ render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle
             loops_computed   += loops_computed_now
             
             final_color = linear_to_srgb(final_color)
-            final_color *= 255
-            pixel := V4(final_color, 255)
+            pixel := color_to_u8(final_color)
             
             pixel_index := (image.height - 1 - py) * image.width + px
-            #no_bounds_check p := &image.data[pixel_index]
-            p ^= round(u8, pixel)
+            #no_bounds_check {
+                image.data[pixel_index] = pixel
+            }
         }
         atomic_add(&world.pixels_done, auto_cast get_dimension(rect).x)
     }
