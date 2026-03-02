@@ -364,9 +364,16 @@ linear_to_srgb :: proc(l: v3) -> (s: v3) {
     return s
 }
 
-color_to_u8 :: proc (color: v3) -> Color {
+color_to_u8 :: proc { color3_to_u8, color4_to_u8 }
+color3_to_u8 :: proc (color: v3) -> Color {
     v: v4 = 255
     v.rgb *= color
+    result := round(u8, v)
+    return result
+}
+color4_to_u8 :: proc (color: v4) -> Color {
+    v: v4 = 255
+    v.rgba *= color
     result := round(u8, v)
     return result
 }

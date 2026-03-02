@@ -10,13 +10,12 @@ import rl "vendor:raylib"
 
 FontSize :: 20
 
+Use_Tree := true
+
 ////////////////////////////////////////////////
 
-fast_factor    :: 6 when SpallDisabled else 30
-quality_factor :: 2 when SpallDisabled else 30
-Use_Octtree := true
-
 Is_Optimized :: ODIN_OPTIMIZATION_MODE == .Speed
+
 
 main :: proc() {
     rl.SetTraceLogLevel(.WARNING)
@@ -202,7 +201,26 @@ main :: proc() {
     rl.GuiEnable()
     rl.GuiSetFont(font)
     rl.GuiSetStyle(.DEFAULT, auto_cast rl.GuiDefaultProperty.TEXT_SIZE, FontSize)
-    rl.GuiSetStyle(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_NORMAL, auto_cast rl.ColorToInt(rl.WHITE))
+    
+    {
+        Background := color_to_u8(DarkGreen)
+        Foreground := color_to_u8(Jasmine)
+        Highlight  := color_to_u8(Green)
+        Focus      := color_to_u8(Isabelline)
+        None       := color_to_u8(v4{})
+        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_NORMAL, Foreground)
+        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BASE_COLOR_NORMAL, Background)
+        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_NORMAL, None)
+        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_FOCUSED, Focus)
+        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BASE_COLOR_FOCUSED, Highlight)
+        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_FOCUSED, Background)
+        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_PRESSED, Highlight)
+        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BASE_COLOR_PRESSED, Focus)
+        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_PRESSED, Highlight)
+        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_DISABLED, Highlight)
+        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BASE_COLOR_DISABLED, Background)
+        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_DISABLED, None)
+    }
     
     show_materials: bool
     show_planes: bool
@@ -211,10 +229,8 @@ main :: proc() {
     
     quality_render: Render
     fast_render:    Render
-    quality_size := window_size / quality_factor
-    fast_size    := window_size / fast_factor
-    init_render(&quality_render, 64, 16, quality_size, core_count)
-    init_render(&fast_render,     8,  4, fast_size,    core_count)
+    init_render(&quality_render, 64, 16, window_size, 2 when SpallDisabled else 8, core_count)
+    init_render(&fast_render,     8,  4, window_size, 6 when SpallDisabled else 30, core_count)
     defer close_work_queue_and_wait_for_threads(&quality_render.queue)
     defer close_work_queue_and_wait_for_threads(&fast_render.queue)
     
@@ -245,7 +261,7 @@ main :: proc() {
             ddp *= 0.1
         }
         
-        if rl.IsKeyPressed(.Q) do Use_Octtree = !Use_Octtree
+        if rl.IsKeyPressed(.Q) do Use_Tree = !Use_Tree
         
         dddp: v3
         if rl.IsKeyDown(.A) do dddp += {-1, 0,  0}
@@ -363,27 +379,35 @@ main :: proc() {
         
         _layout: Layout
         layout := &_layout
-        layout.font = font
-        layout.at = 10
+        layout_init(layout, font, Jasmine, 10)
         
-        if fast_image_is_focussed {
-            rl.DrawTextureEx(fast_render.texture, 0, 0, fast_factor, rl.WHITE)
-            rl.DrawTextureEx(quality_render.texture, vec_cast(f32, window_size.x - quality_render.texture.width, 0), 0, 1.0, rl.WHITE)
-        } else {
-            rl.DrawTextureEx(quality_render.texture, 0, 0, quality_factor, rl.WHITE)
-            rl.DrawTextureEx(fast_render.texture, vec_cast(f32, window_size.x - fast_render.texture.width, 0), 0, 1, rl.WHITE)
+        {
+            small_factor :: 6
+            small_size := window_size / small_factor
+            p := window_size - small_size
+            p.y = 0
+            if fast_image_is_focussed {
+                rl.DrawTextureEx(fast_render.texture, 0, 0, cast(f32) fast_render.image_size_factor, rl.WHITE)
+                rl.DrawTextureEx(quality_render.texture, vec_cast(f32, p), 0, cast(f32) quality_render.image_size_factor / small_factor, rl.WHITE)
+            } else {
+                rl.DrawTextureEx(quality_render.texture, 0, 0, cast(f32) quality_render.image_size_factor, rl.WHITE)
+                rl.DrawTextureEx(fast_render.texture, vec_cast(f32, p), 0, cast(f32) fast_render.image_size_factor / small_factor, rl.WHITE)
+            }
         }
         
         display_line(layout, "Camera: % : % ", camera.p, camera.z)
         layout_advance(layout, 10)
         
-        display_toggle(layout, "Display Progress", &render_display_progress)
-        layout_advance(layout, 10)
+        layout_begin_horizontal(layout)
+            display_toggle(layout, "Display Progress", &render_display_progress)
+            layout_advance(layout, 10)
+            display_toggle(layout, "Use Tree", &Use_Tree)
+        layout_end_horizontal(layout)
         
         xx := !fast_image_is_focussed
-        display_render(layout, &quality_render, "Quality", &xx)
+        display_render(layout, &quality_render, "Quality", &xx, window_size)
         fast_image_is_focussed = !xx
-        display_render(layout, &fast_render, "Fast", &fast_image_is_focussed)
+        display_render(layout, &fast_render, "Fast", &fast_image_is_focussed, window_size)
         layout_advance(layout, 10)
         
         // @todo(viktor): Rebuild the octtree if the spheres are edited in any way
@@ -461,7 +485,8 @@ main :: proc() {
                     if color != before do fast_render.requested = true
                     material.emit = rl.ColorNormalize(color).rgb
                     
-                    layout_advance(layout, color_size + 50)
+                    layout_advance(layout, color_size)
+                    layout_advance(layout, 50)
                     layout_advance(layout, 10)
                 }
                 
@@ -475,9 +500,9 @@ main :: proc() {
                     rl.GuiColorPicker(size, "", &color)
                     if color != before do fast_render.requested = true
                     material.reflect = rl.ColorNormalize(color).rgb
+                    layout_advance(layout, color_size)
                 }
                 layout_end_horizontal(layout)
-                layout_advance(layout, color_size)
                 layout_advance(layout, 10)
             }
         }
@@ -488,7 +513,7 @@ main :: proc() {
 
 ////////////////////////////////////////////////
 
-display_render :: proc (layout: ^Layout, render: ^Render, name: string, focus: ^bool) { 
+display_render :: proc (layout: ^Layout, render: ^Render, name: string, focus: ^bool, window_size: v2i) { 
     display_line(layout, name)
     
     layout_indent(layout)
@@ -497,29 +522,44 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, focus: ^
     layout_begin_horizontal(layout)
         display_toggle(layout, "Render", &render.requested)
         layout_advance(layout, 5)
-        display_toggle(layout, "Focus", focus)
+        condition := focus^
+        display_toggle(layout, "Focus", &condition)
+        focus^ ||= condition
     layout_end_horizontal(layout)
-    layout_advance(layout, FontSize)
     
     layout_begin_horizontal(layout)
-        display_line(layout, "rays per_pixel %", render.rays_per_pixel)
-        layout_advance(layout, 20)
         if display_button(layout, "-") do render.rays_per_pixel /= 2 
         layout_advance(layout, 5)
         if display_button(layout, "+") do render.rays_per_pixel *= 2
+        layout_advance(layout, 5)
+        display_line(layout, "rays per_pixel %", render.rays_per_pixel)
         render.rays_per_pixel = clamp(render.rays_per_pixel, LaneWidth, 2048)
     layout_end_horizontal(layout)
-    layout_advance(layout, FontSize)
     
     layout_begin_horizontal(layout)
-        display_line(layout, "bounces %", render.max_bounce_count)
-        layout_advance(layout, 20)
         if display_button(layout, "-") do render.max_bounce_count -= render.max_bounce_count <= 8 ? 1 : 2
         layout_advance(layout, 5)
         if display_button(layout, "+") do render.max_bounce_count += render.max_bounce_count  < 8 ? 1 : 2
         render.max_bounce_count = clamp(render.max_bounce_count, 1, 16)
+        layout_advance(layout, 5)
+        display_line(layout, "bounces %", render.max_bounce_count)
     layout_end_horizontal(layout)
-    layout_advance(layout, FontSize)
+        
+    if !render.active {
+        layout_begin_horizontal(layout)
+            before := render.image_size_factor
+            if display_button(layout, "-") do render.image_size_factor -= 1
+            layout_advance(layout, 5)
+            if display_button(layout, "+") do render.image_size_factor += 1
+            render.image_size_factor = clamp(render.image_size_factor, 1, 32)
+            
+            if render.image_size_factor != before {
+                init_render_image(render, window_size)
+            }
+            layout_advance(layout, 5)
+            display_line(layout, "size factor %", render.image_size_factor)
+        layout_end_horizontal(layout)
+    }
     
     layout_begin_horizontal(layout)
         end := render.active ? time.now() : render.end
@@ -542,7 +582,6 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, focus: ^
             layout_advance(layout, bar_width)
         }
     layout_end_horizontal(layout)
-    layout_advance(layout, FontSize)
 }
 
 load_image_into_texture :: proc (texture: ^rl.Texture, image: Image) {
@@ -576,156 +615,9 @@ axis_angle_rotation :: proc(axis: v3, angle: f32) -> m4 {
 
 ////////////////////////////////////////////////
 
-Layout :: struct {
-    font: rl.Font,
-    at:  v2,
-    
-    horizontal: bool,
-    base: v2,
+rlGuiSetColor :: proc (control: rl.GuiControl, property: i32, value: Color) {
+    rl.GuiSetStyle(control, property, transmute(i32) value.abgr)
 }
-
-layout_advance :: proc (layout: ^Layout, dimension: v2) {
-    if layout.horizontal {
-        layout.at.x += dimension.x
-    } else {
-        layout.at.y += dimension.y
-    }
-}
-
-layout_begin_horizontal :: proc (layout: ^Layout) {
-    assert(!layout.horizontal)
-    layout.horizontal = true
-    layout.base = layout.at.x
-}
-
-layout_end_horizontal :: proc (layout: ^Layout) {
-    assert(layout.horizontal)
-    layout.horizontal = false
-    layout.at.x = layout.base.x
-}
-
-layout_indent :: proc (layout: ^Layout) {
-    layout.at.x += 20
-}
-layout_unindent :: proc (layout: ^Layout) {
-    layout.at.x -= 20
-}
-
-////////////////////////////////////////////////
-
-SliderFlag :: enum {
-    relative,
-    logarithmic,
-}
-SliderFlags :: bit_set[SliderFlag]
-
-// @copypasta
-display_slider_v :: proc (layout: ^Layout, width: f32, value: ^$V/[$N] $E, min: V, max: V, format: string = "", args: ..any, flags := SliderFlags{}) -> bool {
-    layout_begin_horizontal(layout)
-    if format != "" {
-        display_line(layout, format, ..args)
-        layout_advance(layout, 10)
-    }
-    
-    slider_width := (width - 20) / len(V)
-    result: bool
-    for i in 0..<len(V) {
-        result ||= display_slider_raw(layout, slider_width, &value[i], min[i], max[i], flags = flags)
-        layout_advance(layout, 10)
-    }
-    layout_end_horizontal(layout)
-    layout_advance(layout, FontSize)
-    return result
-}
-
-display_slider :: proc (layout: ^Layout, width: f32, value: ^f32, min: f32, max: f32, format: string = "", args: ..any, flags : SliderFlags = {}) -> bool {
-    layout_begin_horizontal(layout)
-    if format != "" {
-        display_line(layout, format, ..args)
-        layout_advance(layout, 10)
-    }
-    
-    result := display_slider_raw(layout, width, value, min, max, flags)
-    layout_end_horizontal(layout)
-    layout_advance(layout, FontSize)
-    return result
-}
-
-display_slider_raw :: proc (layout: ^Layout, width: f32, value: ^f32, min: f32, max: f32, flags : SliderFlags = {}) -> bool {
-    min := min
-    max := max
-    if .relative in flags {
-        min = value^ + (1.0 / min)
-        max = value^ + (1.0 / max)
-    }
-    
-    size := v2{width, FontSize}
-    bounds := rectangle_min_dimension(layout.at, size)
-    layout_advance(layout, size)
-    
-    result: bool
-    if .logarithmic in flags {
-        editing_value := math.ln(value^)
-        min = math.ln(min)
-        max = math.ln(max)
-        rl.GuiSlider(to_rl_rect(bounds), "", "", &editing_value, min, max)
-        
-        new_value := math.exp(editing_value)
-        result = new_value != value^
-        value^ = new_value
-    } else {
-        editing_value := value^
-        rl.GuiSlider(to_rl_rect(bounds), "", "", &editing_value, min, max)
-        
-        result = editing_value != value^
-        value^ = editing_value
-    }
-    
-    return result
-}
-
-display_line :: proc (layout: ^Layout, format: string, args: ..any) -> f32 {
-    text := ctprint(format, ..args)
-    size := rl.MeasureTextEx(layout.font, text, FontSize, 1)
-    rl.DrawTextEx(layout.font, text, layout.at+2, FontSize, 1, rl.BLACK)
-    rl.DrawTextEx(layout.font, text, layout.at, FontSize, 1, rl.WHITE)
-    layout_advance(layout, size)
-    
-    return size.x
-}
-
-display_list :: proc (layout: ^Layout, is_open: ^bool, format: string) -> bool {
-    display_toggle(layout, format, is_open)
-    return is_open^
-}
-
-display_button :: proc (layout: ^Layout, text: string, size := v2{}) -> bool {
-    text := ctprint("%", text)
-    size := size
-    if size == 0 {
-        size = rl.MeasureTextEx(layout.font, text, FontSize, 1)
-        size.x += 20
-    }
-    bounds := to_rl_rect(rectangle_min_dimension(layout.at, size))
-    result := rl.GuiButton(bounds, text)
-    layout_advance(layout, size)
-    return result
-}
-
-display_toggle :: proc (layout: ^Layout, text: string, condition: ^bool, size := v2{}) -> bool {
-    text := ctprint("%", text)
-    size := size
-    if size == 0 {
-        size = rl.MeasureTextEx(layout.font, text, FontSize, 1)
-        size.x += 20
-    }
-    bounds := to_rl_rect(rectangle_min_dimension(layout.at, size))
-    result := rl.GuiToggle(bounds, text, condition)
-    layout_advance(layout, size)
-    return result
-}
-
-////////////////////////////////////////////////
 
 to_rl_rect :: proc (rect: Rectangle2) -> rl.Rectangle {
     result: rl.Rectangle

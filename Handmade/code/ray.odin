@@ -126,12 +126,14 @@ render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle
         for px in rect.min.x ..< rect.max.x {
             film_x := -1 + 2 * cast(f32) px / image_size.x
             film_p := vec_cast(lane_f32, film_x, film_y)
-            final_color, bounces_computed_now, loops_computed_now := cast_rays(world, film_p, entropy, pixel_size, half_film_size, film_center, camera, rays_per_pixel, max_bounce_count)
-            bounces_computed += bounces_computed_now
-            loops_computed   += loops_computed_now
             
-            final_color = linear_to_srgb(final_color)
-            pixel := color_to_u8(final_color)
+            color, bounces_now, loops_now := cast_rays(world, film_p, entropy, pixel_size, half_film_size, film_center, camera, rays_per_pixel, max_bounce_count)
+            
+            bounces_computed += bounces_now
+            loops_computed   += loops_now
+            
+            color = linear_to_srgb(color)
+            pixel := color_to_u8(color)
             
             pixel_index := (image.height - 1 - py) * image.width + px
             #no_bounds_check {
@@ -173,7 +175,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
     values := backing_values[:]
     
     for _ in 0..<lane_ray_count {
-        jitter := random_unilateral(entropy, lane_v2)
+        jitter := random_unilateral(entropy, lane_v2) * 0.01
         offset := init_film_p + jitter * pixel_size
         film_p := film_center + (offset.x*camera_x*half_film_size.x + offset.y*camera_y * half_film_size.y) 
         
@@ -227,7 +229,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
             
             ////////////////////////////////////////////////
             
-            if Use_Octtree {
+            if Use_Tree {
                 values_len: lane_u32
                 local_nil_value_lanes_tested: [8] u32
                 nodes := world.triangle_nodes[:]
@@ -277,7 +279,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
             
             ////////////////////////////////////////////////
             
-            if Use_Octtree {
+            if Use_Tree {
                 values_len: lane_u32
                 local_nil_value_lanes_tested: [8] u32
                 
