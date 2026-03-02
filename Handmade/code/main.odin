@@ -119,9 +119,9 @@ main :: proc() {
     // @note(viktor): skip nil triangle
     for triangle in world.triangles[1:] {
         bounds := rectangle_inverted_infinity(Rectangle3)
-        bounds = get_union_point(bounds, triangle.a)
-        bounds = get_union_point(bounds, triangle.b)
-        bounds = get_union_point(bounds, triangle.c)
+        bounds = rectangle_union_point(bounds, triangle.a)
+        bounds = rectangle_union_point(bounds, triangle.b)
+        bounds = rectangle_union_point(bounds, triangle.c)
         
         tree_append(&triangle_info, &world.triangle_nodes, triangle, bounds)
     }
@@ -146,13 +146,13 @@ main :: proc() {
                 bounds := rectangle_inverted_infinity(Rectangle3)
                 for link := it.node.first_value; link != Nil_Index; link = nodes[link].value.next_value {
                     value := nodes[link].value
-                    bounds = get_union_point(bounds, value.value.a)
-                    bounds = get_union_point(bounds, value.value.b)
-                    bounds = get_union_point(bounds, value.value.c)
+                    bounds = rectangle_union_point(bounds, value.value.a)
+                    bounds = rectangle_union_point(bounds, value.value.b)
+                    bounds = rectangle_union_point(bounds, value.value.c)
                 }
                 
                 if it.node.bounds != bounds {
-                    stat_update(&compacted, get_volume_or_zero(bounds) / get_volume_or_zero(it.node.bounds))
+                    stat_update(&compacted, rectangle_clamped_area(bounds) / rectangle_clamped_area(it.node.bounds))
                     it.node.bounds = bounds
                 }
             } else {
@@ -576,7 +576,7 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, focus: ^
             
             rect     := rectangle_min_dimension(bar_p, v2{bar_width,                                             bar_height})
             progress := rectangle_min_dimension(bar_p, v2{linear_blend(cast(f32) 0, bar_width, done_percentage), bar_height})
-            rl.DrawRectangleRec(to_rl_rect(add_radius(rect, 1)), rl.BLACK)
+            rl.DrawRectangleRec(to_rl_rect(rectangle_add_radius(rect, 1)), rl.BLACK)
             rl.DrawRectangleLinesEx(to_rl_rect(rect), 2, rl.WHITE)
             rl.DrawRectangleRec(to_rl_rect(progress), rl.WHITE)
             layout_advance(layout, bar_width)
@@ -624,8 +624,8 @@ to_rl_rect :: proc (rect: Rectangle2) -> rl.Rectangle {
     
     result.x = rect.min.x
     result.y = rect.min.y
-    result.width  = get_dimension(rect).x
-    result.height = get_dimension(rect).y
+    result.width  = rectangle_get_dimension(rect).x
+    result.height = rectangle_get_dimension(rect).y
     
     return result
 }

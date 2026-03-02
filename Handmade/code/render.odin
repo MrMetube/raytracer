@@ -132,7 +132,7 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: i32, camera: C
     for row in 0..<tile_rows {
         for col in 0..<tile_cols {
             rect := rectangle_min_dimension(tile_size * {col, row}, tile_size)
-            rect  = get_intersection(rect, rectangle_min_dimension(i32(0), 0, image.width, image.height))
+            rect  = rectangle_intersection(rect, rectangle_min_dimension(i32(0), 0, image.width, image.height))
             
             entropy := seed_random_series(1842098778 + row * 984612097 + col * 237711 + cast(i32) work_index)
             
@@ -173,11 +173,11 @@ print_render_results :: proc (world: ^World, start, end: time.Time) {
     print("  Empty lanes: [")
     for e, i in world.nil_value_lanes_tested {
         if i > 0 do print(", ")
-        print("% = % %%", i, view_percentage_ratio(safe_ratio_0(cast(f64) e, cast(f64) total_lanes)))
+        print("% = % %%", i, view_percentage_ratio(safe_ratio_or_zero(cast(f64) e, cast(f64) total_lanes)))
     }
     print("]\n")
     
-    print("  Wasted lanes: % % %%\n", view_magnitude(wasted_lanes), view_percentage_ratio(safe_ratio_0(cast(f64) wasted_lanes, cast(f64) (total_lanes * 8))))
+    print("  Wasted lanes: % % %%\n", view_magnitude(wasted_lanes), view_percentage_ratio(safe_ratio_or_zero(cast(f64) wasted_lanes, cast(f64) (total_lanes * 8))))
     
     print("\n\n")
 }

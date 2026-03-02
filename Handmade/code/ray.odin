@@ -33,7 +33,9 @@ Sphere :: struct {
 }
 
 Triangle :: struct {
-    a, b, c: v3,
+    a: v3,
+    b: v3,
+    c: v3,
     material: u32,
 }
 
@@ -140,7 +142,7 @@ render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle
                 image.data[pixel_index] = pixel
             }
         }
-        atomic_add(&world.pixels_done, auto_cast get_dimension(rect).x)
+        atomic_add(&world.pixels_done, auto_cast rectangle_get_dimension(rect).x)
     }
     
     atomic_add(&world.bounces_computed, bounces_computed)
@@ -368,14 +370,15 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
     spall_proc()
     if nodes[Root_Index].node.first_value == Nil_Index do return
     
-    inv_d := 1 / normalize_or_zero(ray_d)
+    inv_d := 1 / ray_d
+    neg_inv_o := -(ray_o * inv_d)
     
     stacks_: [64] lane_Node_Index
     stacks := stacks_[:]
     stacks[0] = Root_Index
     counts: lane_u32 = 1
     
-    Check :: !false
+    Check :: false
     
     // @note(viktor): currently the stacks grow and shrink in lockstep.
     // lanes without valid work, work on the nil node and nil values.
@@ -398,7 +401,7 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
         b_max := lane_gather_v(lane_member(it_bounds, "max", v3))
         
         // @todo(viktor): should this update closest_t?
-        hit_mask, _ := hit_rectangle(ray_o, inv_d, b_min, b_max, min_t, closest_t)
+        hit_mask, _ := hit_rectangle(neg_inv_o, inv_d, b_min, b_max, min_t, closest_t)
         // @todo(viktor): this requires that the subnodes are appended in the order from nearest to farthest
         // conditional_assign(hit_mask, &closest_t, t)
         
@@ -441,6 +444,9 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
             conditional_assign(mask, values_len, length+1)
             when Check do assert(less_than(length, auto_cast len(values)) == lane_true)
             
+            // @todo(viktor): @speed each value can only be in one node, sort the values of each node to appear linearly
+            // Then only store the first and count, remove next_value from Tree_Value.
+            // That way we avoid needing to load the node here only to get the next_value.
             value := lane_member(lane_index(nodes, cast(lane_u32) link), "value", Tree_Value(Value))
             link   = lane_gather(lane_member(value, "next_value", Node_Index)) 
         }
@@ -449,13 +455,17 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
 
 ////////////////////////////////////////////////
 
-hit_rectangle :: proc (ray_o, inv_d: lane_v3, min, max: lane_v3, t_min_init, t_max_init: lane_f32) -> (lane_u32, lane_f32) {
+hit_rectangle :: proc (neg_inv_o, inv_d: lane_v3, min, max: lane_v3, t_min_init, t_max_init: lane_f32) -> (lane_u32, lane_f32) {
     spall_proc()
-    t1 := (min - ray_o) * inv_d
-    t2 := (max - ray_o) * inv_d
+    t1x := fused_mul_add(min.x, inv_d.x, neg_inv_o.x)
+    t1y := fused_mul_add(min.y, inv_d.y, neg_inv_o.y)
+    t1z := fused_mul_add(min.z, inv_d.z, neg_inv_o.z)
+    t2x := fused_mul_add(max.x, inv_d.x, neg_inv_o.x)
+    t2y := fused_mul_add(max.y, inv_d.y, neg_inv_o.y)
+    t2z := fused_mul_add(max.z, inv_d.z, neg_inv_o.z)
     
-    tin := lane_v3 { minimum(t1.x, t2.x), minimum(t1.y, t2.y), minimum(t1.z, t2.z) }
-    tax := lane_v3 { maximum(t1.x, t2.x), maximum(t1.y, t2.y), maximum(t1.z, t2.z) }
+    tin := lane_v3 { minimum(t1x, t2x), minimum(t1y, t2y), minimum(t1z, t2z) }
+    tax := lane_v3 { maximum(t1x, t2x), maximum(t1y, t2y), maximum(t1z, t2z) }
     
     tmin := maximum(maximum(t_min_init, tin.x), maximum(tin.y, tin.z))
     tmax := minimum(minimum(t_max_init, tax.x), minimum(tax.y, tax.z))

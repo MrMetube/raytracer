@@ -73,12 +73,7 @@ Rectangle2i :: Rectangle(v2i)
 
 Tau :: 6.28318530717958647692528676655900576
 Pi  :: 3.14159265358979323846264338327950288
-
 E   :: 2.71828182845904523536
-
-τ :: Tau
-π :: Pi
-e :: E
 
 SqrtTwo   :: 1.41421356237309504880168872420969808
 SqrtThree :: 1.73205080756887729352744634150587236
@@ -100,9 +95,9 @@ DegPerRad :: 360.0/Tau
 ////////////////////////////////////////////////
 // Scalar operations
 
-square :: proc(x: $T) -> T where intrinsics.type_is_numeric(T) || intrinsics.type_is_array(T) || intrinsics.type_is_simd_vector(T) { return x * x }
+square :: proc(x: $T) -> T { return x * x }
 
-square_root :: proc(x: $T) -> (result: T) where intrinsics.type_is_numeric(T) || intrinsics.type_is_array(T) || intrinsics.type_is_simd_vector(T) { 
+square_root :: proc(x: $T) -> (result: T) { 
     when intrinsics.type_is_array(T) {
         #no_bounds_check #unroll for i in 0..<len(T) {
             result[i] = simd.sqrt(x[i])
@@ -111,9 +106,9 @@ square_root :: proc(x: $T) -> (result: T) where intrinsics.type_is_numeric(T) ||
         result = simd.sqrt(x)
     }
     return result
- }
- 
- power :: math.pow
+}
+
+power :: math.pow
 
 linear_blend  :: proc{ linear_blend_v_e, linear_blend_e }
 linear_blend_v_e :: proc(from: $V/[$N]$Element, to: V, t: Element) -> V {
@@ -127,7 +122,18 @@ linear_blend_e :: proc(from: $T, to: T, t: T) -> T  {
     return result
 }
 
-bilinear_blend :: proc(a, b, c, d: $V/[$N]$Element, t: [2]Element) -> (result: V) {
+bilinear_blend :: proc { bilinear_blend_s, bilinear_blend_v }
+bilinear_blend_s :: proc (a: $T, b, c, d: T, t: [2] T) -> (result: T) {
+    la := (1-t.y) * (1-t.x)
+    lb := (1-t.y) *    t.x
+    lc :=    t.y  * (1-t.x)
+    ld :=    t.y  *    t.x
+    
+    result = la * a + lb * b + lc * c + ld * d
+    return result
+}
+bilinear_blend_v :: proc (a: $V/[$N]$E, b, c, d: V, t: [2] E) -> (result: V) {
+    // @copypasta
     la := (1-t.y) * (1-t.x)
     lb := (1-t.y) *    t.x
     lc :=    t.y  * (1-t.x)
@@ -137,17 +143,35 @@ bilinear_blend :: proc(a, b, c, d: $V/[$N]$Element, t: [2]Element) -> (result: V
     return result
 }
 
-sin_01 :: proc(t: $T) -> T {
-    result := sin(Pi*t)
-    return result
+safe_ratio_or_else :: proc { safe_ratio_or_else_s, safe_ratio_or_else_v }
+safe_ratio_or_else_s :: proc(numerator: $T, divisor: T) -> (T, bool) {
+    ratio: T
+    ok := divisor != 0
+    
+    if ok {
+        ratio = numerator / divisor
+    }
+    
+    return ratio, ok
+}
+safe_ratio_or_else_v :: proc(numerator: $V/[$N]$E, divisor: V) -> (V, bool) {
+    ratio: V
+    
+    ok := true
+    #no_bounds_check #unroll for i in 0..<N {
+        if divisor[i] != 0 {
+            ratio[i] = numerator[i] / divisor[i]
+        } else {
+            ok = false
+        }
+    }
+    
+    return ratio, ok
 }
 
-safe_ratio_n :: proc(numerator, divisor, n: $T) -> (result: T) {
-    result = divisor != 0 ? numerator / divisor : n
-    return result
-}
-safe_ratio_0 :: proc(numerator, divisor: $T) -> T { return safe_ratio_n(numerator, divisor, 0) }
-safe_ratio_1 :: proc(numerator, divisor: $T) -> T { return safe_ratio_n(numerator, divisor, 1) }
+safe_ratio_or_n    :: proc(numerator: $T, divisor, n: T) -> T { return safe_ratio_or_else(numerator, divisor) or_else n }
+safe_ratio_or_zero :: proc(numerator: $T, divisor: T)    -> T { return safe_ratio_or_else(numerator, divisor) or_else 0 }
+safe_ratio_or_one  :: proc(numerator: $T, divisor: T)    -> T { return safe_ratio_or_else(numerator, divisor) or_else 1 }
 
 clamp :: proc(value: $T, min, max: T) -> (result: T) {
     when intrinsics.type_is_simd_vector(T) {
@@ -159,7 +183,7 @@ clamp :: proc(value: $T, min, max: T) -> (result: T) {
     } else {
         result = builtin.clamp(value, min, max)
     }
-
+    
     return result
 }
 clamp_01 :: proc(value: $T) -> T { return clamp(value, 0, 1) }
@@ -232,16 +256,25 @@ truncate_v :: proc($T: typeid, fs: [$N]f32) -> [N]T where N > 1 {
     return vec_cast(T, fs)
 }
 
-fractional :: proc(x: $F) -> (fractional: F, integer: i32) {
-    integer = cast(i32) x
-    fractional = x - cast(F) integer
-    return 
-}
-
 sin :: math.sin
 cos :: math.cos
+tan :: math.tan
 acos  :: math.acos
+asin  :: math.asin
 atan2 :: math.atan2
+
+fractional :: proc { fractional_v, fractional_f }
+fractional_v :: proc (v: v2) -> (fractional, integral: v2) {
+    fractional.x, integral.x = fractional_f(v.x)
+    fractional.y, integral.y = fractional_f(v.y)
+    return fractional, integral
+}
+fractional_f :: proc (x: f32) -> (fractional, integral: f32) {
+    integral   = cast(f32) floor(i32, x)
+    fractional = x - integral
+    return fractional, integral
+}
+
 
 ////////////////////////////////////////////////
 // Vector operations
@@ -250,7 +283,7 @@ V3 :: proc { V3_x_yz, V3_xy_z }
 V3_x_yz :: proc(x: f32, yz: v2) -> v3 { return { x, yz.x, yz.y }}
 V3_xy_z :: proc(xy: v2, z: f32) -> v3 { return { xy.x, xy.y, z }}
 
-Rect3 :: proc(xy: $R/Rectangle([2]$Element), z_min, z_max: Element) -> Rectangle([3]Element) { 
+Rect3 :: proc(xy: $R/ Rectangle([2] $Element), z_min, z_max: Element) -> Rectangle([3] Element) { 
     return { V3(xy.min, z_min), V3(xy.max, z_max)}
 }
 
@@ -299,15 +332,14 @@ arm :: proc(angle: f32) -> (result: v2) {
     return result
 }
 
-dot :: proc(a, b: $V/[$N]$Element) -> (result: Element) {
-    #no_bounds_check #unroll for i in 0..<N {
-        result += a[i] * b[i]
-    }
-    
+dot :: proc(a: $V/[$N] $E, b: V) -> (result:  E) {
+    result = a.x * b.x + a.y * b.y
+    when N >= 3 do result += a.z * b.z
+    when N >= 4 do result += a.w * b.w
     return result
 }
 
-cross :: proc(a, b: $V/[3]$Element) -> (result: V) {
+cross :: proc(a: $V/[3]$Element, b: V) -> (result: V) {
     result = {
         a.y*b.z - a.z*b.y,
         a.z*b.x - a.x*b.z,
@@ -324,13 +356,13 @@ project :: proc(v, axis: $V) -> V {
     return v - 1 * dot(v, axis) * axis
 }
 
-length :: proc(vec: $V/[$N]$T) -> (result: T) {
+length :: proc(vec: $V/ [$N] $T) -> (result: T) {
     length_squared := length_squared(vec)
     result = square_root(length_squared)
     return result
 }
 
-length_squared :: proc(vec: $V/[$N]$T) -> T {
+length_squared :: proc(vec: $V/ [$N] $T) -> T {
     return dot(vec, vec)
 }
 
@@ -338,6 +370,7 @@ normalize :: proc(vec: $V) -> (result: V) {
     result = vec / length(vec)
     return result
 }
+
 normalize_or_zero :: proc(vec: $V/[$N]$T) -> (result: V) {
     len_sq := length_squared(vec)
     when intrinsics.type_is_simd_vector(T) {
@@ -433,6 +466,8 @@ when LaneWidth == 1 {
     less_than     :: simd.lanes_lt
     equal         :: simd.lanes_eq
     not_equal     :: simd.lanes_ne
+    
+    fused_mul_add :: simd.fma
     
     is_nan :: proc { is_nan_s, is_nan_v }
     
@@ -619,7 +654,7 @@ get_column :: proc (a: m4, column: u32) -> (result: v3) {
     result.x = a[0, column]
     result.y = a[1, column]
     result.z = a[2, column]
-
+    
     return result
 }
 
@@ -627,7 +662,7 @@ get_row :: proc (a: m4, row: u32) -> (result: v3) {
     result.x = a[row, 0]
     result.y = a[row, 1]
     result.z = a[row, 2]
-
+    
     return result
 }
 
@@ -655,11 +690,11 @@ columns_3x3 :: proc (x, y, z: v3) -> (result: m4) {
 // Rectangle operations
 
 rectangle_min_dimension         :: proc { rectangle_min_dimension_2, rectangle_min_dimension_v }
-rectangle_min_dimension_2       :: proc(x: $Element, y, w, h: Element)             -> Rectangle([2]Element) { return rectangle_min_dimension_v([2]Element{x, y}, [2]Element{w, h}) }
-rectangle_min_dimension_v       :: proc(min: $T, dimension: T)         -> Rectangle(T)    { return { min,                      min + dimension          } }
-rectangle_min_max               :: proc(min: $T, max: T)               -> Rectangle(T)    { return { min,                      max                      } }
-rectangle_center_dimension      :: proc(center: $T, dimension: T)      -> Rectangle(T)    { return { center - (dimension / 2), center + (dimension / 2) } }
-rectangle_center_half_dimension :: proc(center: $T, half_dimension: T) -> Rectangle(T)    { return { center - half_dimension,  center + half_dimension  } }
+rectangle_min_dimension_2       :: proc(x: $Element, y, w, h: Element) -> Rectangle([2] Element) { return rectangle_min_dimension_v([2]Element{x, y}, [2]Element{w, h}) }
+rectangle_min_dimension_v       :: proc(min: $T, dimension: T)         -> Rectangle(T)           { return { min,                      min + dimension          } }
+rectangle_min_max               :: proc(min: $T, max: T)               -> Rectangle(T)           { return { min,                      max                      } }
+rectangle_center_dimension      :: proc(center: $T, dimension: T)      -> Rectangle(T)           { return { center - (dimension / 2), center + (dimension / 2) } }
+rectangle_center_half_dimension :: proc(center: $T, half_dimension: T) -> Rectangle(T)           { return { center - half_dimension,  center + half_dimension  } }
 
 rectangle_inverted_infinity :: proc($R: typeid) -> (result: R) {
     T :: intrinsics.type_field_type(R, "min")
@@ -672,10 +707,12 @@ rectangle_inverted_infinity :: proc($R: typeid) -> (result: R) {
     return result
 }
 
-get_dimension :: proc(rect: Rectangle($T)) -> (result: T) { return rect.max - rect.min }
-get_center    :: proc(rect: Rectangle($T)) -> (result: T) { return rect.min + (rect.max - rect.min) / 2 }
+rectangle_get_max       :: proc(rect: Rectangle($T)) -> (result: T) { return rect.max }
+rectangle_get_min       :: proc(rect: Rectangle($T)) -> (result: T) { return rect.min }
+rectangle_get_dimension :: proc(rect: Rectangle($T)) -> (result: T) { return rect.max - rect.min }
+rectangle_get_center    :: proc(rect: Rectangle($T)) -> (result: T) { return rect.min + 0.5 * rectangle_get_dimension(rect) }
 
-add_radius :: proc(rect: $R/Rectangle($T), radius: T) -> (result: R) {
+rectangle_add_radius :: proc(rect: $R/Rectangle($T), radius: T) -> (result: R) {
     result = rect
     result.min -= radius
     result.max += radius
@@ -690,14 +727,14 @@ scale_radius :: proc(rect: $R/Rectangle($T), factor: T) -> (result: R) {
     return result
 }
 
-add_offset :: proc(rect: $R/Rectangle($T), offset: T) -> (result: R) {
+rectangle_add_offset :: proc(rect: $R/Rectangle($T), offset: T) -> (result: R) {
     result.min = rect.min + offset
     result.max = rect.max + offset
     
     return result
 }
 
-contains :: proc(rect: Rectangle($T), point: T) -> (result: b32) {
+contains :: proc(rect: Rectangle($T), point: T) -> (result: bool) {
     result = true
     #no_bounds_check #unroll for i in 0..<len(T) {
         result &&= rect.min[i] <= point[i] && point[i] < rect.max[i] 
@@ -705,7 +742,7 @@ contains :: proc(rect: Rectangle($T), point: T) -> (result: b32) {
     return result
 }
 
-contains_inclusive :: proc(rect: Rectangle($T), point: T) -> (result: b32) {
+contains_inclusive :: proc(rect: Rectangle($T), point: T) -> (result: bool) {
     result = true
     #no_bounds_check #unroll for i in 0..<len(T) {
         result &&= rect.min[i] <= point[i] && point[i] <= rect.max[i] 
@@ -713,7 +750,7 @@ contains_inclusive :: proc(rect: Rectangle($T), point: T) -> (result: b32) {
     return result
 }
 
-dimension_contains :: proc(dimension: $V/[$N]$T, point: V) -> (result: b32) {
+dimension_contains :: proc(dimension: $V/[$N]$T, point: V) -> (result: bool) {
     result = true
     #no_bounds_check #unroll for i in 0..<N {
         result &&= 0 <= point[i] && point[i] < dimension[i] 
@@ -721,99 +758,90 @@ dimension_contains :: proc(dimension: $V/[$N]$T, point: V) -> (result: b32) {
     return result
 }
 
-contains_rect :: proc(a: $R/Rectangle($T), b: R) -> (result: b32) {
-    u := get_union(a, b)
+contains_rect :: proc(a: $R/Rectangle($T), b: R) -> (result: bool) {
+    u := rectangle_union(a, b)
     result = a == u
     return result
 }
 
-intersects :: proc(a, b: Rectangle($T)) -> (result: b32) {
-    result = true
-    #no_bounds_check #unroll for i in 0..<len(T) {
-        result &&= !(b.max[i] <= a.min[i] || b.min[i] >= a.max[i])
+rectangle_intersects :: proc(a, b: Rectangle($T)) -> (result: bool) {
+    result  = !(b.max.x <= a.min.x || b.min.x >= a.max.x)
+    result &= !(b.max.y <= a.min.y || b.min.y >= a.max.y)
+    when len(T) >= 3 do result &= !(b.max.z <= a.min.z || b.min.z >= a.max.z)
+    
+    return result
+}
+
+
+rectangle_intersection :: proc(a, b: $R/Rectangle($T)) -> (result: R) {
+    result.min.x = max(a.min.x, b.min.x)
+    result.min.y = max(a.min.y, b.min.y)
+    
+    result.max.x = min(a.max.x, b.max.x)
+    result.max.y = min(a.max.y, b.max.y)
+    
+    when len(T) >= 3 {
+        result.min.z = max(a.min.z, b.min.z)
+        result.max.z = min(a.max.z, b.max.z)
+    }
+    return result
+    
+}
+
+rectangle_union_point :: proc(a: $R/Rectangle($T), b: T) -> (result: R) {
+    result.min.x = min(a.min.x, b.x)
+    result.min.y = min(a.min.y, b.y)
+    
+    result.max.x = max(a.max.x, b.x)
+    result.max.y = max(a.max.y, b.y)
+    
+    when len(T) >= 3 {
+        result.min.z = min(a.min.z, b.z)
+        result.max.z = max(a.max.z, b.z)
     }
     
     return result
 }
 
-get_intersection :: proc(a: $R/Rectangle($T), b: R) -> (result: R) {
-    #no_bounds_check #unroll for i in 0..<len(T) {
-        result.min[i] = max(a.min[i], b.min[i])
-        result.max[i] = min(a.max[i], b.max[i])
-    }
+rectangle_union :: proc(a: $R/Rectangle($T), b: R) -> (result: R) {
+    result.min.x = min(a.min.x, b.min.x)
+    result.min.y = min(a.min.y, b.min.y)
     
-    return result
+    result.max.x = max(a.max.x, b.max.x)
+    result.max.y = max(a.max.y, b.max.y)
     
-}
-
-get_union :: proc(a: $R/Rectangle($T), b: R) -> (result: R) {
-    #no_bounds_check #unroll for i in 0..<len(T) {
-        result.min[i] = min(a.min[i], b.min[i])
-        result.max[i] = max(a.max[i], b.max[i])
-    }
-    
-    return result
-}
-get_union_point :: proc(a: $R/Rectangle($T), p: T) -> (result: R) {
-    #no_bounds_check #unroll for i in 0..<len(T) {
-        result.min[i] = min(a.min[i], p[i])
-        result.max[i] = max(a.max[i], p[i])
+    when len(T) >= 3 {
+        result.min.z = min(a.min.z, b.min.z)
+        result.max.z = max(a.max.z, b.max.z)
     }
     
     return result
 }
 
-get_barycentric :: proc(rect: Rectangle($T), p: T) -> (result: T) {
-    result = safe_ratio_0(p - rect.min, rect.max - rect.min)
-
+rectangle_get_barycentric :: proc(rect: Rectangle($T), p: T) -> (result: T) {
+    result = safe_ratio_or_zero(p - rect.min, rect.max - rect.min)
+    
     return result
 }
 
-get_xy :: proc(rect: Rectangle3) -> (result: Rectangle2) {
+rectangle_xy :: proc(rect: Rectangle3) -> (result: Rectangle2) {
     result.min = rect.min.xy
     result.max = rect.max.xy
     
     return result
 }
 
-rectangle_modulus :: proc (rect: $R/Rectangle($T), p: T) -> (result: T) {
-    dim := get_dimension(rect)
-    offset := p - rect.min
-    result = (((offset % dim) + dim) % dim) + rect.min
-    assert(contains(rect, result))
-    return result
-}
-
-// @note(viktor): Area without the points at the maximum
-get_volume_or_zero :: get_area_or_zero
-get_area_or_zero :: proc(rect: $R/Rectangle($V/[$N] $T)) -> (result: T) {
-    dimension := get_dimension(rect)
-    result = 1
-    #no_bounds_check #unroll for i in 0..<len(V) {
-        result *= max(0, dimension[i])
+rectangle_clamped_area :: proc(rect: Rectangle([$N] $E)) -> (result: E) {
+    dimension := rect.max - rect.min
+    ok := true
+    #no_bounds_check #unroll for axis in 0..<N do if dimension[axis] <= 0 { ok = false }
+    if ok {
+        result = dimension.x * dimension.y
     }
+    
     return result
 }
 
-has_area :: proc(rect: $R/Rectangle($T)) -> (result: bool) {
-    area := get_area_or_zero(rect)
-    result = area != 0
-    return result
-}
-
-// @note(viktor): Area with the points at the maximum
-get_volume_or_zero_inclusive :: get_area_or_zero_inclusive
-get_area_or_zero_inclusive :: proc(rect: $R/Rectangle($V/ [$N] $T)) -> (result: T) {
-    dimension := get_dimension(rect) + 1
-    result = 1
-    #no_bounds_check #unroll for i in 0..<len(V) {
-        result *= max(0, dimension[i])
-    }
-    return result
-}
-
-has_area_inclusive :: proc(rect: $R/Rectangle($T)) -> (result: bool) {
-    area := get_area_or_zero_inclusive(rect)
-    result = area != 0
-    return result
+rectangle_has_area :: proc(rect: Rectangle2i) -> (result: bool) {
+    return rect.min.x < rect.max.x && rect.min.y < rect.max.y
 }

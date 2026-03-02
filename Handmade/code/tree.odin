@@ -1,5 +1,6 @@
 package main
 
+// @speed we wont ever have 4 billion nodes, we may have more than 65 thousand...
 Node_Index :: distinct u32
 
 // @note(viktor): A sphere node currently fits into 32 bytes, whilst a triangle node is a bit too large at 44 bytes and requires 64 bytes(with alignment).
@@ -94,7 +95,7 @@ tree_append :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Tree_Node($Value),
         
         // @note(viktor): subdivide node
         if node.first_subnode == Nil_Index {
-            dimension := get_dimension(node.bounds)
+            dimension := rectangle_get_dimension(node.bounds)
             
             max_axis := 0
             max_dim  := dimension[max_axis]
