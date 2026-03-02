@@ -585,41 +585,23 @@ brdf_lookup :: proc (all_brdf_values: [] v3, materials: [] Material, index: lane
     diff_y_inner := dot(diff_y, lw)
     diff_z_inner := dot(hw, lw)
     
-    // @speed this is the most expensive part of the whole brdf_lookup.
-    // we also know the exact allowed ranges for these lookups so we 
-    // could craft a specialized approximation that only needs to handle 
-    // those. or atleast make a copy and do it wide
-    //
-    // But the brdf lookup is not even close to being the most expensive 
-    // part of a ray cast anymore. 
+    // @speed if needed the trancendental functions could be widened
     f0: lane_f32
     f1: lane_f32
     f2: lane_f32
-    if !true {
-        for lane in 0..<LaneWidth {
-            theta_half := acos(extract(hw.z, lane))
-            theta_diff := acos(extract(diff_z_inner, lane))
-            phi_diff   := atan2(extract(diff_y_inner, lane), extract(diff_x_inner, lane))
-            if phi_diff < 0 do phi_diff += Pi
-            
-            // @note(viktor): after the divide and clamp any NaNs will be zero in the scalar code, but Intels max_ps/min_ps do not work the same way, so we need to filter them out manually.
-            if math.is_nan(theta_half) do theta_half = 0
-            if math.is_nan(theta_diff) do theta_diff = 0
-            
-            replace(&f0, lane, theta_half)
-            replace(&f1, lane, theta_diff)
-            replace(&f2, lane, phi_diff)
-        }
-    } else {
-        f0 = acos_lane_f32(hw.z)
-        f1 = acos_lane_f32(diff_z_inner)
-        f2 = fast_atan2_lane_f32(diff_y_inner, diff_x_inner)
+    for lane in 0..<LaneWidth {
+        theta_half := acos(extract(hw.z, lane))
+        theta_diff := acos(extract(diff_z_inner, lane))
+        phi_diff   := atan2(extract(diff_y_inner, lane), extract(diff_x_inner, lane))
+        if phi_diff < 0 do phi_diff += Pi
         
         // @note(viktor): after the divide and clamp any NaNs will be zero in the scalar code, but Intels max_ps/min_ps do not work the same way, so we need to filter them out manually.
-        conditional_assign(is_nan(f0), &f0, 0)
-        conditional_assign(is_nan(f1), &f1, 0)
+        if math.is_nan(theta_half) do theta_half = 0
+        if math.is_nan(theta_diff) do theta_diff = 0
         
-        conditional_assign(less_than(f2, 0), &f2, f2 + Pi)
+        replace(&f0, lane, theta_half)
+        replace(&f1, lane, theta_diff)
+        replace(&f2, lane, phi_diff)
     }
     
     f0 = square_root(clamp_01(f0 / (.5 * Pi)))
