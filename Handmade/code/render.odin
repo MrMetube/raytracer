@@ -32,8 +32,8 @@ Image:: struct {
 
 // @volatile also update the render's world copying
 World :: struct {
-    sphere_nodes:   [dynamic] Oct_Node(Sphere),
-    triangle_nodes: [dynamic] Oct_Node(Triangle),
+    sphere_nodes:   [dynamic] Tree_Node(Sphere),
+    triangle_nodes: [dynamic] Tree_Node(Triangle),
     
     spheres:   [dynamic] Sphere,
     triangles: [dynamic] Triangle,

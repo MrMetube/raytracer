@@ -254,7 +254,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                     // pretend_to_write(&value_index)
                     
                     node     := lane_index(nodes, cast(lane_u32) value_index)
-                    as_value := lane_member(node, "value", Oct_Value(Triangle))
+                    as_value := lane_member(node, "value", Tree_Value(Triangle))
                     value    := lane_member(as_value, "value", Triangle)
                     
                     hit_triangle(value, ray_o, ray_d, min_t, &hit)
@@ -292,7 +292,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                     assert(value_index != 0, "should not have been appended")
                     
                     node     := lane_index(nodes, cast(lane_u32) value_index)
-                    as_value := lane_member(node, "value", Oct_Value(Sphere))
+                    as_value := lane_member(node, "value", Tree_Value(Sphere))
                     value    := lane_member(as_value, "value", Sphere)
                     
                     hit_sphere(value, ray_o, ray_d, min_t, &hit)
@@ -362,7 +362,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
 
 ////////////////////////////////////////////////
 
-traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len: ^lane_u32, nodes: [] Oct_Node($Value), ray_o, ray_d: lane_v3, min_t, max_t: lane_f32, world: ^World) {
+traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len: ^lane_u32, nodes: [] Tree_Node($Value), ray_o, ray_d: lane_v3, min_t, max_t: lane_f32, world: ^World) {
     spall_proc()
     inv_d := 1 / normalize_or_zero(ray_d)
     
@@ -383,7 +383,7 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
         it_index := cast(lane_u32) lane_gather(lane_index_wide(stacks, counts))
         when Check do assert(it_index != 0, "should not have been appended")
         
-        node        := lane_member(lane_index(nodes, it_index), "node", Oct_Node_X)
+        node        := lane_member(lane_index(nodes, it_index), "node", Tree_Node_X)
         first_value := lane_gather(lane_member(node, "first_value", Node_Index))
         when Check do assert(first_value != Nil_Index)
         
@@ -408,7 +408,7 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
             for i in cast(u32) 0..<Subnodes_Per_Node {
                 subnode_index := first_subnode + cast(Node_Index) i
                 
-                subnode             := lane_member(lane_index(nodes, cast(lane_u32) subnode_index), "node", Oct_Node_X)
+                subnode             := lane_member(lane_index(nodes, cast(lane_u32) subnode_index), "node", Tree_Node_X)
                 subnode_first_value := lane_gather(lane_member(subnode, "first_value", Node_Index))
                 
                 if subnode_first_value != Nil_Index { // @note(viktor): skip if all subnodes are empty
@@ -430,7 +430,7 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
             conditional_assign(mask, values_len, length+1)
             when Check do assert(less_than(length, auto_cast len(values)) == lane_true)
             
-            value := lane_member(lane_index(nodes, cast(lane_u32) link), "value", Oct_Value(Value))
+            value := lane_member(lane_index(nodes, cast(lane_u32) link), "value", Tree_Value(Value))
             link   = lane_gather(lane_member(value, "next_value", Node_Index)) 
         }
     }

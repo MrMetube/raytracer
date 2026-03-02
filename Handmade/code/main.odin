@@ -48,7 +48,7 @@ main :: proc() {
     load_brdf_merl("./BRDFDatabase/brdfs/purple-paint.binary", &world.materials[5].brdf, &world.all_brdf_values); material_names[5] = "purple-paint"
     load_brdf_merl("./BRDFDatabase/brdfs/white-marble.binary", &world.materials[6].brdf, &world.all_brdf_values); material_names[6] = "white-marble"
     
-    when false {
+    if false {
         area_size := cast(f32) 20
         append(&world.spheres, Sphere { center = { 0, 0, 0},   radius = 1,  material = 2 })
         append(&world.spheres, Sphere { center = { 3,-2, 0.4}, radius = .1, material = 3 })
@@ -57,7 +57,7 @@ main :: proc() {
         append(&world.spheres, Sphere { center = {-2, 3, 0},   radius = 2,  material = 6 })
     
         gen_entropy := seed_random_series(565)
-        for _ in 0..< square(area_size) * 1.2 {
+        if false do for _ in 0..< square(area_size) * 1.2 {
             radius := random_between_f32(&gen_entropy, 0.1, 0.4)
             
             bounds := radius + 0.05
@@ -79,19 +79,20 @@ main :: proc() {
         }
     
         append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 6 })
-        append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
         append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size-0.1}, radius = area_size/5, material = 3 })
-        append(&world.planes, Plane { normal = { 1, 0, 0}, tangent = {}, binormal = {}, center = {-area_size, 0, 0},     radius = area_size,   material = 2 })
-        append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 2 })
-        append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
+        // append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
+        // append(&world.planes, Plane { normal = { 1, 0, 0}, tangent = {}, binormal = {}, center = {-area_size, 0, 0},     radius = area_size,   material = 2 })
+        // append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 2 })
+        // append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
     } else {
         area_size := cast(f32) 5
         append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 6 })
-        append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
         append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size-0.1}, radius = area_size/5, material = 3 })
-        append(&world.planes, Plane { normal = { 1, 0, 0}, tangent = {}, binormal = {}, center = {-area_size, 0, 0},     radius = area_size,   material = 1 })
-        append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 5 })
-        append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
+        
+        // append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
+        // append(&world.planes, Plane { normal = { 1, 0, 0}, tangent = {}, binormal = {}, center = {-area_size, 0, 0},     radius = area_size,   material = 1 })
+        // append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 5 })
+        // append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
         
         load_teapot(&world.triangles, 0, 2)
     }
@@ -99,12 +100,13 @@ main :: proc() {
     ////////////////////////////////////////////////
     
     reserve(&world.sphere_nodes, len(world.spheres))
-    sphere_info := tree_init(&world.sphere_nodes, rectangle_center_dimension(v3{0, 0, 0}, 256), 1, context.temp_allocator)
+    sphere_info := tree_init(&world.sphere_nodes, 1, rectangle_center_dimension(v3{0, 0, 0}, 256))
     
     // @speed Currently the octtree is a ~79% less work compared to the straight array
-    for sphere in world.spheres {
+    // @note(viktor): skip nil sphere
+    for sphere in world.spheres[1:] {
         bounds := rectangle_center_dimension(sphere.center, sphere.radius)
-        octtree_append(&sphere_info, &world.sphere_nodes, sphere, bounds)
+        tree_append(&sphere_info, &world.sphere_nodes, sphere, bounds)
     }
     
     // @todo(viktor): think about the layout of nodes and values
@@ -112,25 +114,29 @@ main :: proc() {
     // then each value + new nodes if needed, 
     // then the next value ...
     reserve(&world.triangle_nodes, len(world.triangles))
-    triangle_info := tree_init(&world.triangle_nodes, rectangle_center_dimension(v3{}, 128), 1, context.temp_allocator)
+    triangle_info := tree_init(&world.triangle_nodes, 1, rectangle_center_dimension(v3{}, 128))
     
-    for triangle in world.triangles {
+    // @note(viktor): skip nil triangle
+    for triangle in world.triangles[1:] {
         bounds := rectangle_inverted_infinity(Rectangle3)
         bounds = get_union_point(bounds, triangle.a)
         bounds = get_union_point(bounds, triangle.b)
         bounds = get_union_point(bounds, triangle.c)
         
-        octtree_append(&triangle_info, &world.triangle_nodes, triangle, bounds)
+        tree_append(&triangle_info, &world.triangle_nodes, triangle, bounds)
     }
     
     inspection := inspect(triangle_info, world.triangle_nodes[:], Root_Index)
     print("triangle tree info:\n")
+    print("            nodes: %\n", inspection.node_count)
     print("            depth: max = %, avg = %\n", inspection.depth.max, view_float(inspection.depth.avg, precision = 2))
     print("  values per node: max = %, avg = %\n", inspection.values_per_node.max, view_float(inspection.values_per_node.avg, precision = 2))
     print("  values per node = %\n", triangle_info.values_per_node)
     print("          density = % %%\n", 100 * cast(f64) inspection.values_per_node.sum / cast(f64) (inspection.node_count + inspection.values_per_node.sum))
     print("     overfullness = % %%\n", 100 * cast(f64) inspection.overfull_nodes / cast(f64) (inspection.node_count))
     print("\n")
+
+    // print_node(world.triangle_nodes[:], 0, Root_Index)
     
     ////////////////////////////////////////////////
     
