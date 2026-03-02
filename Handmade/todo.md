@@ -1,10 +1,6 @@
 ## To be done
 
-- Debug the octtree traversal, there are visual artifacts along bounding rectangles and triangle edges
-    - Check for NaNs and Infs
-    - Do we keep the basic for loop version or fold the traversal into the cast rays to simplify
-    - Do we keep the other primitives(spheres, planes) or should we simplify to only do triangles
-    - Should octtree nodes have a pointer/index or inline/copy the value directly?
+- Do we keep the other primitives(spheres, planes) or should we simplify to only do triangles
 - Investigate the BRDF table usage and why the indices seem to be working better when seemingly wrong
 
 - Add refraction
