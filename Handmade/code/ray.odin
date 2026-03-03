@@ -407,6 +407,7 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
         
         // @todo(viktor): @important if viewed almost directly along an axis, the bounds seems to make cracks in my triangles
         
+        // @speed this feels like a binary search problem, each node splits the search space into two, but there may be holes.and if we do a full bvh child bounds may overlap and then its not
         spall_begin("append subnodes")
         
         first_subnode := lane_gather(lane_member(node, "first_subnode", Node_Index))
@@ -464,6 +465,7 @@ hit_rectangle :: proc (neg_inv_o, inv_d: lane_v3, min, max: lane_v3, t_min_init,
     t2y := fused_mul_add(max.y, inv_d.y, neg_inv_o.y)
     t2z := fused_mul_add(max.z, inv_d.z, neg_inv_o.z)
     
+    // @speed check the latency and throughput of min&max and if select would be better due to the duplicated comparison? 
     tin := lane_v3 { minimum(t1x, t2x), minimum(t1y, t2y), minimum(t1z, t2z) }
     tax := lane_v3 { maximum(t1x, t2x), maximum(t1y, t2y), maximum(t1z, t2z) }
     
@@ -484,6 +486,7 @@ hit_triangle :: proc (triangle: Lane(Triangle), ray_o, ray_d: lane_v3, min_t: la
     c        := lane_gather_v(lane_member(triangle, "c", v3))
     material := lane_gather(  lane_member(triangle, "material", u32))
     
+    // @speed pre-compute and and ac? 
     ab := b - a
     ac := c - a
     ray_cross_ac := cross(ray_d, ac)

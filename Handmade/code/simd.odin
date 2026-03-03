@@ -10,6 +10,7 @@ import "core:simd"
 Lane :: struct ($T: typeid) {
     p: lane_pmm,
 }
+// @cleanup since gather and scatter are here and only they need a pmm .p should be a umm most of the time
 
 lane_index :: proc { lane_index_array, lane_index_dynamic, lane_index_slice, lane_index_slice_lane }
 lane_index_wide :: #force_inline proc (slice: [] $Vector/ #simd[$N] $E, index: lane_u32) -> Lane(E) {
