@@ -244,15 +244,14 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                     if values_len == 0 do break
                     
                     values := to_lane(values)
-                    // @todo(viktor): lane_gather could check index? how often is index, directly followed by gather?
                     value_index := lane_gather(values, values_len, greater_than(values_len, 0), cast(lane_Node_Index) Nil_Index)
                     when Check do assert(value_index != 0, "should not have been appended")
                     
                     // @note(viktor): Test: with and without loading all triangle data, check just the compute work
                     // baseline - nil triangle
-                    // 455ms - 220ms
+                    // 305ms - 115ms
                     // no early outs in hit_triangle
-                    // 535ms - 285ms
+                    // 335ms - 170ms
                     // -> ~46% of the work is loading triangles
                     
                     // pretend_to_read(&value_index)
@@ -260,8 +259,8 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                     // pretend_to_write(&value_index)
                     
                     nodes := to_lane(nodes)
-                    node     := lane_index(nodes, cast(lane_u32) value_index)
-                    value    := lane_member(node, "value", "value", Triangle) 
+                    node  := lane_index(nodes, cast(lane_u32) value_index)
+                    value := lane_member(node, "value", "value", Triangle) 
                     
                     hit_triangle(value, ray_o, ray_d, min_t, &hit)
                     
@@ -332,7 +331,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
             hit_reflect := lane_gather_v(lane_member(material, "reflect", type_of(Material{}.reflect)))
             hit_scatter := lane_gather(  lane_member(material, "scatter", type_of(Material{}.scatter)))
             
-            // only allow world.no_hit on the first time we didnt hit anything
+            // only allow world.no_hit on the first time we didn't hit anything
             hit_emit.r *= cast(lane_f32) (1 & lane_mask)
             hit_emit.g *= cast(lane_f32) (1 & lane_mask)
             hit_emit.b *= cast(lane_f32) (1 & lane_mask)
@@ -374,12 +373,8 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
 
 traverse_tree_and_collect_values :: proc (values: Lane_Slice(Node_Index), values_len: ^lane_u32, nodes: [] Tree_Node($Value), ray_o, ray_d: lane_v3, min_t, max_t: lane_f32, world: ^World) {
     spall_proc()
-    yy := nodes[Root_Index].node.first_value == Nil_Index
+    if nodes[Root_Index].node.first_value == Nil_Index do return
     nodes := to_lane(nodes)
-    xx := lane_gather(lane_member(lane_index(nodes, Root_Index), "node", "first_value", Node_Index)) == Nil_Index 
-    assert(xx == yy)
-    if yy do return
-    if xx do return
     
     inv_d := 1 / ray_d
     neg_inv_o := -(ray_o * inv_d)
@@ -391,11 +386,11 @@ traverse_tree_and_collect_values :: proc (values: Lane_Slice(Node_Index), values
     
     Check :: false
     
-    // @note(viktor): currently the stacks grow and shrink in lockstep.
-    // lanes without valid work, work on the nil node and nil values.
     // @todo(viktor): measure wasted lanes here as well
     closest_t := max_t
     
+    // @note(viktor): currently the stacks grow and shrink in lockstep.
+    // lanes without valid work, work on the nil node and nil values.
     for counts != 0 {
         counts -= 1
         
@@ -496,7 +491,7 @@ hit_triangle :: proc (triangle: Lane(Triangle), ray_o, ray_d: lane_v3, min_t: la
     c        := lane_gather_v(lane_member(triangle, "c", v3))
     material := lane_gather(  lane_member(triangle, "material", u32))
     
-    // @speed pre-compute and and ac? 
+    // @speed pre-compute ab and ac? 
     ab := b - a
     ac := c - a
     ray_cross_ac := cross(ray_d, ac)
@@ -510,19 +505,20 @@ hit_triangle :: proc (triangle: Lane(Triangle), ray_o, ray_d: lane_v3, min_t: la
     u := inv_determinant * dot(s, ray_cross_ac)
     
     u_mask := greater_equal(u, 0) & less_equal(u, 1)
+    u_mask &= not_parallel_mask
     if u_mask== lane_false do return
     
     s_cross_ab := cross(s, ab)
     v := inv_determinant * dot(ray_d, s_cross_ab)
     
     v_mask := greater_equal(v, 0) & less_equal(u + v, 1)
+    v_mask &= u_mask
     if v_mask == lane_false do return
     
     t := inv_determinant * dot(ac, s_cross_ab)
-    t_mask := greater_than(t, min_t) & less_than(t, hit.closest_t)
-    if t_mask == lane_false do return
-    
-    hit_mask := not_parallel_mask & u_mask & v_mask & t_mask
+    hit_mask := greater_than(t, min_t) & less_than(t, hit.closest_t)
+    hit_mask &= v_mask
+    if hit_mask == lane_false do return
     
     // @note(viktor): Assuming counter-clockwise winding order
     normal   := normalize_or_zero(cross(ab, ac))
@@ -555,11 +551,9 @@ hit_sphere :: proc (sphere: Lane(Sphere), ray_o, ray_d: lane_v3, min_t: lane_f32
     pick_mask := greater_than(t_neg, min_t) & less_than(t_neg, t)
     conditional_assign(pick_mask, &t, t_neg)
     
-    t_mask := greater_than(t, min_t) & less_than(t, hit.closest_t)
-    
-    if t_mask == lane_false do return
-    
-    hit_mask := root_mask & t_mask
+    hit_mask := greater_than(t, min_t) & less_than(t, hit.closest_t)
+    hit_mask &= root_mask
+    if hit_mask == lane_false do return
     
     next_o := ray_o + t*ray_d
     normal   := normalize_or_zero(next_o - center)

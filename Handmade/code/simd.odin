@@ -97,9 +97,7 @@ lane_slice_start_end :: proc (slice: Lane_Slice($T), start, end: lane_u32, calle
 // @todo(viktor): once OLS doesn't crash anymore we can remove the parameter
 lane_member :: proc { lane_member_1, lane_member_2 }
 lane_member_1 :: proc (lane: Lane($T), $member: string, $_member_type: typeid) -> Lane(_member_type) 
-where Has(T, member) {
-    #assert(Field(T, member) == _member_type)
-    
+where Has(T, member), Field(T, member) == _member_type {
     offset :: Offset(T, member)
     result := Lane(_member_type) { lane.p + offset }
     

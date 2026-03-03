@@ -3,7 +3,6 @@ package main
 import os "core:os/os2"
 import os_old "core:os"
 import "core:time"
-import "core:math"
 
 import img "vendor:stb/image"
 import rl "vendor:raylib"
