@@ -234,16 +234,18 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
             if Use_Tree {
                 values_len: lane_u32
                 local_nil_value_lanes_tested: [8] u32
-                nodes := world.triangle_nodes[:]
                 
-                traverse_tree_and_collect_values(values, &values_len, nodes, ray_o, ray_d, min_t, hit.closest_t, world)
+                nodes := world.triangle_nodes
+                traverse_tree_and_collect_values(to_lane(values), &values_len, nodes[:], ray_o, ray_d, min_t, hit.closest_t, world)
                 
                 Check :: false
                 for {
                     values_len = simd.saturating_sub(values_len, 1)
                     if values_len == 0 do break
                     
-                    value_index := lane_gather(lane_index_wide(values, values_len), greater_than(values_len, 0), cast(lane_Node_Index) Nil_Index)
+                    values := to_lane(values)
+                    // @todo(viktor): lane_gather could check index? how often is index, directly followed by gather?
+                    value_index := lane_gather(values, values_len, greater_than(values_len, 0), cast(lane_Node_Index) Nil_Index)
                     when Check do assert(value_index != 0, "should not have been appended")
                     
                     // @note(viktor): Test: with and without loading all triangle data, check just the compute work
@@ -257,9 +259,9 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                     // value_index = 0
                     // pretend_to_write(&value_index)
                     
+                    nodes := to_lane(nodes)
                     node     := lane_index(nodes, cast(lane_u32) value_index)
-                    as_value := lane_member(node, "value", Tree_Value(Triangle))
-                    value    := lane_member(as_value, "value", Triangle)
+                    value    := lane_member(node, "value", "value", Triangle) 
                     
                     hit_triangle(value, ray_o, ray_d, min_t, &hit)
                     
@@ -272,9 +274,10 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                     atomic_add(&world.nil_value_lanes_tested[i], local_nil_value_lanes_tested[i])
                 }
             } else {
+                triangles := to_lane(world.triangles) // @cleanup
                 // @note(viktor): skip nil triangle
                 for index in 1 ..< cast(u32) len(world.triangles) {
-                    triangle := lane_index(world.triangles, index)
+                    triangle := lane_index(triangles, index)
                     hit_triangle(triangle, ray_o, ray_d, min_t, &hit)
                 }
             }
@@ -285,19 +288,20 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                 values_len: lane_u32
                 local_nil_value_lanes_tested: [8] u32
                 
-                nodes := world.sphere_nodes[:]
-                traverse_tree_and_collect_values(values, &values_len, nodes, ray_o, ray_d, min_t, hit.closest_t, world)
+                nodes := world.sphere_nodes
+                traverse_tree_and_collect_values(to_lane(values), &values_len, nodes[:], ray_o, ray_d, min_t, hit.closest_t, world)
                 
                 for {
                     values_len = simd.saturating_sub(values_len, 1)
                     if values_len == 0 do break
                     
-                    value_index := lane_gather(lane_index_wide(values, values_len), greater_than(values_len, 0), cast(lane_Node_Index) Nil_Index)
+                    values := to_lane(values)
+                    value_index := lane_gather(values, values_len, greater_than(values_len, 0), cast(lane_Node_Index) Nil_Index)
                     assert(value_index != 0, "should not have been appended")
                     
+                    nodes    := to_lane(nodes)
                     node     := lane_index(nodes, cast(lane_u32) value_index)
-                    as_value := lane_member(node, "value", Tree_Value(Sphere))
-                    value    := lane_member(as_value, "value", Sphere)
+                    value    := lane_member(node, "value", "value", Sphere) 
                     
                     hit_sphere(value, ray_o, ray_d, min_t, &hit)
                     
@@ -310,21 +314,23 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                     atomic_add(&world.nil_value_lanes_tested[i], local_nil_value_lanes_tested[i])
                 }
             } else {
+                spheres := to_lane(world.spheres) // @cleanup
                 // @note(viktor): skip nil sphere
                 for index in 1 ..< cast(u32) len(world.spheres) {
-                    sphere := lane_index(world.spheres, index)
+                    sphere := lane_index(spheres, index)
                     hit_sphere(sphere, ray_o, ray_d, min_t, &hit)
                 }
             }
             
             ////////////////////////////////////////////////
             
-            materials_ok := less_than(hit.material, cast(lane_u32) len(world.materials))
-            assert(materials_ok == lane_true)
+            materials       := to_lane(world.materials)
+            all_brdf_values := to_lane(world.all_brdf_values)
             
-            hit_emit    := lane_gather_v(lane_member(lane_index(world.materials, hit.material), "emit",    type_of(Material{}.emit)))
-            hit_reflect := lane_gather_v(lane_member(lane_index(world.materials, hit.material), "reflect", type_of(Material{}.reflect)))
-            hit_scatter := lane_gather(  lane_member(lane_index(world.materials, hit.material), "scatter", type_of(Material{}.scatter)))
+            material    := lane_index(materials, hit.material)
+            hit_emit    := lane_gather_v(lane_member(material, "emit",    type_of(Material{}.emit)))
+            hit_reflect := lane_gather_v(lane_member(material, "reflect", type_of(Material{}.reflect)))
+            hit_scatter := lane_gather(  lane_member(material, "scatter", type_of(Material{}.scatter)))
             
             // only allow world.no_hit on the first time we didnt hit anything
             hit_emit.r *= cast(lane_f32) (1 & lane_mask)
@@ -343,7 +349,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
             
             next_d := linear_blend(pure_bounce, random_bounce, hit_scatter)
             
-            reflectance := brdf_lookup(world.all_brdf_values[:], world.materials[:], hit.material, -ray_d, hit.normal, hit.tangent, hit.binormal, next_d)
+            reflectance := brdf_lookup(all_brdf_values, materials, hit.material, -ray_d, hit.normal, hit.tangent, hit.binormal, next_d)
             reflectance *= hit_reflect
             conditional_assign(hit.did_hit, &attenuation, attenuation * reflectance)
             
@@ -366,16 +372,21 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
 
 ////////////////////////////////////////////////
 
-traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len: ^lane_u32, nodes: [] Tree_Node($Value), ray_o, ray_d: lane_v3, min_t, max_t: lane_f32, world: ^World) {
+traverse_tree_and_collect_values :: proc (values: Lane_Slice(Node_Index), values_len: ^lane_u32, nodes: [] Tree_Node($Value), ray_o, ray_d: lane_v3, min_t, max_t: lane_f32, world: ^World) {
     spall_proc()
-    if nodes[Root_Index].node.first_value == Nil_Index do return
+    yy := nodes[Root_Index].node.first_value == Nil_Index
+    nodes := to_lane(nodes)
+    xx := lane_gather(lane_member(lane_index(nodes, Root_Index), "node", "first_value", Node_Index)) == Nil_Index 
+    assert(xx == yy)
+    if yy do return
+    if xx do return
     
     inv_d := 1 / ray_d
     neg_inv_o := -(ray_o * inv_d)
     
-    stacks_: [64] lane_Node_Index
-    stacks := stacks_[:]
-    stacks[0] = Root_Index
+    stacks_: [128] lane_Node_Index
+    stacks_[0] = Root_Index
+    stacks := to_lane(stacks_[:])
     counts: lane_u32 = 1
     
     Check :: false
@@ -388,17 +399,15 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
     for counts != 0 {
         counts -= 1
         
-        when Check do assert(greater_equal(counts, 0) & less_than(counts, cast(lane_u32) len(stacks)) == lane_true)
-        it_index := cast(lane_u32) lane_gather(lane_index_wide(stacks, counts))
+        it_index := cast(lane_u32) lane_gather(stacks, counts)
         when Check do assert(it_index != 0, "should not have been appended")
         
         node        := lane_member(lane_index(nodes, it_index), "node", Tree_Node_X)
         first_value := lane_gather(lane_member(node, "first_value", Node_Index))
         when Check do assert(first_value != Nil_Index)
         
-        it_bounds := lane_member(node, "bounds", Rectangle3)
-        b_min := lane_gather_v(lane_member(it_bounds, "min", v3))
-        b_max := lane_gather_v(lane_member(it_bounds, "max", v3))
+        b_min := lane_gather_v(lane_member(node, "bounds", "min", v3)) 
+        b_max := lane_gather_v(lane_member(node, "bounds", "max", v3)) 
         
         // @todo(viktor): should this update closest_t?
         hit_mask, _ := hit_rectangle(neg_inv_o, inv_d, b_min, b_max, min_t, closest_t)
@@ -410,25 +419,25 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
         // @speed this feels like a binary search problem, each node splits the search space into two, but there may be holes.and if we do a full bvh child bounds may overlap and then its not
         spall_begin("append subnodes")
         
-        first_subnode := lane_gather(lane_member(node, "first_subnode", Node_Index))
+        first_subnode : lane_Node_Index = lane_gather(lane_member(node, "first_subnode", Node_Index))
         // @note(viktor): only if all lanes are zero do not push onto the stack, otherwise keep counts in sync and push zeros
         append_first_subnode := not_equal(first_subnode, 0)
         append_first_subnode &= hit_mask
         if append_first_subnode != lane_false {
             // @todo(viktor): push the closer subnode first once we also correctly update the closest_t
             added: u32
-        
-            subnode_0             := lane_member(lane_index(nodes, cast(lane_u32) first_subnode+0), "node", Tree_Node_X)
-            subnode_1             := lane_member(lane_index(nodes, cast(lane_u32) first_subnode+1), "node", Tree_Node_X)
-            subnode_0_first_value := lane_gather(lane_member(subnode_0, "first_value", Node_Index))
-            subnode_1_first_value := lane_gather(lane_member(subnode_1, "first_value", Node_Index))
+            
+            subnode_0_index := lane_index(nodes, cast(lane_u32) first_subnode+0)
+            subnode_1_index := lane_index(nodes, cast(lane_u32) first_subnode+1)
+            subnode_0_first_value := lane_gather(lane_member(subnode_0_index, "node", "first_value", Node_Index)) 
+            subnode_1_first_value := lane_gather(lane_member(subnode_1_index, "node", "first_value", Node_Index)) 
             
             if subnode_0_first_value != Nil_Index { // @note(viktor): skip if all subnodes are empty
-                lane_scatter(lane_index_wide(stacks, counts+added), first_subnode+0, append_first_subnode)
+                lane_scatter(stacks, counts+added, first_subnode+0, append_first_subnode)
                 added += 1
             }
             if subnode_1_first_value != Nil_Index { // @note(viktor): skip if all subnodes are empty
-                lane_scatter(lane_index_wide(stacks, counts+added), first_subnode+1, append_first_subnode)
+                lane_scatter(stacks, counts+added, first_subnode+1, append_first_subnode)
                 added += 1
             }
             counts += added
@@ -441,15 +450,16 @@ traverse_tree_and_collect_values :: proc (values: [] lane_Node_Index, values_len
             length := values_len^
             
             mask := not_equal(link, 0)
-            lane_scatter(lane_index_wide(values, length), link, mask)
+            lane_scatter(values, length, link, mask)
             conditional_assign(mask, values_len, length+1)
             when Check do assert(less_than(length, auto_cast len(values)) == lane_true)
             
             // @todo(viktor): @speed each value can only be in one node, sort the values of each node to appear linearly
             // Then only store the first and count, remove next_value from Tree_Value.
             // That way we avoid needing to load the node here only to get the next_value.
-            value := lane_member(lane_index(nodes, cast(lane_u32) link), "value", Tree_Value(Value))
-            link   = lane_gather(lane_member(value, "next_value", Node_Index)) 
+            value_node := lane_index(nodes, cast(lane_u32) link)
+            value := lane_member(value_node, "value", "next_value", Node_Index) 
+            link   = lane_gather(value)
         }
     }
 }
@@ -574,7 +584,7 @@ update_hit :: proc (hit: ^Hit_Info, hit_mask: lane_u32, t: lane_f32, material: l
 
 ////////////////////////////////////////////////
 
-brdf_lookup :: proc (all_brdf_values: [] v3, materials: [] Material, index: lane_u32, view_direction, normal, tangent, binormal, light_direction: lane_v3) -> lane_v3 {
+brdf_lookup :: proc (all_brdf_values: Lane_Slice(v3), materials: Lane_Slice(Material), index: lane_u32, view_direction, normal, tangent, binormal, light_direction: lane_v3) -> lane_v3 {
     spall_proc()
     
     half_vector := normalize_or_zero(.5 * (view_direction + light_direction))
@@ -626,7 +636,6 @@ brdf_lookup :: proc (all_brdf_values: [] v3, materials: [] Material, index: lane
         return result
     }
     
-    
     brdf  := lane_member(lane_index(materials, index), "brdf", BrdfTable)
     count := lane_gather_v(lane_member(brdf, "count", [3] u32))
     
@@ -640,10 +649,9 @@ brdf_lookup :: proc (all_brdf_values: [] v3, materials: [] Material, index: lane
     
     values_index := lane_gather(lane_member(brdf, "values_index", u32))
     values_count := lane_gather(lane_member(brdf, "values_count", u32))
-    assert(less_than(indices, cast(lane_u32) len(all_brdf_values)) == lane_true)
-    assert((equal(indices, 0) | less_than(indices, values_count))  == lane_true)
+    values := lane_slice(all_brdf_values, values_index, values_index+values_count)
     
-    value  := lane_index(lane_slice(all_brdf_values, values_index), indices)
+    value  := lane_index(values, indices)
     result := lane_gather_v(value)
     
     return result

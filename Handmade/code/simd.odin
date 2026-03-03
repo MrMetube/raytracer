@@ -4,79 +4,171 @@ package main
 import "base:intrinsics"
 import "core:simd"
 
+Lane_Slice_Checked :: false
+
 ////////////////////////////////////////////////
-// @note(viktor): A typed wrapper on a lane pointer
+// @note(viktor): A typed wrapper on wide pointers and slices
 
 Lane :: struct ($T: typeid) {
-    p: lane_pmm,
-}
-// @cleanup since gather and scatter are here and only they need a pmm .p should be a umm most of the time
-// maybe also have a lane slice type and make bounds checks
-
-lane_index :: proc { lane_index_array, lane_index_dynamic, lane_index_slice, lane_index_slice_lane }
-lane_index_wide :: #force_inline proc (slice: [] $Vector/ #simd[$N] $E, index: lane_u32) -> Lane(E) {
-    base   := cast(lane_umm) raw_data(slice)
-    offset := cast(lane_umm) index * size_of(Vector)
-    result := Lane(E) { cast(lane_pmm) (base + offset) }
-    return result
-}
-lane_index_array :: #force_inline proc (lane: Lane($T/ [$N] $E), index: lane_u32) -> Lane(E) {
-    base   := cast(lane_umm) lane.p
-    offset := cast(lane_umm) index * size_of(E)
-    result := Lane(E) { cast(lane_pmm) (base + offset) }
-    return result
-}
-lane_index_slice_lane :: #force_inline proc (lane: Lane($T/ [] $E), index: lane_u32) -> Lane(E) {
-    base   := cast(lane_umm) lane.p
-    offset := size_of(E) * cast(lane_umm) index
-    result := Lane(E) { cast(lane_pmm) (base + offset) }
-    return result
+    p: lane_umm,
 }
 
-lane_index_slice :: #force_inline proc (slice: $T/ [] $E, index: lane_u32) -> Lane(E) {
-    base   := Lane(T) { raw_data(slice) }
-    result := lane_index(base, index)
+Lane_Slice :: struct ($E: typeid) {
+    p:   lane_umm,
+    len: lane_u32,
+}
+
+////////////////////////////////////////////////
+
+to_lane :: proc { to_lane_pointer, to_lane_slice, to_lane_array, to_lane_slice_simd }
+to_lane_pointer :: proc (pointer: ^$T) -> Lane(T) {
+    result: Lane(T)
+    result.p = cast(lane_umm) pointer
     return result
 }
-lane_index_dynamic :: #force_inline proc (array: $T/ [dynamic] $E, index: lane_u32) -> Lane(E) {
-    result := lane_index(array[:], index)
+to_lane_slice :: proc (slice: $S/ [] $T) -> Lane_Slice(T) 
+where !intrinsics.type_is_simd_vector(T) {
+    result: Lane_Slice(T)
+    result.p   = cast(lane_umm) raw_data(slice)
+    result.len = cast(lane_u32) len(slice)
+    return result
+}
+to_lane_slice_simd :: proc (slice: $S/ [] $V / #simd[$N] $T) -> Lane_Slice(T) {
+    result: Lane_Slice(T)
+    result.p   = cast(lane_umm) raw_data(slice)
+    result.len = cast(lane_u32) len(slice)
+    return result
+}
+to_lane_array :: proc (array: $S/ [dynamic ]$T) -> Lane_Slice(T) {
+    result := to_lane(array[:])
     return result
 }
 
-lane_member :: #force_inline proc (lane: Lane($T), $member: string, $_member_type: typeid) -> Lane(_member_type) 
-where intrinsics.type_field_index_of(T, member) != 999 { // @note(viktor): 999 is a bullshit value, if the member is not valid the where will also fail
-    // @todo(viktor): once OLS doesn't crash anymore we can remove the parameter
-    type :: intrinsics.type_field_type(T, member)
-    #assert(type == _member_type)
+////////////////////////////////////////////////
+
+lane_index :: proc { lane_index_scalar, _lane_index_simd, lane_index_array }
+lane_index_scalar :: proc (slice: Lane_Slice($T), index: lane_u32) -> Lane(T) 
+where !intrinsics.type_is_simd_vector(T) {
+    result: Lane(T)
+    result.p = slice.p + cast(lane_umm) index * size_of(T)
+    return result
+}
+_lane_index_simd :: proc (lane: Lane_Slice($V/  #simd[$N] $T), index: lane_u32, caller_location := #caller_location) -> Lane(T) {
+    when Lane_Slice_Checked {
+        assert(less_than(index, lane.len) == lane_true, loc = caller_location)
+    }
+    offset := cast(lane_umm) index * size_of(V)
+    result := Lane(T) { lane.p + offset }
+    return result
+}
+lane_index_array :: proc (array: Lane([$N] $T), index: lane_u32, caller_location := #caller_location) -> Lane(T) {
+    when Lane_Slice_Checked {
+        assert(less_than(index, N) == lane_true, loc = caller_location)
+    }
+    base   := array.p
+    offset := cast(lane_umm) index * size_of(T)
+    result := Lane(T) { base + offset }
+    return result
+} 
+
+lane_slice :: proc { lane_slice_start, lane_slice_start_end }
+lane_slice_start :: proc (slice: Lane_Slice($T), start: lane_u32, caller_location := #caller_location) -> Lane_Slice(T) {
+    result := lane_slice(slice, start, slice.len, caller_location = caller_location)
+    return result
+}
+lane_slice_start_end :: proc (slice: Lane_Slice($T), start, end: lane_u32, caller_location := #caller_location) -> Lane_Slice(T) {
+    when Lane_Slice_Checked {
+        assert(less_than(start, slice.len) == lane_true, loc = caller_location)
+        assert(less_equal(start, end)      == lane_true, loc = caller_location)
+        assert(less_equal(end, slice.len)  == lane_true, loc = caller_location)
+    }
+    result: Lane_Slice(T)
+    result.p = slice.p + cast(lane_umm) start * size_of(T)
+    result.len = end - start
+    return result
+}
+
+////////////////////////////////////////////////
+
+@(private="file") Has    :: intrinsics.type_has_field
+@(private="file") Field  :: intrinsics.type_field_type
+@(private="file") Offset :: offset_of_by_string
+
+// @todo(viktor): once OLS doesn't crash anymore we can remove the parameter
+lane_member :: proc { lane_member_1, lane_member_2 }
+lane_member_1 :: proc (lane: Lane($T), $member: string, $_member_type: typeid) -> Lane(_member_type) 
+where Has(T, member) {
+    #assert(Field(T, member) == _member_type)
     
-    base   := cast(lane_umm) lane.p
-    offset :: offset_of_by_string(T, member)
-    result := Lane(_member_type) { cast(lane_pmm) (base + offset) }
+    offset :: Offset(T, member)
+    result := Lane(_member_type) { lane.p + offset }
+    
     return result
 }
 
-lane_slice :: #force_inline proc (slice: $T / [] $E, start: lane_u32) -> Lane([] E) {
-    result := cast(Lane([] E)) lane_index(slice, start)
+lane_member_2 :: proc (lane: Lane($T), $first_member: string, $member_of_first_member: string, $_member_type: typeid) -> Lane(_member_type)
+where Has(T, first_member), Has(Field(T, first_member), member_of_first_member) {
+    T1 :: Field(T, first_member)
+    T2 :: Field(T1, member_of_first_member)
+    #assert(T2 == _member_type)
+    
+    offset :: Offset(T, first_member) + Offset(T1, member_of_first_member)
+    result := Lane(_member_type) { lane.p + offset }
+    
     return result
 }
 
-lane_gather :: proc { lane_gather_mask, lane_gather_no_mask, lane_gather_v }
-lane_gather_mask :: #force_inline proc (lane: Lane($T), mask: lane_u32, default: #simd [LaneWidth] T) -> #simd [LaneWidth] T {
-    result := simd.gather(lane.p, default, mask)
-    return result
+////////////////////////////////////////////////
+
+lane_gather :: proc { 
+    lane_gather_no_mask,       lane_gather_mask,
+    lane_gather_index_no_mask, lane_gather_index_mask,
+    lane_gather_v, 
 }
-lane_gather_no_mask :: #force_inline proc (lane: Lane($T)) -> #simd [LaneWidth] T {
+
+lane_gather_no_mask :: proc (lane: Lane($T)) -> #simd [LaneWidth] T {
     result := lane_gather_mask(lane, lane_true, T{})
     return result
 }
-lane_gather_v :: #force_inline proc (lane: Lane($T/ [$N] $E)) -> [N] #simd [LaneWidth] E {
+lane_gather_mask :: proc (lane: Lane($T), mask: lane_u32, default: #simd [LaneWidth] T) -> #simd [LaneWidth] T {
+    result := simd.gather(cast(lane_pmm) lane.p, default, mask)
+    return result
+}
+
+lane_gather_index_no_mask :: proc (lane: Lane_Slice($T), index: lane_u32) -> #simd [LaneWidth] T {
+    result := lane_gather_index_mask(lane, index, lane_true, T{})
+    return result
+}
+lane_gather_index_mask :: proc (lane: Lane_Slice($T), index: lane_u32, mask: lane_u32, default: #simd [LaneWidth] T) -> #simd [LaneWidth] T {
+    gather_mask := mask
+    when Lane_Slice_Checked {
+        gather_mask &= less_than(index, lane.len)
+    }
+    
+    element := lane_index(lane, index)
+    result  := lane_gather_mask(element, gather_mask, default)
+    return result
+}
+
+lane_gather_v :: proc (lane: Lane($T/ [$N] $E)) -> [N] #simd [LaneWidth] E {
     result: [N] #simd [LaneWidth] E
     #no_bounds_check #unroll for channel_index in cast(u32) 0..<N {
-        result[channel_index] = lane_gather(lane_index(lane, cast(lane_u32) channel_index))
+        index : Lane(E) = lane_index(lane, cast(lane_u32) channel_index)
+        result[channel_index] = lane_gather(index)
     }
     return result
 }
 
-lane_scatter :: #force_inline proc (lane: Lane($T), value: #simd [LaneWidth] T, mask: lane_u32 = lane_true) {
-    simd.scatter(lane.p, value, mask)
+////////////////////////////////////////////////
+
+lane_scatter :: proc { 
+    lane_scatter_mask,
+    lane_scatter_index,
+}
+lane_scatter_mask :: proc (lane: Lane($T), value: #simd [LaneWidth] T, mask: lane_u32 = lane_true) {
+    simd.scatter(cast(lane_pmm) lane.p, value, mask)
+}
+lane_scatter_index :: proc (lane: Lane_Slice($T), index: lane_u32, value: #simd [LaneWidth] T, mask: lane_u32) {
+    element := lane_index(lane, index)
+    lane_scatter(element, value, mask)
 }
