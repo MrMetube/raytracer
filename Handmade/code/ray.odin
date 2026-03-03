@@ -7,6 +7,7 @@ import "core:simd"
 Material :: struct {
     emit:    v3,
     reflect: v3,
+    emit_factor: f32,
     scatter: f32, // 0 = mirror like, 1 = chalk like
     
     brdf: BrdfTable,
@@ -328,10 +329,11 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
             materials       := to_lane(world.materials)
             all_brdf_values := to_lane(world.all_brdf_values)
             
-            material    := lane_index(materials, hit.material)
-            hit_emit    := lane_gather_v(lane_member(material, "emit",    type_of(Material{}.emit)))
-            hit_reflect := lane_gather_v(lane_member(material, "reflect", type_of(Material{}.reflect)))
-            hit_scatter := lane_gather(  lane_member(material, "scatter", type_of(Material{}.scatter)))
+            material        := lane_index(materials, hit.material)
+            hit_emit        := lane_gather_v(lane_member(material, "emit",        type_of(Material{}.emit)))
+            hit_reflect     := lane_gather_v(lane_member(material, "reflect",     type_of(Material{}.reflect)))
+            hit_scatter     := lane_gather(  lane_member(material, "scatter",     type_of(Material{}.scatter)))
+            hit_emit_factor := lane_gather(  lane_member(material, "emit_factor", type_of(Material{}.emit_factor)))
             
             // only allow world.no_hit on the first time we didn't hit anything
             hit_emit.r *= cast(lane_f32) (1 & lane_mask)
@@ -339,7 +341,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
             hit_emit.b *= cast(lane_f32) (1 & lane_mask)
             
             // Color Accumulation
-            sample += attenuation * hit_emit
+            sample += attenuation * (hit_emit * hit_emit_factor)
             
             lane_mask &= hit.did_hit
             if lane_mask == lane_false do break

@@ -29,13 +29,13 @@ main :: proc() {
     append(&world.triangles, Triangle{})
     append(&world.planes,    Plane{})
     
-    append(&world.materials, Material{ emit    = { .3  , .4  , .5 },              })
-    append(&world.materials, Material{ reflect = { .5  , .5  , .5 }, scatter = 1  })
-    append(&world.materials, Material{ reflect = { .7  , .5  , .3 }, scatter = .8 })
-    append(&world.materials, Material{ emit    = {  35 ,  20 , .5 }, scatter = 1. })
-    append(&world.materials, Material{ reflect = { .2  , .8  , .2 }, scatter = .3 })
-    append(&world.materials, Material{ reflect = { .65 , .1  , .7 }, scatter = .9 })
-    append(&world.materials, Material{ reflect = { .9  , .9  , .8 }, scatter = .6 })
+    append(&world.materials, Material{ emit    = { .3  , .4  , .5  }, emit_factor = 3   })
+    append(&world.materials, Material{ reflect = { .5  , .5  , .5  }, scatter = 1       })
+    append(&world.materials, Material{ reflect = { .7  , .5  , .3  }, scatter = .8      })
+    append(&world.materials, Material{ emit    = { .35 , .2 ,  .01 }, emit_factor = 100 })
+    append(&world.materials, Material{ reflect = { .2  , .8  , .2  }, scatter = .3      })
+    append(&world.materials, Material{ reflect = { .65 , .1  , .7  }, scatter = .9      })
+    append(&world.materials, Material{ reflect = { .9  , .9  , .8  }, scatter = .6      })
     
     material_names := make_slice(context.allocator, [] string, len(world.materials))
     
@@ -93,7 +93,7 @@ main :: proc() {
         // append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 5 })
         // append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
         
-        load_teapot(&world.triangles, 0, 2)
+        load_teapot(&world.triangles, 0, 4)
     }
     
     ////////////////////////////////////////////////
@@ -461,13 +461,13 @@ main :: proc() {
             defer layout_unindent(layout)
             
             for &material, index in world.materials {
-                if index == 0 do continue
                 display_line(layout, "Material %: material %", index, material_names[index])
                 
                 layout_indent(layout)
                 defer layout_unindent(layout)
                 
-                if display_slider(layout, 240, &material.scatter, 0, 1, "Scatter")  do fast_render.requested = true
+                if display_slider(layout, 240, &material.scatter,     0,   1, "Scatter") do fast_render.requested = true
+                if display_slider(layout, 240, &material.emit_factor, 0, 100, "Emittance") do fast_render.requested = true
                 
                 layout_advance(layout, 10)
                 layout_begin_horizontal(layout)
@@ -502,7 +502,7 @@ main :: proc() {
                     layout_advance(layout, color_size)
                 }
                 layout_end_horizontal(layout)
-                layout_advance(layout, 10)
+                layout_advance(layout, 50)
             }
         }
         
@@ -558,6 +558,8 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, focus: ^
             layout_advance(layout, 5)
             display_line(layout, "size factor %", render.image_size_factor)
         layout_end_horizontal(layout)
+    } else {
+        layout_advance(layout, FontSize)
     }
     
     layout_begin_horizontal(layout)
@@ -581,6 +583,7 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, focus: ^
             layout_advance(layout, bar_width)
         }
     layout_end_horizontal(layout)
+        
 }
 
 load_image_into_texture :: proc (texture: ^rl.Texture, image: Image) {

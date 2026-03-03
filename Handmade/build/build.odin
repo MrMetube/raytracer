@@ -3,7 +3,7 @@ package build
 import os "core:os/os2"
 
 native   :: true
-optimize :: !false
+optimize :: false
 pedantic :: false
 
 main :: proc () {
