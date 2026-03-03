@@ -1,5 +1,9 @@
 ## To be done
 
+- vary sample count over viewport, have a focus region with highest detail
+- think more about the response to a accumulated ray
+    - do more than store it, get inspired by biology
+
 - make some debug visualization of Tree hit test count and such
 - Do we keep the other primitives(spheres, planes) or should we simplify to only do triangles
 - Investigate the BRDF table usage and why the indices seem to be working better when seemingly wrong

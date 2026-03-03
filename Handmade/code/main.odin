@@ -29,10 +29,10 @@ main :: proc() {
     append(&world.triangles, Triangle{})
     append(&world.planes,    Plane{})
     
-    append(&world.materials, Material{ emit    = { .3  , .4  , .5  }, emit_factor = 3   })
+    append(&world.materials, Material{ emit    = { .3  , .4  , .5  }, emit_factor = 2   })
     append(&world.materials, Material{ reflect = { .5  , .5  , .5  }, scatter = 1       })
     append(&world.materials, Material{ reflect = { .7  , .5  , .3  }, scatter = .8      })
-    append(&world.materials, Material{ emit    = { .35 , .2 ,  .01 }, emit_factor = 100 })
+    append(&world.materials, Material{ emit    = { .35 , .2 ,  .01 }, emit_factor = 10 })
     append(&world.materials, Material{ reflect = { .2  , .8  , .2  }, scatter = .3      })
     append(&world.materials, Material{ reflect = { .65 , .1  , .7  }, scatter = .9      })
     append(&world.materials, Material{ reflect = { .9  , .9  , .8  }, scatter = .6      })
@@ -47,7 +47,7 @@ main :: proc() {
     load_brdf_merl("./BRDFDatabase/brdfs/purple-paint.binary", &world.materials[5].brdf, &world.all_brdf_values); material_names[5] = "purple-paint"
     load_brdf_merl("./BRDFDatabase/brdfs/white-marble.binary", &world.materials[6].brdf, &world.all_brdf_values); material_names[6] = "white-marble"
     
-    if false {
+    if !false {
         area_size := cast(f32) 20
         append(&world.spheres, Sphere { center = { 0, 0, 0},   radius = 1,  material = 2 })
         append(&world.spheres, Sphere { center = { 3,-2, 0.4}, radius = .1, material = 3 })
@@ -56,7 +56,7 @@ main :: proc() {
         append(&world.spheres, Sphere { center = {-2, 3, 0},   radius = 2,  material = 6 })
     
         gen_entropy := seed_random_series(565)
-        if false do for _ in 0..< square(area_size) * 1.2 {
+        for _ in 0..< square(area_size) * 1.2 {
             radius := random_between_f32(&gen_entropy, 0.1, 0.4)
             
             bounds := radius + 0.05
@@ -104,7 +104,7 @@ main :: proc() {
     // @speed Currently the octtree is a ~79% less work compared to the straight array
     // @note(viktor): skip nil sphere
     for sphere in world.spheres[1:] {
-        bounds := rectangle_center_dimension(sphere.center, sphere.radius)
+        bounds := get_bounds(sphere)
         tree_append(&sphere_info, &world.sphere_nodes, sphere, bounds)
     }
     
@@ -117,63 +117,50 @@ main :: proc() {
     
     // @note(viktor): skip nil triangle
     for triangle in world.triangles[1:] {
-        bounds := rectangle_inverted_infinity(Rectangle3)
-        bounds = rectangle_union_point(bounds, triangle.a)
-        bounds = rectangle_union_point(bounds, triangle.b)
-        bounds = rectangle_union_point(bounds, triangle.c)
-        
+        bounds := get_bounds_triangle(triangle)
         tree_append(&triangle_info, &world.triangle_nodes, triangle, bounds)
     }
     
     {
-        compacted: Stat(f32)
-        
-        nodes := world.triangle_nodes
-        backing: [1024] Node_Index
-        stack := dynamic_array_from_parts(Node_Index, raw_data(&backing), 0, len(backing))
-        append(&stack, Root_Index)
-        for len(stack) != 0 {
-            it_index := pop(&stack)
-            assert(it_index != Nil_Index)
-            it := nodes[it_index]
-            if it.node.first_subnode != Nil_Index {
-                append(&stack, it.node.first_subnode+0)
-                append(&stack, it.node.first_subnode+1)
-            }
-            
-            if it.node.first_value != Nil_Index {
-                bounds := rectangle_inverted_infinity(Rectangle3)
-                for link := it.node.first_value; link != Nil_Index; link = nodes[link].value.next_value {
-                    value := nodes[link].value
-                    bounds = rectangle_union_point(bounds, value.value.a)
-                    bounds = rectangle_union_point(bounds, value.value.b)
-                    bounds = rectangle_union_point(bounds, value.value.c)
-                }
-                
-                if it.node.bounds != bounds {
-                    stat_update(&compacted, rectangle_clamped_area(bounds) / rectangle_clamped_area(it.node.bounds))
-                    it.node.bounds = bounds
-                }
-            } else {
-                it.node.bounds = {}
-            }
+        triangles_compacted := tree_compact(world.triangle_nodes[:])
+        spheres_compacted := tree_compact(world.sphere_nodes[:])
+        print("compacting nodes - average size afterwards:\n")
+        if len(world.triangles) > 1 {
+            print("   triangles = % %%\n", view_percentage_ratio(triangles_compacted.avg))
         }
-        
-        stat_finalize(&compacted)
-        print("compacting nodes: average size afterwards = % %%\n", view_percentage_ratio(compacted.avg))
+        if len(world.spheres) > 1 {
+            print("   spheres   = % %%\n", view_percentage_ratio(spheres_compacted.avg))
+        }
     }
     
-    inspection := inspect(triangle_info, world.triangle_nodes[:], Root_Index)
-    print("triangle tree info:\n")
-    print("            nodes: %\n", inspection.node_count)
-    print("            depth: max = %, avg = %\n", inspection.depth.max, view_float(inspection.depth.avg, precision = 2))
-    print("  values per node: max = %, avg = %\n", inspection.values_per_node.max, view_float(inspection.values_per_node.avg, precision = 2))
-    print("  values per node = %\n", triangle_info.values_per_node)
-    print("          density = % %%\n", 100 * cast(f64) inspection.values_per_node.sum / cast(f64) (inspection.node_count + inspection.values_per_node.sum))
-    print("     overfullness = % %%\n", 100 * cast(f64) inspection.overfull_nodes / cast(f64) (inspection.node_count))
-    print("\n")
+    {
+        if len(world.triangles) > 1 {
+            inspection_t := inspect(triangle_info, world.triangle_nodes[:], Root_Index)
+            print("triangle tree info:\n")
+            print("            nodes: %\n", inspection_t.node_count)
+            print("            depth: max = %, avg = %\n", inspection_t.depth.max, view_float(inspection_t.depth.avg, precision = 2))
+            print("  values per node: max = %, avg = %\n", inspection_t.values_per_node.max, view_float(inspection_t.values_per_node.avg, precision = 2))
+            print("  values per node = %\n", triangle_info.values_per_node)
+            print("          density = % %%\n", 100 * cast(f64) inspection_t.values_per_node.sum / cast(f64) (inspection_t.node_count + inspection_t.values_per_node.sum))
+            print("     overfullness = % %%\n", 100 * cast(f64) inspection_t.overfull_nodes / cast(f64) (inspection_t.node_count))
+            print("\n")
+        }
+        
+        if len(world.spheres) > 1 {
+            inspection_s := inspect(sphere_info, world.sphere_nodes[:], Root_Index)
+            print("sphere tree info:\n")
+            print("            nodes: %\n", inspection_s.node_count)
+            print("            depth: max = %, avg = %\n", inspection_s.depth.max, view_float(inspection_s.depth.avg, precision = 2))
+            print("  values per node: max = %, avg = %\n", inspection_s.values_per_node.max, view_float(inspection_s.values_per_node.avg, precision = 2))
+            print("  values per node = %\n", sphere_info.values_per_node)
+            print("          density = % %%\n", 100 * cast(f64) inspection_s.values_per_node.sum / cast(f64) (inspection_s.node_count + inspection_s.values_per_node.sum))
+            print("     overfullness = % %%\n", 100 * cast(f64) inspection_s.overfull_nodes / cast(f64) (inspection_s.node_count))
+            print("\n")
+        }
+        
+        // print_node(world.triangle_nodes[:], 0, Root_Index)
+    }
 
-    // print_node(world.triangle_nodes[:], 0, Root_Index)
     
     ////////////////////////////////////////////////
     
@@ -466,8 +453,8 @@ main :: proc() {
                 layout_indent(layout)
                 defer layout_unindent(layout)
                 
-                if display_slider(layout, 240, &material.scatter,     0,   1, "Scatter") do fast_render.requested = true
-                if display_slider(layout, 240, &material.emit_factor, 0, 100, "Emittance") do fast_render.requested = true
+                if display_slider(layout, 240, &material.scatter,     0,  1, "Scatter") do fast_render.requested = true
+                if display_slider(layout, 240, &material.emit_factor, 0, 10, "Emittance") do fast_render.requested = true
                 
                 layout_advance(layout, 10)
                 layout_begin_horizontal(layout)

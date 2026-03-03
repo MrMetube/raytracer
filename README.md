@@ -2,18 +2,19 @@
 3 cpu ray tracers. The first in java was part of a voluntary uni project. The other two were made in my free time.
 
 ## Screenshots
-anti-chronological order
+(anti-chronological order)
 
 ### Handmade
-![Render 8](Handmade/data/render_9.bmp)
-![Render 8](Handmade/data/render_8.bmp)
-![Render 7](Handmade/data/render_7.bmp)
-![Render 6](Handmade/data/render_6.bmp)
-![Render 5](Handmade/data/render_day_5.bmp)
-![Render 4](Handmade/data/render_day_4.bmp)
-![Render 3](Handmade/data/render_day_3.bmp)
-![Render 2](Handmade/data/render_day_2.bmp)
-![Render 1](Handmade/data/render_day_1.bmp)
+![Render 10](Handmade/data/render_10.png)
+![Render 9](Handmade/data/render_9.png)
+![Render 8](Handmade/data/render_8.png)
+![Render 7](Handmade/data/render_7.png)
+![Render 6](Handmade/data/render_6.png)
+![Render 5](Handmade/data/render_day_5.png)
+![Render 4](Handmade/data/render_day_4.png)
+![Render 3](Handmade/data/render_day_3.png)
+![Render 2](Handmade/data/render_day_2.png)
+![Render 1](Handmade/data/render_day_1.png)
 
 ### Java
 ![alt text](<java/archive/broken intersect LightShader.png>) 

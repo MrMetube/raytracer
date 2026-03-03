@@ -152,6 +152,51 @@ tree_append :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Tree_Node($Value),
     info.value_counts[into_index] += 1
 }
 
+tree_compact :: proc (nodes: [] Tree_Node($Value)) -> Stat(f32) {
+    compacted: Stat(f32)
+    backing: [1024] Node_Index
+    stack := dynamic_array_from_parts(Node_Index, raw_data(&backing), 0, len(backing))
+    append(&stack, Root_Index)
+    for len(stack) != 0 {
+        it_index := pop(&stack)
+        assert(it_index != Nil_Index)
+        it := nodes[it_index]
+        if it.node.first_subnode != Nil_Index {
+            append(&stack, it.node.first_subnode+0)
+            append(&stack, it.node.first_subnode+1)
+        }
+        
+        if it.node.first_value != Nil_Index {
+            bounds := rectangle_inverted_infinity(Rectangle3)
+            for link := it.node.first_value; link != Nil_Index; link = nodes[link].value.next_value {
+                value := nodes[link].value
+                bounds = rectangle_union(bounds, get_bounds(value.value))
+            }
+            
+            stat_update(&compacted, rectangle_clamped_area(bounds) / rectangle_clamped_area(it.node.bounds))
+        } else {
+            it.node.bounds = {}
+        }
+    }
+    
+    stat_finalize(&compacted)
+    
+    return compacted
+}
+
+get_bounds :: proc { get_bounds_triangle, get_bounds_sphere }
+get_bounds_triangle :: proc (triangle: Triangle) -> Rectangle3 {
+    bounds := rectangle_inverted_infinity(Rectangle3)
+    bounds = rectangle_union_point(bounds, triangle.a)
+    bounds = rectangle_union_point(bounds, triangle.b)
+    bounds = rectangle_union_point(bounds, triangle.c)
+    return bounds
+}
+get_bounds_sphere :: proc (sphere: Sphere) -> Rectangle3 {
+    bounds := rectangle_center_dimension(sphere.center, sphere.radius)
+    return bounds
+}
+
 tree_is_empty :: proc (tree: [] Tree_Node($Value)) -> bool {
     root := tree[Root_Index].node
     result := root.first_value == Nil_Index
