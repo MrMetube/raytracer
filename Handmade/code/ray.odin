@@ -389,56 +389,43 @@ traverse_tree_and_collect_values :: proc (values: Lane_Slice(Node_Index), values
     // @todo(viktor): measure wasted lanes here as well
     closest_t := max_t
     
-    // @note(viktor): currently the stacks grow and shrink in lockstep.
-    // lanes without valid work, work on the nil node and nil values.
     for counts != 0 {
-        counts -= 1
+        load_mask := not_equal(counts, 0)
+        counts = simd.saturating_sub(counts, 1)
         
-        it_index := cast(lane_u32) lane_gather(stacks, counts)
+        it_index := cast(lane_u32) lane_gather(stacks, counts, load_mask, Nil_Index)
         when Check do assert(it_index != 0, "should not have been appended")
         
-        node        := lane_member(lane_index(nodes, it_index), "node", Tree_Node_X)
-        first_value := lane_gather(lane_member(node, "first_value", Node_Index))
-        when Check do assert(first_value != Nil_Index)
-        
+        node  := lane_member(lane_index(nodes, it_index), "node", Tree_Node_X)
         b_min := lane_gather_v(lane_member(node, "bounds", "min", v3)) 
         b_max := lane_gather_v(lane_member(node, "bounds", "max", v3)) 
         
         // @todo(viktor): should this update closest_t?
-        hit_mask, _ := hit_rectangle(neg_inv_o, inv_d, b_min, b_max, min_t, closest_t)
         // @todo(viktor): this requires that the subnodes are appended in the order from nearest to farthest
+        hit_mask, _ := hit_rectangle(neg_inv_o, inv_d, b_min, b_max, min_t, closest_t)
         // conditional_assign(hit_mask, &closest_t, t)
         
-        // @todo(viktor): @important if viewed almost directly along an axis, the bounds seems to make cracks in my triangles
-        
-        // @speed this feels like a binary search problem, each node splits the search space into two, but there may be holes.and if we do a full bvh child bounds may overlap and then its not
         spall_begin("append subnodes")
-        
-        first_subnode : lane_Node_Index = lane_gather(lane_member(node, "first_subnode", Node_Index))
-        // @note(viktor): only if all lanes are zero do not push onto the stack, otherwise keep counts in sync and push zeros
-        append_first_subnode := not_equal(first_subnode, 0)
-        append_first_subnode &= hit_mask
-        if append_first_subnode != lane_false {
-            // @todo(viktor): push the closer subnode first once we also correctly update the closest_t
-            added: u32
+        first_subnode := lane_gather(lane_member(node, "first_subnode", Node_Index))
+        subnode_mask := not_equal(first_subnode, Nil_Index)
+        subnode_mask &= hit_mask
+        if subnode_mask != lane_false {
+            subnode_0_index := first_subnode + 0
+            subnode_1_index := first_subnode + 1
+            subnode_0 := lane_member(lane_index(nodes, cast(lane_u32) subnode_0_index), "node", Tree_Node_X)
+            subnode_1 := lane_member(lane_index(nodes, cast(lane_u32) subnode_1_index), "node", Tree_Node_X)
+            subnode_0_mask := subnode_mask & not_equal(lane_gather(lane_member(subnode_0, "first_value", Node_Index)), Nil_Index)
+            subnode_1_mask := subnode_mask & not_equal(lane_gather(lane_member(subnode_1, "first_value", Node_Index)), Nil_Index)
             
-            subnode_0_index := lane_index(nodes, cast(lane_u32) first_subnode+0)
-            subnode_1_index := lane_index(nodes, cast(lane_u32) first_subnode+1)
-            subnode_0_first_value := lane_gather(lane_member(subnode_0_index, "node", "first_value", Node_Index)) 
-            subnode_1_first_value := lane_gather(lane_member(subnode_1_index, "node", "first_value", Node_Index)) 
+            lane_scatter(stacks, counts, subnode_0_index, subnode_0_mask)
+            conditional_assign(subnode_0_mask, &counts, counts + 1)
             
-            if subnode_0_first_value != Nil_Index { // @note(viktor): skip if all subnodes are empty
-                lane_scatter(stacks, counts+added, first_subnode+0, append_first_subnode)
-                added += 1
-            }
-            if subnode_1_first_value != Nil_Index { // @note(viktor): skip if all subnodes are empty
-                lane_scatter(stacks, counts+added, first_subnode+1, append_first_subnode)
-                added += 1
-            }
-            counts += added
+            lane_scatter(stacks, counts, subnode_1_index, subnode_1_mask)
+            conditional_assign(subnode_1_mask, &counts, counts + 1)
         }
         spall_end()
         
+        first_value := lane_gather(lane_member(node, "first_value", Node_Index))
         link := first_value & cast(lane_Node_Index) hit_mask
         spall_scope("append values")
         for link != 0 {
