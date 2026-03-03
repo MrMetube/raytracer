@@ -49,6 +49,9 @@ World :: struct {
         tiles_retired:    u32,
         pixels_done:      u32,
         nil_value_lanes_tested: [8] u32,
+        
+        // @note(viktor): only sum and count -> avg are valid
+        all_triangle_tests, triangle_tests: Stat(u32),
     },
 }
 
@@ -178,6 +181,19 @@ print_render_results :: proc (world: ^World, start, end: time.Time) {
     print("]\n")
     
     print("  Wasted lanes: % % %%\n", view_magnitude(wasted_lanes), view_percentage_ratio(safe_ratio_or_zero(cast(f64) wasted_lanes, cast(f64) (total_lanes * 8))))
+    
+    {
+        tests := &world.triangle_tests
+        total := &world.all_triangle_tests
+        stat_finalize(tests)
+        stat_finalize(total)
+        wasted := total.sum - tests.sum
+        
+        print("Triangle tests:\n")
+        print("     tests = % (avg ~%)\n", view_magnitude(tests.sum), view_float(tests.avg, precision = 2))
+        print(" all lanes = % (avg ~%)\n", view_magnitude(total.sum), view_float(total.avg, precision = 2))
+        print("    wasted = % % %%\n", view_magnitude(wasted), view_percentage(wasted, total.sum))
+    }
     
     print("\n\n")
 }

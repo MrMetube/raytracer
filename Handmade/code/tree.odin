@@ -152,6 +152,15 @@ tree_append :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Tree_Node($Value),
     info.value_counts[into_index] += 1
 }
 
+tree_is_empty :: proc (tree: [] Tree_Node($Value)) -> bool {
+    root := tree[Root_Index].node
+    result := root.first_value == Nil_Index
+    if result {
+        assert(root.first_subnode == 0)
+    }
+    return result
+}
+
 ////////////////////////////////////////////////
 
 print_node :: proc (nodes: [] $T, level: int, it_index: Node_Index) {

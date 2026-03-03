@@ -176,8 +176,11 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
     backing_values: [4096] lane_Node_Index
     values := backing_values[:]
     
+    triangle_tests: Stat(u32)
+    all_triangle_tests: Stat(u32)
+    
     for _ in 0..<lane_ray_count {
-        jitter := random_unilateral(entropy, lane_v2) * 0.01
+        jitter := random_unilateral(entropy, lane_v2)
         offset := init_film_p + jitter * pixel_size
         film_p := film_center + (offset.x*camera_x*half_film_size.x + offset.y*camera_y * half_film_size.y) 
         
@@ -238,6 +241,9 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                 nodes := world.triangle_nodes
                 traverse_tree_and_collect_values(to_lane(values), &values_len, nodes[:], ray_o, ray_d, min_t, hit.closest_t, world)
                 
+                stat_update(&triangle_tests, horizontal_add(values_len))
+                stat_update(&all_triangle_tests, simd.reduce_max(values_len) * LaneWidth)
+                
                 Check :: false
                 for {
                     values_len = simd.saturating_sub(values_len, 1)
@@ -247,16 +253,10 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                     value_index := lane_gather(values, values_len, greater_than(values_len, 0), cast(lane_Node_Index) Nil_Index)
                     when Check do assert(value_index != 0, "should not have been appended")
                     
-                    // @note(viktor): Test: with and without loading all triangle data, check just the compute work
-                    // baseline - nil triangle
-                    // 305ms - 115ms
-                    // no early outs in hit_triangle
-                    // 335ms - 170ms
-                    // -> ~46% of the work is loading triangles
-                    
-                    // pretend_to_read(&value_index)
-                    // value_index = 0
-                    // pretend_to_write(&value_index)
+                    // @note(viktor): total time, percentage of baseline without neither
+                    // baseline - load nil    - no load     - no traverse - neither
+                    // 153 ms   -  97 ms  41% -  76 ms  27% - 62 ms  18%  - 34 ms
+                    // 189 ms   - 131 ms  32% - 110 ms  21% - 87 ms   9%  - 70 ms   // no early outs in hit_triangle
                     
                     nodes := to_lane(nodes)
                     node  := lane_index(nodes, cast(lane_u32) value_index)
@@ -279,6 +279,8 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                     triangle := lane_index(triangles, index)
                     hit_triangle(triangle, ray_o, ray_d, min_t, &hit)
                 }
+                stat_update(&triangle_tests, cast(u32) len(world.triangles)-1 * LaneWidth)
+                stat_update(&all_triangle_tests, cast(u32) len(world.triangles)-1 * LaneWidth)
             }
             
             ////////////////////////////////////////////////
@@ -366,6 +368,11 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
     bounces_computed = cast(u64) horizontal_add(bounces_computed_lanes)
     loops_computed   = cast(u64) horizontal_add(loops_computed_lanes)
     
+    atomic_add(&world.all_triangle_tests.count, all_triangle_tests.count)
+    atomic_add(&world.all_triangle_tests.sum,   all_triangle_tests.sum)
+    atomic_add(&world.triangle_tests.count, triangle_tests.count)
+    atomic_add(&world.triangle_tests.sum,   triangle_tests.sum)
+    
     return final_color, bounces_computed, loops_computed
 }
 
@@ -373,7 +380,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
 
 traverse_tree_and_collect_values :: proc (values: Lane_Slice(Node_Index), values_len: ^lane_u32, nodes: [] Tree_Node($Value), ray_o, ray_d: lane_v3, min_t, max_t: lane_f32, world: ^World) {
     spall_proc()
-    if nodes[Root_Index].node.first_value == Nil_Index do return
+    if tree_is_empty(nodes) do return
     nodes := to_lane(nodes)
     
     inv_d := 1 / ray_d
@@ -412,6 +419,7 @@ traverse_tree_and_collect_values :: proc (values: Lane_Slice(Node_Index), values
         if subnode_mask != lane_false {
             subnode_0_index := first_subnode + 0
             subnode_1_index := first_subnode + 1
+            // @speed is this really worth it?
             subnode_0 := lane_member(lane_index(nodes, cast(lane_u32) subnode_0_index), "node", Tree_Node_X)
             subnode_1 := lane_member(lane_index(nodes, cast(lane_u32) subnode_1_index), "node", Tree_Node_X)
             subnode_0_mask := subnode_mask & not_equal(lane_gather(lane_member(subnode_0, "first_value", Node_Index)), Nil_Index)

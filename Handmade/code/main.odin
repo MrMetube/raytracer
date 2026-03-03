@@ -229,7 +229,7 @@ main :: proc() {
     quality_render: Render
     fast_render:    Render
     init_render(&quality_render, 64, 16, window_size, 2 when SpallDisabled else 8, core_count)
-    init_render(&fast_render,     8,  4, window_size, 6 when SpallDisabled else 30, core_count)
+    init_render(&fast_render,     8,  4, window_size, 6 when SpallDisabled else 12, core_count)
     defer close_work_queue_and_wait_for_threads(&quality_render.queue)
     defer close_work_queue_and_wait_for_threads(&fast_render.queue)
     
