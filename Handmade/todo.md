@@ -1,5 +1,8 @@
 ## To be done
 
+- Ensure that Tree_Node subnodes do not have gaps
+    - make a smarter splitting logic
+
 - vary sample count over viewport, have a focus region with highest detail
 - think more about the response to a accumulated ray
     - do more than store it, get inspired by biology

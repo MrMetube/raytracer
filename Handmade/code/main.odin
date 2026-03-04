@@ -24,10 +24,6 @@ main :: proc() {
     core_count := cast(i32) os_old.processor_core_count() - 1
     
     world: World
-    // nil sphere, triangle, and plane
-    append(&world.spheres,   Sphere{})
-    append(&world.triangles, Triangle{})
-    append(&world.planes,    Plane{})
     
     append(&world.materials, Material{ emit    = { .3  , .4  , .5  }, emit_factor = 2   })
     append(&world.materials, Material{ reflect = { .5  , .5  , .5  }, scatter = 1       })
@@ -47,14 +43,14 @@ main :: proc() {
     load_brdf_merl("./BRDFDatabase/brdfs/purple-paint.binary", &world.materials[5].brdf, &world.all_brdf_values); material_names[5] = "purple-paint"
     load_brdf_merl("./BRDFDatabase/brdfs/white-marble.binary", &world.materials[6].brdf, &world.all_brdf_values); material_names[6] = "white-marble"
     
-    if !false {
+    if false {
         area_size := cast(f32) 20
         append(&world.spheres, Sphere { center = { 0, 0, 0},   radius = 1,  material = 2 })
         append(&world.spheres, Sphere { center = { 3,-2, 0.4}, radius = .1, material = 3 })
         append(&world.spheres, Sphere { center = {-2,-1, 2},   radius = 1,  material = 1 })
         append(&world.spheres, Sphere { center = { 1,-1, 3},   radius = 1,  material = 5 })
         append(&world.spheres, Sphere { center = {-2, 3, 0},   radius = 2,  material = 6 })
-    
+        
         gen_entropy := seed_random_series(565)
         for _ in 0..< square(area_size) * 1.2 {
             radius := random_between_f32(&gen_entropy, 0.1, 0.4)
@@ -76,7 +72,7 @@ main :: proc() {
             material := random_between_u32(&gen_entropy, 1, auto_cast len(world.materials) - 1)
             append(&world.spheres, Sphere { center, radius, material })
         }
-    
+        
         append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 6 })
         append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size-0.1}, radius = area_size/5, material = 3 })
         // append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
@@ -85,7 +81,7 @@ main :: proc() {
         // append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
     } else {
         area_size := cast(f32) 5
-        append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 6 })
+        append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 3 })
         append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size-0.1}, radius = area_size/5, material = 3 })
         
         // append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
@@ -98,43 +94,53 @@ main :: proc() {
     
     ////////////////////////////////////////////////
     
-    reserve(&world.sphere_nodes, len(world.spheres))
-    sphere_info := tree_init(&world.sphere_nodes, 1, rectangle_center_dimension(v3{0, 0, 0}, 256))
-    
-    // @speed Currently the octtree is a ~79% less work compared to the straight array
-    // @note(viktor): skip nil sphere
-    for sphere in world.spheres[1:] {
-        bounds := get_bounds(sphere)
-        tree_append(&sphere_info, &world.sphere_nodes, sphere, bounds)
-    }
-    
-    // @todo(viktor): think about the layout of nodes and values
-    // currently we append nil, root,
-    // then each value + new nodes if needed, 
-    // then the next value ...
+    reserve(&world.sphere_nodes,   len(world.spheres))
     reserve(&world.triangle_nodes, len(world.triangles))
-    triangle_info := tree_init(&world.triangle_nodes, 1, rectangle_center_dimension(v3{}, 128))
     
-    // @note(viktor): skip nil triangle
-    for triangle in world.triangles[1:] {
-        bounds := get_bounds_triangle(triangle)
-        tree_append(&triangle_info, &world.triangle_nodes, triangle, bounds)
+    sphere_bounds   := rectangle_inverted_infinity(Rectangle3)
+    triangle_bounds := rectangle_inverted_infinity(Rectangle3)
+    
+    // @todo(viktor): can we get rid of the nil sphere and triangle by making the hit_xxx take the value and a valid mask, and if invalid, just "load" zeros itself 
+    
+    for sphere, index_minus_one in world.spheres {
+        bounds := get_bounds(sphere)
+        sphere_bounds = rectangle_union(sphere_bounds, bounds)
     }
+    for triangle, index_minus_one in world.triangles {
+        bounds := get_bounds(triangle)
+        triangle_bounds = rectangle_union(triangle_bounds, bounds)
+    }
+    
+    sphere_info   := tree_init(&world.sphere_nodes,   1, sphere_bounds)
+    triangle_info := tree_init(&world.triangle_nodes, 8, triangle_bounds)
+    
+    for sphere, value_index in world.spheres {
+        bounds := get_bounds(sphere)
+        tree_append(&sphere_info, &world.sphere_nodes, cast(Value_Index) value_index, bounds)
+    }
+    
+    for triangle, value_index in world.triangles {
+        bounds := get_bounds_triangle(triangle)
+        tree_append(&triangle_info, &world.triangle_nodes, cast(Value_Index) value_index, bounds)
+    }
+    
+    tree_finalize(&sphere_info, &world.sphere_nodes, world.spheres[:])
+    tree_finalize(&triangle_info, &world.triangle_nodes, world.triangles[:])
     
     {
-        triangles_compacted := tree_compact(world.triangle_nodes[:])
-        spheres_compacted := tree_compact(world.sphere_nodes[:])
+        triangles_compacted := tree_compact(world.triangle_nodes[:], world.triangles[:])
+        spheres_compacted   := tree_compact(world.sphere_nodes[:], world.spheres[:])
         print("compacting nodes - average size afterwards:\n")
-        if len(world.triangles) > 1 {
+        if len(world.triangles) > 0 {
             print("   triangles = % %%\n", view_percentage_ratio(triangles_compacted.avg))
         }
-        if len(world.spheres) > 1 {
+        if len(world.spheres) > 0 {
             print("   spheres   = % %%\n", view_percentage_ratio(spheres_compacted.avg))
         }
     }
     
     {
-        if len(world.triangles) > 1 {
+        if len(world.triangles) > 0 {
             inspection_t := inspect(triangle_info, world.triangle_nodes[:], Root_Index)
             print("triangle tree info:\n")
             print("            nodes: %\n", inspection_t.node_count)
@@ -146,7 +152,7 @@ main :: proc() {
             print("\n")
         }
         
-        if len(world.spheres) > 1 {
+        if len(world.spheres) > 0 {
             inspection_s := inspect(sphere_info, world.sphere_nodes[:], Root_Index)
             print("sphere tree info:\n")
             print("            nodes: %\n", inspection_s.node_count)
@@ -160,7 +166,6 @@ main :: proc() {
         
         // print_node(world.triangle_nodes[:], 0, Root_Index)
     }
-
     
     ////////////////////////////////////////////////
     
@@ -176,7 +181,7 @@ main :: proc() {
     camera.y = normalize_or_zero(cross(camera.z, camera.x))
     
     ////////////////////////////////////////////////
-        
+    
     window_size := v2i { 1920, 1080 }
     
     rl.InitWindow(window_size.x, window_size.y, ctprint("Handmade Ray %", (Is_Optimized ? "Optimized" :  "Debug")))
@@ -216,7 +221,11 @@ main :: proc() {
     quality_render: Render
     fast_render:    Render
     init_render(&quality_render, 64, 16, window_size, 2 when SpallDisabled else 8, core_count)
-    init_render(&fast_render,     8,  4, window_size, 6 when SpallDisabled else 12, core_count)
+    when false {
+        init_render(&fast_render,    64,  2, window_size, 6 when SpallDisabled else 12, core_count)
+    } else {
+        init_render(&fast_render,     8,  4, window_size, 6 when SpallDisabled else 12, core_count)
+    }
     defer close_work_queue_and_wait_for_threads(&quality_render.queue)
     defer close_work_queue_and_wait_for_threads(&fast_render.queue)
     
@@ -243,39 +252,44 @@ main :: proc() {
         delta_time := rl.GetFrameTime()
         
         speed: f32 = 60
-        if !rl.IsMouseButtonDown(.RIGHT) {
-            ddp *= 0.1
-        }
-        
-        if rl.IsKeyPressed(.Q) do Use_Tree = !Use_Tree
-        
         dddp: v3
-        if rl.IsKeyDown(.A) do dddp += {-1, 0,  0}
-        if rl.IsKeyDown(.D) do dddp += { 1, 0,  0}
-        if rl.IsKeyDown(.W) do dddp += { 0, 0, -1}
-        if rl.IsKeyDown(.S) do dddp += { 0, 0,  1}
-        
-        if rl.IsKeyDown(.SPACE)      do dddp += {0, 1,  0}
-        if rl.IsKeyDown(.LEFT_SHIFT) do dddp += {0,-1,  0}
-        
-        if rl.IsMouseButtonPressed(.MIDDLE) {
-            mouse_is_look = !mouse_is_look
-        }
-        
         dlook: v2
-        if mouse_is_look {
-            dlook = -rl.GetMouseDelta()
-        }
         
         if !rl.IsWindowFocused() {
             mouse_is_look = false
             rl.ShowCursor()
         } else {
+            
+            if rl.IsKeyDown(.A) do dddp += {-1, 0,  0}
+            if rl.IsKeyDown(.D) do dddp += { 1, 0,  0}
+            if rl.IsKeyDown(.W) do dddp += { 0, 0, -1}
+            if rl.IsKeyDown(.S) do dddp += { 0, 0,  1}
+            
+            if rl.IsKeyDown(.SPACE)      do dddp += {0, 1,  0}
+            if rl.IsKeyDown(.LEFT_SHIFT) do dddp += {0,-1,  0}
+            
+            if !rl.IsMouseButtonDown(.RIGHT) {
+                ddp *= 0.1
+            }
+            
+            if rl.IsMouseButtonPressed(.MIDDLE) {
+                mouse_is_look = !mouse_is_look
+            }
+            
+            if mouse_is_look {
+                dlook = -rl.GetMouseDelta()
+            }
+            
             if mouse_is_look {
                 rl.HideCursor()
                 rl.SetMousePosition(window_size.x / 2, window_size.y / 2)
-            } else do rl.ShowCursor()   
+            } else do rl.ShowCursor()
             
+            if rl.IsKeyPressed(.Q) do Use_Tree = !Use_Tree
+            
+            if rl.IsKeyPressed(.R) {
+                fast_render.requested = true
+            }
         }
         
         if dlook != 0 {
@@ -313,10 +327,6 @@ main :: proc() {
             camera.p += dp.y * v3{0, 0, 1} * delta_time
             camera.p += dp.z * camera.z    * delta_time
             
-            fast_render.requested = true
-        }
-        
-        if rl.IsKeyPressed(.R) {
             fast_render.requested = true
         }
         
@@ -402,7 +412,7 @@ main :: proc() {
             layout_indent(layout)
             defer layout_unindent(layout)
             
-            for &sphere, index in world.spheres[1:] {
+            for &sphere, index in world.spheres {
                 material := cast(f32) sphere.material
                 display_line(layout, "Sphere %: %", index, material_names[sphere.material])
                 
@@ -424,7 +434,7 @@ main :: proc() {
             layout_indent(layout)
             defer layout_unindent(layout)
             
-            for &plane, index in world.planes[1:] {
+            for &plane, index in world.planes {
                 material := cast(f32) plane.material
                 display_line(layout, "Plane %: %", index, material_names[plane.material])
                 

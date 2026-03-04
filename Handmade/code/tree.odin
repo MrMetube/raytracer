@@ -1,24 +1,18 @@
 package main
 
-// @speed we wont ever have 4 billion nodes, we may have more than 65 thousand...
-Node_Index :: distinct u32
+Node_Index  :: distinct u16
+Value_Index :: distinct u32
+/// bounds = 2 * 3 * 4
+/// node = bounds + 4 * 3
+/// node
 
 // @note(viktor): A sphere node currently fits into 32 bytes, whilst a triangle node is a bit too large at 44 bytes and requires 64 bytes(with alignment).
-Tree_Node :: struct ($Value: typeid) #align(32) #raw_union {
-    node:  Tree_Node_X,
-    value: Tree_Value(Value),
-}
-
-Tree_Value :: struct ($Value: typeid) {
-    next_value: Node_Index,
-    value:      Value,
-}
-
-Tree_Node_X :: struct {
+Tree_Node :: struct #align(32) {
+    bounds:        Rectangle3,
+    first_value:   Value_Index,
+    value_count:   u16,
     // @note(viktor): the other one must follow directly after the first
     first_subnode: Node_Index,
-    first_value:   Node_Index,
-    bounds:        Rectangle3,
 }
 
 Nil_Index  :: 0
@@ -26,35 +20,18 @@ Root_Index :: 1
 
 Subnodes_Per_Node :: 2
 
-/* 
-  @todo(viktor): Again update once the layout has been settled.
-  
-  - A Node is either a octtree node containing values and subnodes 
-    or a value node.
-  - Node_Index 0 is reserved for the nil-value / nil-node.
-  - The root of the tree is defined as index 1.
-  - It is currently not allowed to tree_append a octtree node.
-  
-  - The nodes of the tree may have subnodes.
-  - These are reached through the first_subnode from the parent and 
-    then through the next_subnode until an index of 0 is reached.
-  - Only tree nodes have the first/next_subnode and first_value set.
-  
-  - The values of a node are structured similarly and are reached 
-    through the first_value and then the next_value.
-  - Values only ever point to their next sibling.
-*/
-
 Tree_Build_Info :: struct {
+    allocator: Allocator,
     temp_stack:      [dynamic] Node_Index,
-    value_counts:    [dynamic] u32,
-    values_per_node: u32,
+    values:          map [Node_Index] [dynamic] Value_Index,
+    values_per_node: u16,
 }
 
-tree_init :: proc (tree: ^[dynamic] Tree_Node($Value), values_per_node: u32, bounds: Rectangle3, build_allocator: Allocator = context.temp_allocator) -> Tree_Build_Info {
+tree_init :: proc (tree: ^[dynamic] Tree_Node, values_per_node: u16, bounds: Rectangle3, build_allocator: Allocator = context.temp_allocator) -> Tree_Build_Info {
     result: Tree_Build_Info
-    result.temp_stack.allocator   = build_allocator
-    result.value_counts.allocator = build_allocator
+    result.allocator = build_allocator
+    result.temp_stack.allocator   = result.allocator
+    result.values.allocator = result.allocator
     result.values_per_node = values_per_node
     
     tree_append_node(&result, tree, {})     // nil
@@ -63,31 +40,31 @@ tree_init :: proc (tree: ^[dynamic] Tree_Node($Value), values_per_node: u32, bou
     return result
 }
 
-tree_append_value :: proc (build_info: ^Tree_Build_Info, tree: ^[dynamic] Tree_Node($Value), value: Value) {
-    append(tree, Tree_Node(Value) { value = { value = value } })
-    append_nothing(&build_info.value_counts)
+tree_append_value :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Tree_Node, node_index: Node_Index, value_index: Value_Index) {
+    values, ok := &info.values[node_index]
+    assert(ok)
+    append(values, value_index)
+    node := &tree[node_index]
+    node.value_count += 1
 }
 
-tree_append_node :: proc (build_info: ^Tree_Build_Info, tree: ^[dynamic] Tree_Node($Value), bounds: Rectangle3) {
-    append(tree, Tree_Node(Value) { node = { bounds = bounds } })
-    append_nothing(&build_info.value_counts)
+tree_append_node :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Tree_Node, bounds: Rectangle3) {
+    node_index := cast(Node_Index) len(tree)
+    append(tree, Tree_Node{ bounds = bounds })
+    info.values[node_index] = make_dynamic_array(info.allocator, [dynamic] Value_Index, 0, 4)
 }
 
-tree_append :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Tree_Node($Value), value: Value, value_bounds: Rectangle3) {
+tree_append :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Tree_Node, value_index: Value_Index, value_bounds: Rectangle3) {
     clear(&info.temp_stack)
     append(&info.temp_stack, Root_Index)
-    
-    value_index := cast(Node_Index) len(tree)
-    tree_append_value(info, tree, value)
     
     into_index: Node_Index
     for len(&info.temp_stack) > 0 {
         it_index := pop(&info.temp_stack)
-        it := &tree[it_index]
-        node := &it.node
+        node := &tree[it_index]
         if !contains_rect(node.bounds, value_bounds) do continue
         
-        value_count := info.value_counts[it_index]
+        value_count := node.value_count
         if value_count < info.values_per_node {
             into_index = it_index
             break
@@ -118,18 +95,16 @@ tree_append :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Tree_Node($Value),
             node.first_subnode = cast(Node_Index) len(tree)
             tree_append_node(info, tree, sub_bounds_0)
             // @cleanup tree may have been reallocated
-            it = &tree[it_index]
-            node = &it.node
+            node = &tree[it_index]
             tree_append_node(info, tree, sub_bounds_1)
             // @cleanup tree may have been reallocated
-            it = &tree[it_index]
-            node = &it.node
+            node = &tree[it_index]
         }
         
         sub_could_contain: bool
         subs: for sub_index in node.first_subnode ..< node.first_subnode + Subnodes_Per_Node {
             sub := tree[sub_index]
-            if contains_rect(sub.node.bounds, value_bounds) {
+            if contains_rect(sub.bounds, value_bounds) {
                 sub_could_contain = true
                 append(&info.temp_stack, sub_index)
                 break subs
@@ -143,16 +118,49 @@ tree_append :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Tree_Node($Value),
     }
     
     assert(into_index != Nil_Index)
-    
-    into  := &tree[into_index]
-    value := &tree[value_index]
-    value.value.next_value = into.node.first_value
-    into.node.first_value = value_index
-    
-    info.value_counts[into_index] += 1
+    tree_append_value(info, tree, into_index, value_index)
 }
 
-tree_compact :: proc (nodes: [] Tree_Node($Value)) -> Stat(f32) {
+tree_finalize :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Tree_Node, values: [] $Value) {
+    buffer := make_slice(info.allocator, [] Value, len(values))
+    copy(buffer, values)
+    zero(values) 
+    
+    next_free_index: Value_Index
+    
+    stack := &info.temp_stack
+    clear(stack)
+    append(stack, Root_Index)
+    
+    for len(stack) > 0 {
+        node_index := pop(stack)
+        node := &tree[node_index]
+        
+        value_indices, ok := info.values[node_index]
+        assert(ok)
+        
+        node.value_count = cast(u16) len(value_indices)
+        if node.value_count != 0 {
+            node.first_value = next_free_index
+            for buffer_index, offset in value_indices {
+                value_index := node.first_value + cast(Value_Index) offset
+                assert(values[value_index] == {})
+                values[value_index] = buffer[buffer_index]
+            }
+            next_free_index += cast(Value_Index) node.value_count
+        }
+        
+        if node.first_subnode != Nil_Index {
+            append(stack, node.first_subnode+0)
+            append(stack, node.first_subnode+1)
+        }
+    }
+    
+    assert(next_free_index == cast(Value_Index) len(buffer))
+    pretend_to_read(&next_free_index)
+}
+
+tree_compact :: proc (nodes: [] Tree_Node, values: [] $Value) -> Stat(f32) {
     compacted: Stat(f32)
     backing: [1024] Node_Index
     stack := dynamic_array_from_parts(Node_Index, raw_data(&backing), 0, len(backing))
@@ -161,21 +169,23 @@ tree_compact :: proc (nodes: [] Tree_Node($Value)) -> Stat(f32) {
         it_index := pop(&stack)
         assert(it_index != Nil_Index)
         it := nodes[it_index]
-        if it.node.first_subnode != Nil_Index {
-            append(&stack, it.node.first_subnode+0)
-            append(&stack, it.node.first_subnode+1)
+        if it.first_subnode != Nil_Index {
+            append(&stack, it.first_subnode+0)
+            append(&stack, it.first_subnode+1)
         }
         
-        if it.node.first_value != Nil_Index {
+        if it.first_value != Nil_Index {
             bounds := rectangle_inverted_infinity(Rectangle3)
-            for link := it.node.first_value; link != Nil_Index; link = nodes[link].value.next_value {
-                value := nodes[link].value
-                bounds = rectangle_union(bounds, get_bounds(value.value))
+            
+            end := it.first_value + cast(Value_Index) it.value_count
+            for link in it.first_value..<end {
+                value := values[link]
+                bounds = rectangle_union(bounds, get_bounds(value))
             }
             
-            stat_update(&compacted, rectangle_clamped_area(bounds) / rectangle_clamped_area(it.node.bounds))
+            stat_update(&compacted, rectangle_clamped_area(bounds) / rectangle_clamped_area(it.bounds))
         } else {
-            it.node.bounds = {}
+            it.bounds = {}
         }
     }
     
@@ -197,11 +207,11 @@ get_bounds_sphere :: proc (sphere: Sphere) -> Rectangle3 {
     return bounds
 }
 
-tree_is_empty :: proc (tree: [] Tree_Node($Value)) -> bool {
-    root := tree[Root_Index].node
-    result := root.first_value == Nil_Index
+tree_is_empty :: proc (tree: [] Tree_Node) -> bool {
+    root := tree[Root_Index]
+    result := root.value_count == 0
     if result {
-        assert(root.first_subnode == 0)
+        assert(root.first_subnode == Nil_Index)
     }
     return result
 }
@@ -214,22 +224,22 @@ print_node :: proc (nodes: [] $T, level: int, it_index: Node_Index) {
     for _ in 0..<level * 4 do print(" ")
     print("node %\n", it_index)
     for _ in 0..<level * 4 do print(" ")
-    print("bounds %\n", it.node.bounds)
+    print("bounds %\n", it.bounds)
     
-    // if it.node.first_value != 0 {
+    // if it.first_value != 0 {
     //     for _ in 0..<level * 4 do print(" ")
     //     print("values:\n")
     //     for _ in 0..<(level+1) * 4 do print(" ")
-    //     for link := it.node.first_value; link != 0; link = nodes[link].value.next_value {
+    //     for link := it.first_value; link != 0; link = nodes[link].value.next_value {
     //         print("%, ", link)
     //     }
     //     print("\n")
     // }
     
-    if it.node.first_subnode != 0 {
+    if it.first_subnode != 0 {
         for _ in 0..<level * 4 do print(" ")
         print("subnodes:\n")
-        for subnode in it.node.first_subnode ..< it.node.first_subnode + Subnodes_Per_Node {
+        for subnode in it.first_subnode ..< it.first_subnode + Subnodes_Per_Node {
             print_node(nodes, level + 1, subnode)
         }
         for _ in 0..<level * 4 do print(" ")
@@ -245,21 +255,21 @@ Tree_Info :: struct {
     overfull_nodes: u32, 
 }
 
-inspect :: proc (info: Tree_Build_Info, nodes: [] Tree_Node($Value), it_index: Node_Index, depth : u32 = 0) -> Tree_Info {
+inspect :: proc (info: Tree_Build_Info, nodes: [] Tree_Node, it_index: Node_Index, depth : u32 = 0) -> Tree_Info {
     it := nodes[it_index]
-    value_count := info.value_counts[it_index]
+    value_count := it.value_count
     
     result: Tree_Info
     
     result.depth = stat_init(depth)
-    result.values_per_node = stat_init(value_count)
+    result.values_per_node = stat_init(cast(u32) value_count)
     result.node_count = 1
     if value_count > info.values_per_node {
         result.overfull_nodes += 1
     }
     
-    if it.node.first_subnode != Nil_Index {
-        for sub_index in it.node.first_subnode..< it.node.first_subnode + Subnodes_Per_Node {
+    if it.first_subnode != Nil_Index {
+        for sub_index in it.first_subnode..< it.first_subnode + Subnodes_Per_Node {
             sub_info := inspect(info, nodes, sub_index, depth + 1)
             
             result.overfull_nodes += sub_info.overfull_nodes

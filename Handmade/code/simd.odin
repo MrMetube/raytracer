@@ -20,20 +20,13 @@ Lane_Slice :: struct ($E: typeid) {
 
 ////////////////////////////////////////////////
 
-to_lane :: proc { to_lane_pointer, to_lane_slice, to_lane_array, to_lane_slice_simd }
+to_lane :: proc { to_lane_pointer, to_lane_slice, to_lane_array }
 to_lane_pointer :: proc (pointer: ^$T) -> Lane(T) {
     result: Lane(T)
     result.p = cast(lane_umm) pointer
     return result
 }
-to_lane_slice :: proc (slice: $S/ [] $T) -> Lane_Slice(T) 
-where !intrinsics.type_is_simd_vector(T) {
-    result: Lane_Slice(T)
-    result.p   = cast(lane_umm) raw_data(slice)
-    result.len = cast(lane_u32) len(slice)
-    return result
-}
-to_lane_slice_simd :: proc (slice: $S/ [] $V / #simd[$N] $T) -> Lane_Slice(T) {
+to_lane_slice :: proc (slice: $S/ [] $T) -> Lane_Slice(T) {
     result: Lane_Slice(T)
     result.p   = cast(lane_umm) raw_data(slice)
     result.len = cast(lane_u32) len(slice)
@@ -44,21 +37,18 @@ to_lane_array :: proc (array: $S/ [dynamic ]$T) -> Lane_Slice(T) {
     return result
 }
 
-////////////////////////////////////////////////
-
-lane_index :: proc { lane_index_scalar, _lane_index_simd, lane_index_array }
-lane_index_scalar :: proc (slice: Lane_Slice($T), index: lane_u32) -> Lane(T) 
-where !intrinsics.type_is_simd_vector(T) {
-    result: Lane(T)
-    result.p = slice.p + cast(lane_umm) index * size_of(T)
+lane_extract :: proc (lane: Lane($T), #any_int lane_index: u32) -> ^T {
+    ts := transmute([LaneWidth] ^T) lane.p
+    result := ts[lane_index]
     return result
 }
-_lane_index_simd :: proc (lane: Lane_Slice($V/  #simd[$N] $T), index: lane_u32, caller_location := #caller_location) -> Lane(T) {
-    when Lane_Slice_Checked {
-        assert(less_than(index, lane.len) == lane_true, loc = caller_location)
-    }
-    offset := cast(lane_umm) index * size_of(V)
-    result := Lane(T) { lane.p + offset }
+
+////////////////////////////////////////////////
+
+lane_index :: proc { lane_index_scalar, lane_index_array }
+lane_index_scalar :: proc (slice: Lane_Slice($T), index: lane_u32) -> Lane(T) {
+    result: Lane(T)
+    result.p = slice.p + cast(lane_umm) index * size_of(T)
     return result
 }
 lane_index_array :: proc (array: Lane([$N] $T), index: lane_u32, caller_location := #caller_location) -> Lane(T) {
@@ -121,19 +111,24 @@ where Has(T, first_member), Has(Field(T, first_member), member_of_first_member) 
 lane_gather :: proc { 
     lane_gather_no_mask,       lane_gather_mask,
     lane_gather_index_no_mask, lane_gather_index_mask,
-    lane_gather_v, 
+}
+
+lane_gather_v :: proc {
+    lane_gather_v_no_mask, lane_gather_v_mask, 
 }
 
 lane_gather_no_mask :: proc (lane: Lane($T)) -> #simd [LaneWidth] T {
     result := lane_gather_mask(lane, lane_true, T{})
     return result
 }
-lane_gather_mask :: proc (lane: Lane($T), mask: lane_u32, default: #simd [LaneWidth] T) -> #simd [LaneWidth] T {
+lane_gather_mask :: proc (lane: Lane($T), mask: lane_u32, default: #simd [LaneWidth] T) -> #simd [LaneWidth] T 
+where !intrinsics.type_is_sliceable(intrinsics.type_base_type(T)), !intrinsics.type_is_array(intrinsics.type_base_type(T)) {
     result := simd.gather(cast(lane_pmm) lane.p, default, mask)
     return result
 }
 
-lane_gather_index_no_mask :: proc (lane: Lane_Slice($T), index: lane_u32) -> #simd [LaneWidth] T {
+lane_gather_index_no_mask :: proc (lane: Lane_Slice($T), index: lane_u32) -> #simd [LaneWidth] T 
+where !intrinsics.type_is_array(T) {
     result := lane_gather_index_mask(lane, index, lane_true, T{})
     return result
 }
@@ -148,11 +143,19 @@ lane_gather_index_mask :: proc (lane: Lane_Slice($T), index: lane_u32, mask: lan
     return result
 }
 
-lane_gather_v :: proc (lane: Lane($T/ [$N] $E)) -> [N] #simd [LaneWidth] E {
+lane_gather_v_no_mask :: proc (lane: Lane($T/ [$N] $E)) -> [N] #simd [LaneWidth] E {
     result: [N] #simd [LaneWidth] E
     #no_bounds_check #unroll for channel_index in cast(u32) 0..<N {
         index : Lane(E) = lane_index(lane, cast(lane_u32) channel_index)
         result[channel_index] = lane_gather(index)
+    }
+    return result
+}
+lane_gather_v_mask :: proc (lane: Lane($T/ [$N] $E), mask: lane_u32, default: [N] #simd [LaneWidth] E) -> [N] #simd [LaneWidth] E {
+    result: [N] #simd [LaneWidth] E
+    #no_bounds_check #unroll for channel_index in cast(u32) 0..<N {
+        index : Lane(E) = lane_index(lane, cast(lane_u32) channel_index)
+        result[channel_index] = lane_gather(index, mask, default[channel_index])
     }
     return result
 }
@@ -162,11 +165,16 @@ lane_gather_v :: proc (lane: Lane($T/ [$N] $E)) -> [N] #simd [LaneWidth] E {
 lane_scatter :: proc { 
     lane_scatter_mask,
     lane_scatter_index,
+    lane_scatter_index_array,
 }
 lane_scatter_mask :: proc (lane: Lane($T), value: #simd [LaneWidth] T, mask: lane_u32 = lane_true) {
     simd.scatter(cast(lane_pmm) lane.p, value, mask)
 }
 lane_scatter_index :: proc (lane: Lane_Slice($T), index: lane_u32, value: #simd [LaneWidth] T, mask: lane_u32) {
+    element := lane_index(lane, index)
+    lane_scatter(element, value, mask)
+}
+lane_scatter_index_array :: proc (lane: Lane($A/[$N] $T), index: lane_u32, value: #simd [LaneWidth] T, mask: lane_u32) {
     element := lane_index(lane, index)
     lane_scatter(element, value, mask)
 }
