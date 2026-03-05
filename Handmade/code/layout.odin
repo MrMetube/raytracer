@@ -87,14 +87,15 @@ display_slider_v :: proc (layout: ^Layout, width: f32, value: ^$V/[$N] $E, min: 
 }
 
 display_slider :: proc (layout: ^Layout, width: f32, value: ^f32, min: f32, max: f32, format: string = "", args: ..any, flags : SliderFlags = {}) -> bool {
-    layout_begin_horizontal(layout)
+    wrap_horizontal := !layout.horizontal
+    if wrap_horizontal do layout_begin_horizontal(layout)
     if format != "" {
         display_line(layout, format, ..args)
         layout_advance(layout, 10)
     }
     
     result := display_slider_raw(layout, width, value, min, max, flags)
-    layout_end_horizontal(layout)
+    if wrap_horizontal do layout_end_horizontal(layout)
     return result
 }
 
@@ -131,14 +132,12 @@ display_slider_raw :: proc (layout: ^Layout, width: f32, value: ^f32, min: f32, 
     return result
 }
 
-display_line :: proc (layout: ^Layout, format: string, args: ..any) -> f32 {
+display_line :: proc (layout: ^Layout, format: string, args: ..any) {
     text := ctprint(format, ..args)
     size := rl.MeasureTextEx(layout.font, text, FontSize, 1)
     rl.DrawTextEx(layout.font, text, layout.at+2, FontSize, 1, rl.BLACK)
     rl.DrawTextEx(layout.font, text, layout.at, FontSize, 1, layout.text_color)
     layout_advance_2(layout, size)
-    
-    return size.x
 }
 
 display_list :: proc (layout: ^Layout, is_open: ^bool, format: string) -> bool {

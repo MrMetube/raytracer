@@ -108,6 +108,9 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, all_brdf_values: ^[d
 
 ////////////////////////////////////////////////
 
+Debug_View := 1
+Test_Threshold : f32 = 2000
+
 render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle2i, entropy: ^RandomSeries, rays_per_pixel, max_bounce_count: u32) {
     film_distance :: 1
     film_center := vec_cast(lane_f32, camera.p - film_distance * camera.z)
@@ -131,12 +134,20 @@ render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle
             film_x := -1 + 2 * cast(f32) px / image_size.x
             film_p := vec_cast(lane_f32, film_x, film_y)
             
-            color, bounces_now, loops_now := cast_rays(world, film_p, entropy, pixel_size, half_film_size, film_center, camera, rays_per_pixel, max_bounce_count)
+            color, bounces_now, loops_now, tests_now := cast_rays(world, film_p, entropy, pixel_size, half_film_size, film_center, camera, rays_per_pixel, max_bounce_count)
             
             bounces_computed += bounces_now
             loops_computed   += loops_now
             
             color = linear_to_srgb(color)
+            if Debug_View == 1 {
+                tests := cast(f32) tests_now / LaneWidth
+                color = tests / Test_Threshold
+                if tests > Test_Threshold {
+                    color = v3{1, 0, 0}
+                }
+            }
+            
             pixel := color_to_u8(color)
             
             pixel_index := (image.height - 1 - py) * image.width + px
@@ -162,11 +173,13 @@ Hit_Info :: struct {
     binormal:  lane_v3,
 }
 
-cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries,  pixel_size: lane_v2, half_film_size: lane_v2, film_center: lane_v3, camera: Camera, rays_per_pixel, max_bounce_count: u32) -> (final_color: v3, bounces_computed, loops_computed: u64) {
+cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries,  pixel_size: lane_v2, half_film_size: lane_v2, film_center: lane_v3, camera: Camera, rays_per_pixel, max_bounce_count: u32) -> (final_color: v3, bounces_computed, loops_computed, triangles_tested: u64) {
     spall_proc()
     final_color_lanes: lane_v3
+    
     bounces_computed_lanes: lane_u32
-    loops_computed_lanes: lane_u32
+    loops_computed_lanes:   lane_u32
+    triangles_tested_lanes: lane_u32
     
     lane_ray_count := rays_per_pixel / LaneWidth
     sample_contribution_factor := 1.0 / cast(f32) rays_per_pixel
@@ -240,9 +253,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                 local_nil_value_lanes_tested: [LaneWidth] u32
                 
                 nodes := world.triangle_nodes
-                // @todo(viktor): can this be a lane_u32 now?
-                values_len: lane_u32
-                traverse_tree_and_collect_values(values[:], &values_len, nodes[:], ray_o, ray_d, min_t, hit.closest_t)
+                values_len := traverse_tree_and_collect_values(values[:], nodes[:], ray_o, ray_d, min_t, hit.closest_t)
                 
                 spall_begin("values")
                 min_len := simd.reduce_min(values_len)
@@ -253,105 +264,95 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                 stat_update(&all_triangle_tests, simd.reduce_max(values_len) * LaneWidth)
                 
                 // @cleanup there is lots of duplicate code and lots of opportunity to compress
-                when false {
-                    for {
-                        mask := not_equal(values_len^, cast(lane_u32) min_len)
-                        if mask == lane_false do break
-                        conditional_assign(mask, values_len, values_len^-1)
-                        
-                        ee := lane_index(to_lane(values), values_len^)
-                        value_index := simd.gather(cast(lane_pmm) ee.p, cast(lane_u32) 0, mask)
-                        triangle := lane_index(triangles, value_index)
-                        hit_triangle(not_equal(value_index, 0), triangle, ray_o, ray_d, min_t, &hit)
-                        
-                        empties := horizontal_add(1 & equal(value_index, 0))
-                        #no_bounds_check local_nil_value_lanes_tested[empties] += 1
-                    }
-                } else {
-                    counts := values_len - min_len
-                    base := min_len
+                counts := values_len - min_len
+                base := min_len
+                values_len -= counts
+                
+                // @note(viktor): reduce each stack to the min_len by testing values x LaneWidth for each lane until all are flush.
+                for lane in 0..<LaneWidth {
+                    lane_hit: Hit_Info
+                    lane_hit.closest_t =    cast(lane_f32) extract(hit.closest_t, lane)
+                    lane_hit.did_hit   =    cast(lane_u32) extract(hit.did_hit, lane)
+                    lane_hit.material  =    cast(lane_u32) extract(hit.material, lane)
+                    lane_hit.next_o    = vec_cast(lane_f32, extract_v3(hit.next_o, lane))
+                    lane_hit.normal    = vec_cast(lane_f32, extract_v3(hit.normal, lane))
+                    lane_hit.tangent   = vec_cast(lane_f32, extract_v3(hit.tangent, lane))
+                    lane_hit.binormal  = vec_cast(lane_f32, extract_v3(hit.binormal, lane))
                     
-                    // @note(viktor): reduce each stack to the min_len by testing values x LaneWidth for each lane until all are flush.
-                    for lane in 0..<LaneWidth {
-                        lane_hit: Hit_Info
-                        lane_hit.closest_t =    cast(lane_f32) extract(hit.closest_t, lane)
-                        lane_hit.did_hit   =    cast(lane_u32) extract(hit.did_hit, lane)
-                        lane_hit.material  =    cast(lane_u32) extract(hit.material, lane)
-                        lane_hit.next_o    = vec_cast(lane_f32, extract_v3(hit.next_o, lane))
-                        lane_hit.normal    = vec_cast(lane_f32, extract_v3(hit.normal, lane))
-                        lane_hit.tangent   = vec_cast(lane_f32, extract_v3(hit.tangent, lane))
-                        lane_hit.binormal  = vec_cast(lane_f32, extract_v3(hit.binormal, lane))
+                    lane_ray_o := vec_cast(lane_f32, extract_v3(ray_o, lane))
+                    lane_ray_d := vec_cast(lane_f32, extract_v3(ray_d, lane))
+                    
+                    ////////////////////////////////////////////////
+                    
+                    count := extract(counts, lane)
+                    count_x8  := count / LaneWidth
+                    remainder := count % LaneWidth
+                    
+                    values := to_lane(values)
+                    
+                    for index in base..<base+count_x8 {
+                        lane_value_index := lane_index(lane_index(values, index + lane_offset), cast(lane_u32) lane)
                         
-                        lane_ray_o := vec_cast(lane_f32, extract_v3(ray_o, lane))
-                        lane_ray_d := vec_cast(lane_f32, extract_v3(ray_d, lane))
+                        value_index := lane_gather(lane_value_index)
                         
-                        ////////////////////////////////////////////////
+                        triangle := lane_index(triangles, cast(lane_u32) value_index)
+                        value_mask := not_equal(value_index, 0)
+                        triangles_tested_lanes += 1 & value_mask
+                        hit_triangle(value_mask, triangle, lane_ray_o, lane_ray_d, min_t, &lane_hit)
+                    }
+                    local_nil_value_lanes_tested[0] = count_x8
+                    
+                    ////////////////////////////////////////////////
+                    
+                    if remainder != 0 {
+                        local_nil_value_lanes_tested[LaneWidth-remainder] += 1
+                        index := base+count_x8
                         
-                        count := extract(counts, lane)
-                        count_x8  := count / LaneWidth
-                        remainder := count % LaneWidth
+                        load_mask := less_than(lane_offset, cast(lane_u32) remainder)
                         
-                        values := to_lane(values)
+                        lane := lane_index(lane_index(values, index + lane_offset), cast(lane_u32) lane)
+                        value_index := lane_gather_mask(lane, load_mask, 0)
                         
-                        for index in base..<base+count_x8 {
-                            lane_value_index := lane_index(lane_index(values, index + lane_offset), cast(lane_u32) lane)
-                            
-                            value_index := lane_gather(lane_value_index)
-                            
-                            triangle := lane_index(triangles, cast(lane_u32) value_index)
-                            hit_triangle(not_equal(value_index, 0), triangle, lane_ray_o, lane_ray_d, min_t, &lane_hit)
-                        }
-                        local_nil_value_lanes_tested[0] = count_x8
-                        
-                        ////////////////////////////////////////////////
-                        
-                        if remainder != 0 {
-                            local_nil_value_lanes_tested[LaneWidth-remainder] += 1
-                            index := base+count_x8
-                            
-                            value_mask := less_than(lane_offset, cast(lane_u32) remainder)
-                            
-                            lane := lane_index(lane_index(values, index + lane_offset), cast(lane_u32) lane)
-                            value_index := lane_gather_mask(lane, value_mask, 0)
-                            
-                            triangle := lane_index(triangles, cast(lane_u32) value_index)
-                            hit_triangle(not_equal(value_index, 0), triangle, lane_ray_o, lane_ray_d, min_t, &lane_hit)
-                        }
-                        
-                        ////////////////////////////////////////////////
-                        
-                        min_lane: int = -1
-                        min_closest_t := extract(hit.closest_t, lane)
-                        for n in 0..<LaneWidth {
-                            t := extract(lane_hit.closest_t, n)
-                            if min_closest_t > t {
-                                min_closest_t = t
-                                min_lane = n
-                            }
-                        }
-                        
-                        if min_lane != -1 {
-                            replace(&hit.closest_t,   lane, extract(lane_hit.closest_t, min_lane))
-                            replace(&hit.did_hit,     lane, extract(lane_hit.did_hit, min_lane))
-                            replace(&hit.material,    lane, extract(lane_hit.material, min_lane))
-                            replace_v3(&hit.next_o,   lane, extract_v3(lane_hit.next_o, min_lane))
-                            replace_v3(&hit.normal,   lane, extract_v3(lane_hit.normal, min_lane))
-                            replace_v3(&hit.tangent,  lane, extract_v3(lane_hit.tangent, min_lane))
-                            replace_v3(&hit.binormal, lane, extract_v3(lane_hit.binormal, min_lane))
+                        triangle := lane_index(triangles, cast(lane_u32) value_index)
+                        value_mask := not_equal(value_index, 0)
+                        triangles_tested_lanes += 1 & value_mask
+                        hit_triangle(value_mask, triangle, lane_ray_o, lane_ray_d, min_t, &lane_hit)
+                    }
+                    
+                    ////////////////////////////////////////////////
+                    
+                    min_lane: int = -1
+                    min_closest_t := extract(hit.closest_t, lane)
+                    for n in 0..<LaneWidth {
+                        t := extract(lane_hit.closest_t, n)
+                        if min_closest_t > t {
+                            min_closest_t = t
+                            min_lane = n
                         }
                     }
                     
-                    values_len -= counts
+                    if min_lane != -1 {
+                        replace(&hit.closest_t,   lane, extract(lane_hit.closest_t, min_lane))
+                        replace(&hit.did_hit,     lane, extract(lane_hit.did_hit, min_lane))
+                        replace(&hit.material,    lane, extract(lane_hit.material, min_lane))
+                        replace_v3(&hit.next_o,   lane, extract_v3(lane_hit.next_o, min_lane))
+                        replace_v3(&hit.normal,   lane, extract_v3(lane_hit.normal, min_lane))
+                        replace_v3(&hit.tangent,  lane, extract_v3(lane_hit.tangent, min_lane))
+                        replace_v3(&hit.binormal, lane, extract_v3(lane_hit.binormal, min_lane))
+                    }
                 }
+                
                 spall_end()
                 
+                // @speed this is a serial dependency chain on hit, measure if this is relevant.
                 spall_begin("values x8")
-                assert(values_len == min_len)
                 for min_len != 0 {
                     min_len -= 1
                     value_index := transmute(lane_Value_Index) values[min_len]
                     triangle := lane_index(triangles, transmute(lane_u32) value_index)
-                    hit_triangle(not_equal(value_index, 0), triangle, ray_o, ray_d, min_t, &hit)
+                    value_mask := not_equal(value_index, 0)
+                    triangles_tested_lanes += 1 & value_mask
+                    hit_triangle(value_mask, triangle, ray_o, ray_d, min_t, &hit)
                 }
                 spall_end()
                 
@@ -377,8 +378,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                 local_nil_value_lanes_tested: [LaneWidth] u32
                 
                 nodes := world.sphere_nodes
-                values_len: lane_u32
-                traverse_tree_and_collect_values(values[:], &values_len, nodes[:], ray_o, ray_d, min_t, hit.closest_t)
+                values_len := traverse_tree_and_collect_values(values[:], nodes[:], ray_o, ray_d, min_t, hit.closest_t)
                 
                 for lane in 0..<LaneWidth {
                     values_len := extract(values_len, lane)
@@ -447,41 +447,40 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
     
     bounces_computed = cast(u64) horizontal_add(bounces_computed_lanes)
     loops_computed   = cast(u64) horizontal_add(loops_computed_lanes)
+    triangles_tested = cast(u64) horizontal_add(triangles_tested_lanes)
     
     atomic_add(&world.all_triangle_tests.count, all_triangle_tests.count)
     atomic_add(&world.all_triangle_tests.sum,   all_triangle_tests.sum)
     atomic_add(&world.triangle_tests.count, triangle_tests.count)
     atomic_add(&world.triangle_tests.sum,   triangle_tests.sum)
     
-    return final_color, bounces_computed, loops_computed
+    return final_color, bounces_computed, loops_computed, triangles_tested
 }
 
 ////////////////////////////////////////////////
 
-traverse_tree_and_collect_values :: proc (values: [] [LaneWidth] Value_Index, _values_len: ^lane_u32, nodes: [] Tree_Node, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32) {
+traverse_tree_and_collect_values :: proc (values: [] [LaneWidth] Value_Index, nodes: [] Tree_Node, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32) -> (values_len: lane_u32) {
     if tree_is_empty(nodes) do return
     spall_proc()
     
-    nodes := to_lane(nodes)
+    nodes  := to_lane(nodes)
+    values := to_lane(values)
     
     inv_d := 1 / ray_d
     neg_inv_o := -(ray_o * inv_d)
     
-    stack: [64] [LaneWidth] Node_Index
-    stack_count: lane_u32
-    stack[0] = Root_Index
-    stack_count = 1
+    backing: [64] [LaneWidth] Node_Index
+    backing[0] = Root_Index
     
-    values_len := _values_len^
+    stack_count := cast(lane_u32) 1
+    stack := to_lane(backing[:])
     
     for stack_count != 0 {
-        stack := to_lane(stack[:])
-        stack_top := lane_index(lane_index(stack, stack_count-1), lane_offset)
-        
-        it_mask  := not_equal(stack_count, 0)
-        it_index := lane_gather(stack_top, it_mask, cast(lane_Node_Index) Nil_Index)
-        
+        it_mask := not_equal(stack_count, 0)
         conditional_assign(it_mask, &stack_count, stack_count-1)
+        stack_top := lane_index(lane_index(stack, stack_count), lane_offset)
+        
+        it_index := lane_gather(stack_top, it_mask, cast(lane_Node_Index) Nil_Index)
         
         node := lane_index(nodes, cast(lane_u32) it_index)
         min  := lane_gather_v(lane_member(node, "bounds", "min", v3))
@@ -491,18 +490,17 @@ traverse_tree_and_collect_values :: proc (values: [] [LaneWidth] Value_Index, _v
         hit_mask, _ := hit_rectangle(neg_inv_o, inv_d, min, max, min_t, max_t)
         if hit_mask == lane_false do continue
         
-        x0 := lane_index(lane_index(stack, stack_count+0), lane_offset)
-        x1 := lane_index(lane_index(stack, stack_count+1), lane_offset)
-        
         first_subnode := lane_gather(lane_member(node, "first_subnode", Node_Index))
         
         append_mask := hit_mask
         append_mask &= not_equal(cast(lane_u32) first_subnode, Nil_Index)
-        
-        lane_scatter(x0, first_subnode+0, append_mask)
-        lane_scatter(x1, first_subnode+1, append_mask)
-        
-        conditional_assign(append_mask, &stack_count, stack_count+2)
+        if append_mask != lane_false {
+            x0 := lane_index(lane_index(stack, stack_count+0), lane_offset)
+            x1 := lane_index(lane_index(stack, stack_count+1), lane_offset)
+            lane_scatter(x0, first_subnode+0, append_mask)
+            lane_scatter(x1, first_subnode+1, append_mask)
+            conditional_assign(append_mask, &stack_count, stack_count+2)
+        }
         
         first_value := lane_gather_mask(lane_member(node, "first_value", Value_Index), hit_mask, 0)
         value_count := lane_gather_mask(lane_member(node, "value_count", u16), hit_mask, 0)
@@ -510,19 +508,19 @@ traverse_tree_and_collect_values :: proc (values: [] [LaneWidth] Value_Index, _v
         value_index := first_value
         end         := first_value + cast(lane_Value_Index) value_count
         
-        mask := less_than(value_index, end)
-        values := to_lane(values)
-        for mask != 0 {
-            values_end := lane_index(values, values_len)
-            lane_scatter(values_end, lane_offset, value_index, mask)
+        for {
+            value_mask := less_than(value_index, end)
+            if value_mask == 0 do break
             
-            conditional_assign(mask, &values_len,  values_len+1)
-            conditional_assign(mask, &value_index, value_index+1)
-            mask = less_than(value_index, end)
+            values_end := lane_index(values, values_len)
+            lane_scatter(values_end, lane_offset, value_index, value_mask)
+            
+            conditional_assign(value_mask, &values_len,  values_len+1)
+            conditional_assign(value_mask, &value_index, value_index+1)
         }
     }
     
-    _values_len^ = values_len
+    return values_len
 }
 
 ////////////////////////////////////////////////
@@ -707,6 +705,7 @@ brdf_lookup :: proc (all_brdf_values: Lane_Slice(v3), materials: Lane_Slice(Mate
     i2 := round_positive(lane_u32, f2 * cast(lane_f32) (count[2]-1))
     
     indices := (i2) + (i1 * count[2]) + (i0 * count[2] * count[1])
+    // @todo(viktor): is this still relevant with the Lane ensuring some amount of type safety?
     // @todo(viktor): @important Before indices were interpreted as f32(stride=4), when correcting to v3(stride=12) the color of all surfaces is almost black. is this because i misused the brdfs or picked bad brdfs?
     indices = floor(lane_u32, cast(lane_f32) indices / 3)
     

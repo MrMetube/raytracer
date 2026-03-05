@@ -216,7 +216,8 @@ main :: proc() {
     show_materials: bool
     show_planes: bool
     show_spheres: bool
-    
+    quality_render_is_open: bool
+    fast_render_is_open: bool = true
     
     quality_render: Render
     fast_render:    Render
@@ -395,15 +396,32 @@ main :: proc() {
         layout_advance(layout, 10)
         
         layout_begin_horizontal(layout)
+            if display_button(layout, "Normal") do Debug_View = 0
+            layout_advance(layout, 10)
+            if display_button(layout, "Tests")  do Debug_View = 1
+        layout_end_horizontal(layout)
+        layout_advance(layout, 10)
+        
+        layout_begin_horizontal(layout)
+            display_slider(layout, 300, &Test_Threshold, 100, 100000, "Test Threshold", flags = { .logarithmic })
+            layout_advance(layout, 10)
+            display_line(layout, "%", view_magnitude(cast(u32) Test_Threshold, precision = 1))
+        layout_end_horizontal(layout)
+        layout_advance(layout, 10)
+        
+        layout_begin_horizontal(layout)
             display_toggle(layout, "Display Progress", &render_display_progress)
             layout_advance(layout, 10)
             display_toggle(layout, "Use Tree", &Use_Tree)
         layout_end_horizontal(layout)
+        layout_advance(layout, 10)
         
+        // @cleanup
         xx := !fast_image_is_focussed
-        display_render(layout, &quality_render, "Quality", &xx, window_size)
+        display_render(layout, &quality_render, "Quality", &quality_render_is_open, &xx, window_size)
         fast_image_is_focussed = !xx
-        display_render(layout, &fast_render, "Fast", &fast_image_is_focussed, window_size)
+        layout_advance(layout, 10)
+        display_render(layout, &fast_render, "Fast", &fast_render_is_open, &fast_image_is_focussed, window_size)
         layout_advance(layout, 10)
         
         // @todo(viktor): Rebuild the octtree if the spheres are edited in any way
@@ -508,78 +526,78 @@ main :: proc() {
 
 ////////////////////////////////////////////////
 
-display_render :: proc (layout: ^Layout, render: ^Render, name: string, focus: ^bool, window_size: v2i) { 
-    display_line(layout, name)
-    
-    layout_indent(layout)
-    defer layout_unindent(layout)
-    
-    layout_begin_horizontal(layout)
-        display_toggle(layout, "Render", &render.requested)
-        layout_advance(layout, 5)
-        condition := focus^
-        display_toggle(layout, "Focus", &condition)
-        focus^ ||= condition
-    layout_end_horizontal(layout)
-    
-    layout_begin_horizontal(layout)
-        if display_button(layout, "-") do render.rays_per_pixel /= 2 
-        layout_advance(layout, 5)
-        if display_button(layout, "+") do render.rays_per_pixel *= 2
-        layout_advance(layout, 5)
-        display_line(layout, "rays per_pixel %", render.rays_per_pixel)
-        render.rays_per_pixel = clamp(render.rays_per_pixel, LaneWidth, 2048)
-    layout_end_horizontal(layout)
-    
-    layout_begin_horizontal(layout)
-        if display_button(layout, "-") do render.max_bounce_count -= render.max_bounce_count <= 8 ? 1 : 2
-        layout_advance(layout, 5)
-        if display_button(layout, "+") do render.max_bounce_count += render.max_bounce_count  < 8 ? 1 : 2
-        render.max_bounce_count = clamp(render.max_bounce_count, 1, 16)
-        layout_advance(layout, 5)
-        display_line(layout, "bounces %", render.max_bounce_count)
-    layout_end_horizontal(layout)
+display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open, focus: ^bool, window_size: v2i) { 
+    if display_list(layout, is_open, name) {
+        layout_indent(layout)
+        defer layout_unindent(layout)
         
-    if !render.active {
         layout_begin_horizontal(layout)
-            before := render.image_size_factor
-            if display_button(layout, "-") do render.image_size_factor -= 1
+            display_toggle(layout, "Render", &render.requested)
             layout_advance(layout, 5)
-            if display_button(layout, "+") do render.image_size_factor += 1
-            render.image_size_factor = clamp(render.image_size_factor, 1, 32)
-            
-            if render.image_size_factor != before {
-                init_render_image(render, window_size)
-            }
-            layout_advance(layout, 5)
-            display_line(layout, "size factor %", render.image_size_factor)
+            // @cleanup
+            condition := focus^
+            display_toggle(layout, "Focus", &condition)
+            focus^ ||= condition
         layout_end_horizontal(layout)
-    } else {
-        layout_advance(layout, FontSize)
-    }
-    
-    layout_begin_horizontal(layout)
-        end := render.active ? time.now() : render.end
-        display_line(layout, "Render took: %", view_time_duration(time.diff(render.start, end), precision = 2))
         
-        if render.active && !work_is_completed(&render.queue){
-            total_pixels := render.image.width * render.image.height
-            done_percentage := cast(f32) render.world.pixels_done / cast(f32) total_pixels
+        layout_begin_horizontal(layout)
+            if display_button(layout, "-") do render.rays_per_pixel /= 2 
+            layout_advance(layout, 5)
+            if display_button(layout, "+") do render.rays_per_pixel *= 2
+            layout_advance(layout, 5)
+            display_line(layout, "rays per_pixel %", render.rays_per_pixel)
+            render.rays_per_pixel = clamp(render.rays_per_pixel, LaneWidth, 2048)
+        layout_end_horizontal(layout)
+        
+        layout_begin_horizontal(layout)
+            if display_button(layout, "-") do render.max_bounce_count -= render.max_bounce_count <= 8 ? 1 : 2
+            layout_advance(layout, 5)
+            if display_button(layout, "+") do render.max_bounce_count += render.max_bounce_count  < 8 ? 1 : 2
+            render.max_bounce_count = clamp(render.max_bounce_count, 1, 16)
+            layout_advance(layout, 5)
+            display_line(layout, "bounces %", render.max_bounce_count)
+        layout_end_horizontal(layout)
             
-            layout_advance(layout, 10)
-            bar_p := layout.at
-            bar_width  :: 300
-            bar_height := cast(f32) FontSize * 0.8
-            
-            rect     := rectangle_min_dimension(bar_p, v2{bar_width,                                             bar_height})
-            progress := rectangle_min_dimension(bar_p, v2{linear_blend(cast(f32) 0, bar_width, done_percentage), bar_height})
-            rl.DrawRectangleRec(to_rl_rect(rectangle_add_radius(rect, 1)), rl.BLACK)
-            rl.DrawRectangleLinesEx(to_rl_rect(rect), 2, rl.WHITE)
-            rl.DrawRectangleRec(to_rl_rect(progress), rl.WHITE)
-            layout_advance(layout, bar_width)
+        if !render.active {
+            layout_begin_horizontal(layout)
+                before := render.image_size_factor
+                if display_button(layout, "-") do render.image_size_factor -= 1
+                layout_advance(layout, 5)
+                if display_button(layout, "+") do render.image_size_factor += 1
+                render.image_size_factor = clamp(render.image_size_factor, 1, 32)
+                
+                if render.image_size_factor != before {
+                    init_render_image(render, window_size)
+                }
+                layout_advance(layout, 5)
+                display_line(layout, "size factor %", render.image_size_factor)
+            layout_end_horizontal(layout)
+        } else {
+            layout_advance(layout, FontSize)
         }
-    layout_end_horizontal(layout)
         
+        layout_begin_horizontal(layout)
+            end := render.active ? time.now() : render.end
+            display_line(layout, "Render took: %", view_time_duration(time.diff(render.start, end), precision = 2))
+            
+            if render.active && !work_is_completed(&render.queue){
+                total_pixels := render.image.width * render.image.height
+                done_percentage := cast(f32) render.world.pixels_done / cast(f32) total_pixels
+                
+                layout_advance(layout, 10)
+                bar_p := layout.at
+                bar_width  :: 300
+                bar_height := cast(f32) FontSize * 0.8
+                
+                rect     := rectangle_min_dimension(bar_p, v2{bar_width,                                             bar_height})
+                progress := rectangle_min_dimension(bar_p, v2{linear_blend(cast(f32) 0, bar_width, done_percentage), bar_height})
+                rl.DrawRectangleRec(to_rl_rect(rectangle_add_radius(rect, 1)), rl.BLACK)
+                rl.DrawRectangleLinesEx(to_rl_rect(rect), 2, rl.WHITE)
+                rl.DrawRectangleRec(to_rl_rect(progress), rl.WHITE)
+                layout_advance(layout, bar_width)
+            }
+        layout_end_horizontal(layout)
+    }
 }
 
 load_image_into_texture :: proc (texture: ^rl.Texture, image: Image) {
