@@ -123,6 +123,16 @@ linear_blend_e :: proc(from: $T, to: T, t: T) -> T  {
     return result
 }
 
+linear_remap :: proc (v: $T, old_from, old_to: T, new_from, new_to: T) -> T {
+    result: T
+    old_range := old_to - old_from
+    if old_range != 0 {
+        old_t := (v - old_from) / old_range
+        result = linear_blend(new_from, new_to, old_t)
+    }
+    return result
+}
+
 bilinear_blend :: proc { bilinear_blend_s, bilinear_blend_v }
 bilinear_blend_s :: proc (a: $T, b, c, d: T, t: [2] T) -> (result: T) {
     la := (1-t.y) * (1-t.x)

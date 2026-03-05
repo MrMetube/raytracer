@@ -3,6 +3,7 @@ package main
 import "core:os"
 import si "core:sys/info"
 import "core:time"
+import "core:fmt"
 
 import img "vendor:stb/image"
 import rl "vendor:raylib"
@@ -95,17 +96,14 @@ main :: proc () {
     
     ////////////////////////////////////////////////
     
-    Tree_Settings :: struct {
-        max_depth: u32
-    }
+    triangles_max_depth: u32 = 6
     
-    // @todo(viktor): make a plot of this: vary depth, min and max and create a csv, output is  inspection.values per node, node_count and depth
-    triangle_settings: Tree_Settings
-    triangle_settings.max_depth = 6
+    tree_build(context.temp_allocator, &world.sphere_nodes,   world.spheres[:],   6)
+    start := time.now()
+    tree_build(context.temp_allocator, &world.triangle_nodes, world.triangles[:], triangles_max_depth)
+    build_time := time.since(start)
     
-    sphere_info   := tree_build(context.temp_allocator, &world.sphere_nodes,   world.spheres[:],   6)
-    triangle_info := tree_build(context.temp_allocator, &world.triangle_nodes, world.triangles[:], triangle_settings.max_depth)
-    inspection := inspect(triangle_info, world.triangle_nodes[:])
+    inspection := inspect(world.triangle_nodes[:])
     {
         print_inspection(world.triangles[:], world.triangle_nodes[:], inspection)
         // print_node(world.triangle_nodes[:])
@@ -384,20 +382,25 @@ main :: proc () {
         {
             layout_indent(layout)
             
+            display_line(layout, "build took %", fmt.tprint(build_time))
             display_line(layout, "node count %", inspection.node_count)
             display_line(layout, "depth: max = %, avg = %", inspection.depth.max, view_float(inspection.depth.avg, precision = 2))
             display_line(layout, "values per node: max = %, avg = %", inspection.values_per_node.max, view_float(inspection.values_per_node.avg, precision = 2))
             layout_advance(layout, 10)
             
-            xx := cast(f32) triangle_settings.max_depth
+            xx := cast(f32) triangles_max_depth
             rebuild := false
             display_slider(layout, 200, &xx, 1, 16, "Desired Depth %",  round(u32, xx))
-            if triangle_settings.max_depth != round(u32, xx) do rebuild = true
-            triangle_settings.max_depth    = round(u32, xx)
+            if triangles_max_depth != round(u32, xx) do rebuild = true
+            triangles_max_depth    = round(u32, xx)
+            if display_button(layout, "rebuild") do rebuild = true
             
             if rebuild {
-                triangle_info = tree_build(context.temp_allocator, &world.triangle_nodes, world.triangles[:], triangle_settings.max_depth)
-                inspection = inspect(triangle_info, world.triangle_nodes[:])
+                start = time.now()
+                tree_build(context.temp_allocator, &world.triangle_nodes, world.triangles[:], triangles_max_depth)
+                build_time = time.since(start)
+                print("building tree took %\n", fmt.tprint(build_time))
+                inspection = inspect(world.triangle_nodes[:])
                 
                 fast_render.requested = true
             }
