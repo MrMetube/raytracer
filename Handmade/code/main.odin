@@ -1,7 +1,7 @@
 package main
 
-import os "core:os/os2"
-import os_old "core:os"
+import "core:os"
+import si "core:sys/info"
 import "core:time"
 
 import img "vendor:stb/image"
@@ -21,7 +21,9 @@ main :: proc() {
     
     init_spall()
     
-    core_count := cast(i32) os_old.processor_core_count() - 1
+    _, logical_core_count, ok := si.cpu_core_count()
+    assert(ok)
+    core_count := cast(i32) logical_core_count - 1
     
     world: World
     

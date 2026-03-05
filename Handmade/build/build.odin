@@ -1,6 +1,6 @@
 package build
 
-import os "core:os/os2"
+import "core:os"
 
 native   :: true
 optimize :: !false

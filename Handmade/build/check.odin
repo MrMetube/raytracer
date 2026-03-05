@@ -4,7 +4,7 @@ package build
 import "core:fmt"
 import "core:strings"
 import "core:terminal/ansi"
-import "core:os/os2"
+import "core:os"
 import "core:odin/ast"
 import "core:odin/parser"
 import "core:odin/tokenizer"
@@ -30,7 +30,7 @@ CheckContext :: struct {
 
 
 // @todo(viktor): This needs to be changed manually. A relative path makes to files map not work with the ast.node positions/files
-CodeDir       :: `D:\raytracer\Handmade\code`
+CodeDir       :: `D:\Archiv\raytracer\Handmade\code\`
 
 check_printlikes :: proc() -> (succes: b32) {
     using my_context: CheckContext
@@ -49,9 +49,9 @@ check_printlikes :: proc() -> (succes: b32) {
 collect_all_files :: proc(directory: string) {
     using my := cast(^CheckContext) context.user_ptr
     
-    fi, _ := os2.read_directory_by_path(directory, -1, context.allocator)
+    fi, _ := os.read_directory_by_path(directory, -1, context.allocator)
     for f in fi {
-        bytes, _ := os2.read_entire_file_from_path(f.fullpath, context.allocator)
+        bytes, _ := os.read_entire_file_from_path(f.fullpath, context.allocator)
         files[f.fullpath] = string(bytes)
     }
 }
