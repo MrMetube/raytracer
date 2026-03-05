@@ -1,11 +1,12 @@
 #+vet !unused-procedures
+#+no-instrumentation
 package main
 
 import "base:runtime"
 import "core:os"
 import "core:unicode/utf8"
 import "core:fmt"
-import "core:mem"
+import "shared"
 
 // @volatile This breaks if in the midst of a print we start another print on the same thread. we could use a cursor to know from where onwards we can use the buffer.
 @(thread_local) console_buffer: [128 * Megabyte] u8
@@ -20,7 +21,7 @@ print_to_console :: proc (format: string, args: ..any, flags: Format_Context_Fla
 
 // @todo(viktor): string and cstring is a bunch of @copypasta code, that sucks especially because all the format code changes is if it appends a zero at the end
 @(printlike)
-print_to_allocator :: proc (allocator: runtime.Allocator, format: string, args: ..any, flags: Format_Context_Flags = {}) -> (result: string) {
+print_to_allocator :: proc (allocator: Allocator, format: string, args: ..any, flags: Format_Context_Flags = {}) -> (result: string) {
     s := format_string(buffer = console_buffer[:], format = format, args = args, flags = flags)
     buffer := make([]u8, len(s), allocator)
     copy(buffer, s)
@@ -28,7 +29,7 @@ print_to_allocator :: proc (allocator: runtime.Allocator, format: string, args: 
     return result
 }
 @(printlike)
-cprint_to_allocator :: proc (allocator: runtime.Allocator, format: string, args: ..any, flags: Format_Context_Flags = {}) -> (result: cstring) {
+cprint_to_allocator :: proc (allocator: Allocator, format: string, args: ..any, flags: Format_Context_Flags = {}) -> (result: cstring) {
     s, length := format_cstring(buffer = console_buffer[:], format = format, args = args, flags = flags)
     buffer := make([]u8, length, allocator)
     copy(buffer, slice_from_parts(u8, cast(^u8) s, length))
@@ -288,8 +289,8 @@ Format_Context :: struct {
 ////////////////////////////////////////////////
 
 
-@(private="file") temp_view_arena:     mem.Arena
-@(private="file") temp_view_allocator: mem.Allocator
+@(private="file") temp_view_arena:     Arena
+@(private="file") temp_view_allocator: Allocator
 
 @(private="file") temp_view_buffer:       [1024] View
 @(private="file") temp_view_inside_block: bool
@@ -305,9 +306,7 @@ begin_temp_views :: proc (width: Maybe(u16) = nil) {
     
     if temp_view_allocator.procedure == nil {
         // @todo(viktor): find a better place for this
-        buffer := make([] u8, 64*4096, context.allocator)
-        mem.arena_init(&temp_view_arena, buffer)
-        temp_view_allocator = mem.arena_allocator(&temp_view_arena)
+        temp_view_allocator = arena_allocator(&temp_view_arena)
         assert(temp_view_allocator.procedure != nil)
     }
 }
@@ -325,8 +324,8 @@ append_temp_view :: proc (value: any) {
     info := type_info_of(view.value.id)
     
     size := info.size
-    copied := make([] u8, size, temp_view_allocator)
-    copy(copied, slice_from_parts(u8, view.value.data, size))
+    copied := make_slice(temp_view_allocator, [] u8, size)
+    copy(copied, slice_from_parts_type(u8, view.value.data, size))
     view.value.data = raw_data(copied)
     
     temp_view_buffer[temp_view_next_index] = view
@@ -362,33 +361,22 @@ format_string :: proc (buffer: []u8, format: string, args: ..any, flags := Forma
         max_depth = 8,
     }
     
-    // :PrintlikeChecking @volatile 
-    // the loop structure is copied in the metaprogram to check the arg count, any changes here need to be propagated to there
     arg_index: u32
-    start_of_text: int
-    for index: int; index < len(format); index += 1 {
-        if format[index] == '%' {
-            part := format[start_of_text:index]
-            if part != "" {
-                format_any(&ctx, part)
-            }
-            start_of_text = index+1
+    
+    for iter := shared.make_format_iterator(format); part in shared.iterate_format(&iter) {
+        switch part.kind {
+        case .Percent:
+            arg := args[arg_index]
+            arg_index += 1
+            format_any(&ctx, arg)
             
-            if index+1 < len(format) && format[index+1] == '%' {
-                index += 1
-                // @note(viktor): start_of_text now points at the percent sign and will append it next time saving processing one view
-            } else {
-                arg := args[arg_index]
-                arg_index += 1
-                
-                // @incomplete Would be ever want to display a raw View? if so put in a flag to make it use the normal path
-                format_any(&ctx, arg)
-            }
+        case .Escaped:
+            // @todo(viktor): maybe we could spare this invocation by joining the second % to the next Text
+            format_any(&ctx, "%")
+        case .Text:
+            format_any(&ctx, part.text)
         }
     }
-    
-    end := format[start_of_text:]
-    format_any(&ctx, end)
     
     assert(arg_index == auto_cast len(args))
     
@@ -432,7 +420,7 @@ format_any :: proc (ctx: ^Format_Context, arg: any) {
         // @todo(viktor): maybe do this myself
         buf, count := utf8.encode_rune(value)
         bytes := buf[:count]
-        append(&temp, transmute(string) bytes)
+        append_string(&temp, transmute(string) bytes)
         
       case string:    append(&temp, value)
       case cstring:   append(&temp, string(value))
@@ -692,7 +680,6 @@ format_float_with_ryu :: proc (dest: ^String_Builder, view: View) {
         }
     }
 }
-
 format_float_badly :: proc (dest: ^String_Builder, view: View) {
     when false {
         fraction, integer := fractional(float)

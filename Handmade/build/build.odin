@@ -11,7 +11,9 @@ main :: proc () {
     
     parse_run_and_debug_arguments()
     
-    if !check_printlikes() do os.exit(1)
+    metaprogram: Metaprogram
+    if !metaprogram_collect_files_and_parse_package(&metaprogram, "code", "main") do os.exit(1)
+    if !check_printlikes(&metaprogram, "main") do os.exit(1)
     
     if begin_build(cmd, "code", "ray.exe", .Kill) {
         build_meander()
