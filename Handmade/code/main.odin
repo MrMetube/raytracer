@@ -15,8 +15,7 @@ Use_Tree := true
 
 Is_Optimized :: ODIN_OPTIMIZATION_MODE == .Speed
 
-
-main :: proc() {
+main :: proc () {
     rl.SetTraceLogLevel(.WARNING)
     
     init_spall(output_name = tprint("trace_%_%", Is_Optimized ? "Optimized" : "Debug", LaneWidth))
@@ -83,7 +82,7 @@ main :: proc() {
         // append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
     } else {
         area_size := cast(f32) 5
-        append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 3 })
+        append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 6 })
         append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size-0.1}, radius = area_size/5, material = 3 })
         
         // append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
@@ -96,76 +95,32 @@ main :: proc() {
     
     ////////////////////////////////////////////////
     
-    reserve(&world.sphere_nodes,   len(world.spheres))
-    reserve(&world.triangle_nodes, len(world.triangles))
-    
-    sphere_bounds   := rectangle_inverted_infinity(Rectangle3)
-    triangle_bounds := rectangle_inverted_infinity(Rectangle3)
-    
-    for sphere, index_minus_one in world.spheres {
-        bounds := get_bounds(sphere)
-        sphere_bounds = rectangle_union(sphere_bounds, bounds)
-    }
-    for triangle, index_minus_one in world.triangles {
-        bounds := get_bounds(triangle)
-        triangle_bounds = rectangle_union(triangle_bounds, bounds)
+    Tree_Settings :: struct {
+        max_depth, min_values_per_node, max_values_per_node: u32
     }
     
-    sphere_info   := tree_init(&world.sphere_nodes,   1, sphere_bounds)
-    triangle_info := tree_init(&world.triangle_nodes, 8, triangle_bounds)
+    // @todo(viktor): make a plot of this: vary depth, min and max and create a csv, output is  inspection.values per node, node_count and depth
+    triangle_settings: Tree_Settings
+    triangle_settings.max_depth = 6
+    triangle_settings.min_values_per_node = 8
+    triangle_settings.max_values_per_node = 64
     
-    for sphere, value_index in world.spheres {
-        bounds := get_bounds(sphere)
-        tree_append(&sphere_info, &world.sphere_nodes, cast(Value_Index) value_index, bounds)
-    }
-    
-    for triangle, value_index in world.triangles {
-        bounds := get_bounds_triangle(triangle)
-        tree_append(&triangle_info, &world.triangle_nodes, cast(Value_Index) value_index, bounds)
-    }
-    
-    tree_finalize(&sphere_info, &world.sphere_nodes, world.spheres[:])
-    tree_finalize(&triangle_info, &world.triangle_nodes, world.triangles[:])
-    
+    sphere_info   := tree_build(context.temp_allocator, &world.sphere_nodes,   world.spheres[:],   6,  8, 64)
+    triangle_info := tree_build(context.temp_allocator, &world.triangle_nodes, world.triangles[:], triangle_settings.max_depth, triangle_settings.min_values_per_node, triangle_settings.max_values_per_node)
+    inspection := inspect(triangle_info, world.triangle_nodes[:])
     {
-        triangles_compacted := tree_compact(world.triangle_nodes[:], world.triangles[:])
-        spheres_compacted   := tree_compact(world.sphere_nodes[:], world.spheres[:])
-        print("compacting nodes - average size afterwards:\n")
-        if len(world.triangles) > 0 {
-            print("   triangles = % %%\n", view_percentage_ratio(triangles_compacted.avg))
-        }
-        if len(world.spheres) > 0 {
-            print("   spheres   = % %%\n", view_percentage_ratio(spheres_compacted.avg))
-        }
+        print_inspection(world.triangles[:], world.triangle_nodes[:], inspection)
+        // print_node(world.triangle_nodes[:])
     }
     
-    {
-        if len(world.triangles) > 0 {
-            inspection_t := inspect(triangle_info, world.triangle_nodes[:], Root_Index)
-            print("triangle tree info:\n")
-            print("            nodes: %\n", inspection_t.node_count)
-            print("            depth: max = %, avg = %\n", inspection_t.depth.max, view_float(inspection_t.depth.avg, precision = 2))
-            print("  values per node: max = %, avg = %\n", inspection_t.values_per_node.max, view_float(inspection_t.values_per_node.avg, precision = 2))
-            print("  values per node = %\n", triangle_info.values_per_node)
-            print("          density = % %%\n", 100 * cast(f64) inspection_t.values_per_node.sum / cast(f64) (inspection_t.node_count + inspection_t.values_per_node.sum))
-            print("     overfullness = % %%\n", 100 * cast(f64) inspection_t.overfull_nodes / cast(f64) (inspection_t.node_count))
-            print("\n")
-        }
-        
-        if len(world.spheres) > 0 {
-            inspection_s := inspect(sphere_info, world.sphere_nodes[:], Root_Index)
-            print("sphere tree info:\n")
-            print("            nodes: %\n", inspection_s.node_count)
-            print("            depth: max = %, avg = %\n", inspection_s.depth.max, view_float(inspection_s.depth.avg, precision = 2))
-            print("  values per node: max = %, avg = %\n", inspection_s.values_per_node.max, view_float(inspection_s.values_per_node.avg, precision = 2))
-            print("  values per node = %\n", sphere_info.values_per_node)
-            print("          density = % %%\n", 100 * cast(f64) inspection_s.values_per_node.sum / cast(f64) (inspection_s.node_count + inspection_s.values_per_node.sum))
-            print("     overfullness = % %%\n", 100 * cast(f64) inspection_s.overfull_nodes / cast(f64) (inspection_s.node_count))
-            print("\n")
-        }
-        
-        // print_node(world.triangle_nodes[:], 0, Root_Index)
-    }
+    //  2 476 ms
+    //  3 308 ms
+    //  4 194 ms
+    //  5 172 ms
+    //  6 154 ms
+    //  7 181 ms
+    //  8 248 ms
+    // 16   5 s 
     
     ////////////////////////////////////////////////
     
@@ -396,14 +351,16 @@ main :: proc() {
         layout_advance(layout, 10)
         
         layout_begin_horizontal(layout)
-            if display_button(layout, "Normal") do Debug_View = 0
+            if display_button_highlighted(layout, "Normal", Debug_View == 0) { Debug_View = 0; fast_render.requested = true }
             layout_advance(layout, 10)
-            if display_button(layout, "Tests")  do Debug_View = 1
+            if display_button_highlighted(layout, "Tests", Debug_View == 1)  { Debug_View = 1; fast_render.requested = true }
         layout_end_horizontal(layout)
         layout_advance(layout, 10)
         
         layout_begin_horizontal(layout)
-            display_slider(layout, 300, &Test_Threshold, 100, 100000, "Test Threshold", flags = { .logarithmic })
+            if display_slider(layout, 100, &Test_Threshold, 10, 10000, "Test Threshold", flags = { .logarithmic }) {
+                fast_render.requested = true
+            }
             layout_advance(layout, 10)
             display_line(layout, "%", view_magnitude(cast(u32) Test_Threshold, precision = 1))
         layout_end_horizontal(layout)
@@ -416,13 +373,50 @@ main :: proc() {
         layout_end_horizontal(layout)
         layout_advance(layout, 10)
         
-        // @cleanup
-        xx := !fast_image_is_focussed
-        display_render(layout, &quality_render, "Quality", &quality_render_is_open, &xx, window_size)
-        fast_image_is_focussed = !xx
+        if display_render(layout, &quality_render, "Quality", &quality_render_is_open, !fast_image_is_focussed, window_size) {
+            fast_image_is_focussed = false
+        }
         layout_advance(layout, 10)
-        display_render(layout, &fast_render, "Fast", &fast_render_is_open, &fast_image_is_focussed, window_size)
+        if display_render(layout, &fast_render, "Fast", &fast_render_is_open, fast_image_is_focussed, window_size) {
+            fast_image_is_focussed = true
+        }
         layout_advance(layout, 10)
+        
+        display_line(layout, "Tree")
+        {
+            layout_indent(layout)
+            
+            display_line(layout, "node count %", inspection.node_count)
+            display_line(layout, "depth: max = %, avg = %", inspection.depth.max, view_float(inspection.depth.avg, precision = 2))
+            display_line(layout, "values per node: max = %, avg = %", inspection.values_per_node.max, view_float(inspection.values_per_node.avg, precision = 2))
+            layout_advance(layout, 10)
+            
+            xx := cast(f32) triangle_settings.max_depth
+            yy := cast(f32) triangle_settings.min_values_per_node
+            zz := cast(f32) triangle_settings.max_values_per_node
+            
+            rebuild := false
+            display_slider(layout, 200, &xx, 1, 16, "Desired Depth %",  round(u32, xx))
+            display_slider(layout, 200, &yy, 1, zz, "Stop below % values", round(u32, yy))
+            display_slider(layout, 200, &zz, yy, 256, "Split above % values", round(u32, zz))
+            
+            if triangle_settings.max_depth           != round(u32, xx) do rebuild = true
+            if triangle_settings.min_values_per_node != round(u32, yy) do rebuild = true
+            if triangle_settings.max_values_per_node != round(u32, zz) do rebuild = true
+            
+            triangle_settings.max_depth           = round(u32, xx)
+            triangle_settings.min_values_per_node = round(u32, yy)
+            triangle_settings.max_values_per_node = round(u32, zz)
+            
+            if rebuild {
+                triangle_info = tree_build(context.temp_allocator, &world.triangle_nodes, world.triangles[:], triangle_settings.max_depth, triangle_settings.min_values_per_node, triangle_settings.max_values_per_node)
+                inspection = inspect(triangle_info, world.triangle_nodes[:])
+                
+                fast_render.requested = true
+            }
+            
+            layout_unindent(layout)
+        }
         
         // @todo(viktor): Rebuild the octtree if the spheres are edited in any way
         layout_advance(layout, FontSize)
@@ -526,7 +520,8 @@ main :: proc() {
 
 ////////////////////////////////////////////////
 
-display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open, focus: ^bool, window_size: v2i) { 
+display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open: ^bool, is_focused: bool, window_size: v2i) -> bool { 
+    result: bool
     if display_list(layout, is_open, name) {
         layout_indent(layout)
         defer layout_unindent(layout)
@@ -535,9 +530,9 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open,
             display_toggle(layout, "Render", &render.requested)
             layout_advance(layout, 5)
             // @cleanup
-            condition := focus^
+            condition := is_focused
             display_toggle(layout, "Focus", &condition)
-            focus^ ||= condition
+            result = !is_focused && condition == true
         layout_end_horizontal(layout)
         
         layout_begin_horizontal(layout)
@@ -586,7 +581,7 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open,
                 
                 layout_advance(layout, 10)
                 bar_p := layout.at
-                bar_width  :: 300
+                bar_width  :: 200
                 bar_height := cast(f32) FontSize * 0.8
                 
                 rect     := rectangle_min_dimension(bar_p, v2{bar_width,                                             bar_height})
@@ -598,6 +593,8 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open,
             }
         layout_end_horizontal(layout)
     }
+    
+    return result
 }
 
 load_image_into_texture :: proc (texture: ^rl.Texture, image: Image) {

@@ -158,6 +158,13 @@ display_button :: proc (layout: ^Layout, text: string, size := v2{}) -> bool {
     return result
 }
 
+display_button_highlighted :: proc (layout: ^Layout, text: string, highlighted: bool, size := v2{}) -> bool {
+    condition := highlighted
+    display_toggle(layout, text, &condition, size)
+    result := condition != highlighted
+    return result
+}
+
 display_toggle :: proc (layout: ^Layout, text: string, condition: ^bool, size := v2{}) -> bool {
     text := ctprint("%", text)
     size := size

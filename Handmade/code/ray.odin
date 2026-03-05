@@ -109,7 +109,7 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, all_brdf_values: ^[d
 ////////////////////////////////////////////////
 
 Debug_View := 1
-Test_Threshold : f32 = 2000
+Test_Threshold : f32 = 100
 
 render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle2i, entropy: ^RandomSeries, rays_per_pixel, max_bounce_count: u32) {
     film_distance :: 1
@@ -460,7 +460,6 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
 ////////////////////////////////////////////////
 
 traverse_tree_and_collect_values :: proc (values: [] [LaneWidth] Value_Index, nodes: [] Tree_Node, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32) -> (values_len: lane_u32) {
-    if tree_is_empty(nodes) do return
     spall_proc()
     
     nodes  := to_lane(nodes)
@@ -469,6 +468,7 @@ traverse_tree_and_collect_values :: proc (values: [] [LaneWidth] Value_Index, no
     inv_d := 1 / ray_d
     neg_inv_o := -(ray_o * inv_d)
     
+    // @volatile max tree depth
     backing: [64] [LaneWidth] Node_Index
     backing[0] = Root_Index
     
@@ -494,13 +494,11 @@ traverse_tree_and_collect_values :: proc (values: [] [LaneWidth] Value_Index, no
         
         append_mask := hit_mask
         append_mask &= not_equal(cast(lane_u32) first_subnode, Nil_Index)
-        if append_mask != lane_false {
-            x0 := lane_index(lane_index(stack, stack_count+0), lane_offset)
-            x1 := lane_index(lane_index(stack, stack_count+1), lane_offset)
-            lane_scatter(x0, first_subnode+0, append_mask)
-            lane_scatter(x1, first_subnode+1, append_mask)
-            conditional_assign(append_mask, &stack_count, stack_count+2)
-        }
+        x0 := lane_index(lane_index(stack, stack_count+0), lane_offset)
+        x1 := lane_index(lane_index(stack, stack_count+1), lane_offset)
+        lane_scatter(x0, first_subnode+0, append_mask)
+        lane_scatter(x1, first_subnode+1, append_mask)
+        conditional_assign(append_mask, &stack_count, stack_count+2)
         
         first_value := lane_gather_mask(lane_member(node, "first_value", Value_Index), hit_mask, 0)
         value_count := lane_gather_mask(lane_member(node, "value_count", u16), hit_mask, 0)

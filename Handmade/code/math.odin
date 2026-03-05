@@ -735,7 +735,7 @@ rectangle_add_offset :: proc(rect: $R/Rectangle($T), offset: T) -> (result: R) {
     return result
 }
 
-contains :: proc(rect: Rectangle($T), point: T) -> (result: bool) {
+rectangle_contains :: proc(rect: Rectangle($T), point: T) -> (result: bool) {
     result = true
     #no_bounds_check #unroll for i in 0..<len(T) {
         result &&= rect.min[i] <= point[i] && point[i] < rect.max[i] 
@@ -743,7 +743,7 @@ contains :: proc(rect: Rectangle($T), point: T) -> (result: bool) {
     return result
 }
 
-contains_inclusive :: proc(rect: Rectangle($T), point: T) -> (result: bool) {
+rectangle_contains_inclusive :: proc(rect: Rectangle($T), point: T) -> (result: bool) {
     result = true
     #no_bounds_check #unroll for i in 0..<len(T) {
         result &&= rect.min[i] <= point[i] && point[i] <= rect.max[i] 
@@ -759,7 +759,7 @@ dimension_contains :: proc(dimension: $V/[$N]$T, point: V) -> (result: bool) {
     return result
 }
 
-contains_rect :: proc(a: $R/Rectangle($T), b: R) -> (result: bool) {
+rectangle_contains_rect :: proc(a: $R/Rectangle($T), b: R) -> (result: bool) {
     u := rectangle_union(a, b)
     result = a == u
     return result
