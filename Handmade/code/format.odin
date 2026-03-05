@@ -289,13 +289,13 @@ Format_Context :: struct {
 ////////////////////////////////////////////////
 
 
-@(private="file") temp_view_arena:     Arena
-@(private="file") temp_view_allocator: Allocator
+@(private="file", thread_local) temp_view_arena:     Arena
+@(private="file", thread_local) temp_view_allocator: Allocator
 
-@(private="file") temp_view_buffer:       [1024] View
-@(private="file") temp_view_inside_block: bool
-@(private="file") temp_view_start_index:  u32
-@(private="file") temp_view_next_index:   u32
+@(private="file", thread_local) temp_view_buffer:       [1024] View
+@(private="file", thread_local) temp_view_inside_block: bool
+@(private="file", thread_local) temp_view_start_index:  u32
+@(private="file", thread_local) temp_view_next_index:   u32
 
 
 begin_temp_views :: proc (width: Maybe(u16) = nil) {

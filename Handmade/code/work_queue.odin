@@ -15,7 +15,7 @@ WorkQueue :: struct {
     next_entry_to_write, 
     next_entry_to_read:  u32,
     
-    entries: [4096]WorkQueueEntry,
+    entries: [4096] WorkQueueEntry,
     
     closed: bool,
     thread_count: u32,
@@ -56,14 +56,11 @@ init_work_queue :: proc(queue: ^WorkQueue, infos: []CreateThreadInfo) {
 
 close_work_queue_and_wait_for_threads :: proc (queue: ^WorkQueue) {
     queue.closed = true
-    dummy: int // @todo(viktor): make a version of enqueue work without a data
+    
+    complete_previous_writes_before_future_writes()
+    
     for queue.closed_thread_count != queue.opened_thread_count {
-        // @note(viktor): wake the threads, is there an easier way?
-        old_next_entry := queue.next_entry_to_write
-        new_next_entry := (old_next_entry + 1) % len(queue.entries)
-        if new_next_entry != queue.next_entry_to_read {
-            enqueue_work(queue, proc (_: ^int) {}, &dummy)
-        }
+        win.ReleaseSemaphore(queue.semaphore_handle, 1, nil)
     }
 }
 
@@ -80,7 +77,7 @@ enqueue_work_or_do_immediatly_any :: proc(queue: ^WorkQueue, callback: WorkQueue
 }
 
 enqueue_work :: proc { enqueue_work_t, enqueue_work_any }
-enqueue_work_t :: proc(queue: ^WorkQueue, callback: proc(data: ^$T), data: ^T) { enqueue_work_any(queue, auto_cast callback, data) }
+enqueue_work_t :: proc(queue: ^WorkQueue, callback: proc (data: ^$T), data: ^T) { enqueue_work_any(queue, auto_cast callback, data) }
 enqueue_work_any :: proc(queue: ^WorkQueue, callback: WorkQueueCallback, data: pmm) {
     old_next_entry := queue.next_entry_to_write
     new_next_entry := (old_next_entry + 1) % len(queue.entries)
@@ -143,9 +140,9 @@ worker_thread :: proc (parameter: pmm) {
     atomic_add(&queue.opened_thread_count, 1)
     
     for {
-        if do_next_work_queue_entry(queue) {
-            if queue.closed do break
-            
+        should_sleep := do_next_work_queue_entry(queue)
+        if queue.closed do break
+        if should_sleep {
             INFINITE :: transmute(win.DWORD) i32(-1)
             win.WaitForSingleObjectEx(queue.semaphore_handle, INFINITE, false)
         }

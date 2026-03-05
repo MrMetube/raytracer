@@ -19,7 +19,7 @@ Is_Optimized :: ODIN_OPTIMIZATION_MODE == .Speed
 main :: proc() {
     rl.SetTraceLogLevel(.WARNING)
     
-    init_spall()
+    init_spall(output_name = tprint("trace_%_%", Is_Optimized ? "Optimized" : "Debug", LaneWidth))
     
     _, logical_core_count, ok := si.cpu_core_count()
     assert(ok)
@@ -101,8 +101,6 @@ main :: proc() {
     
     sphere_bounds   := rectangle_inverted_infinity(Rectangle3)
     triangle_bounds := rectangle_inverted_infinity(Rectangle3)
-    
-    // @todo(viktor): can we get rid of the nil sphere and triangle by making the hit_xxx take the value and a valid mask, and if invalid, just "load" zeros itself 
     
     for sphere, index_minus_one in world.spheres {
         bounds := get_bounds(sphere)
@@ -475,7 +473,6 @@ main :: proc() {
                     display_line(layout, "Emit")
                     layout_advance(layout, 10)
                     
-                    // @todo(viktor): emittance could be larger than 1
                     color  := rl.ColorFromNormalized(V4(material.emit, 1))
                     before := color
                     size := to_rl_rect(rectangle_min_dimension(layout.at, color_size))

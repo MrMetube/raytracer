@@ -31,7 +31,6 @@ Debug_Platform_Memory_Stats :: struct {
 }
 
 Arena :: struct {
-    // @todo(viktor): if we see performance problems here, maybe move storage and used out?
     current_block: ^Platform_Memory_Block,
     
     temp_count: i32,

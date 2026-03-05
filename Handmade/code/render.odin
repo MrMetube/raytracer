@@ -48,7 +48,7 @@ World :: struct {
         loops_computed:   u64,
         tiles_retired:    u32,
         pixels_done:      u32,
-        nil_value_lanes_tested: [8] u32,
+        nil_value_lanes_tested: [LaneWidth] u32,
         
         // @note(viktor): only sum and count -> avg are valid
         all_triangle_tests, triangle_tests: Stat(u32),
@@ -155,7 +155,7 @@ print_render_results :: proc (world: ^World, start, end: time.Time) {
     bounces_computed := volatile_load(&world.bounces_computed)
     loops_computed   := volatile_load(&world.loops_computed)
     wasted_bounces   := loops_computed - bounces_computed
-    nanoseconds := time.duration_nanoseconds(total_time) / cast(i64) bounces_computed
+    nanoseconds := safe_ratio_or_zero(time.duration_nanoseconds(total_time), cast(i64) bounces_computed)
     print("Raycasting time: %s\n  bounces %\n  total bounces %\n  wasted bounces % (% %%)\n  time per ray %\n", 
         time.duration_seconds(total_time), 
         view_magnitude(bounces_computed), 
@@ -180,7 +180,7 @@ print_render_results :: proc (world: ^World, start, end: time.Time) {
     }
     print("]\n")
     
-    print("  Wasted lanes: % % %%\n", view_magnitude(wasted_lanes), view_percentage_ratio(safe_ratio_or_zero(cast(f64) wasted_lanes, cast(f64) (total_lanes * 8))))
+    print("  Wasted lanes: % % %%\n", view_magnitude(wasted_lanes), view_percentage_ratio(safe_ratio_or_zero(cast(f64) wasted_lanes, cast(f64) (total_lanes * LaneWidth))))
     
     {
         tests := &world.triangle_tests

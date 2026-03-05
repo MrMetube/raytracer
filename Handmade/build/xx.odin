@@ -11,7 +11,6 @@ import win "core:sys/windows"
 ////////////////////////////////////////////////
 
 // @todo(viktor): 
-// integrate with vscode shortcuts
 // readd renderdoc, and maybe simplify it
 // windows subsystem: "-subsystem:windows", "-subsystem:console"
 
@@ -305,7 +304,6 @@ handle_running_exe_gracefully :: proc (exe_name: string, handling: Handle_Runnin
 
 ////////////////////////////////////////////////
 
-// @todo(viktor): Find where the version where I could also pass os.stdin/stdout here
 Command_Console :: union {
     ^string,
     ^os.File,

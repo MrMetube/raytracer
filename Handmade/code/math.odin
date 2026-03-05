@@ -58,6 +58,7 @@ when LaneWidth == 1 {
 
 lane_false :: cast(lane_u32) 0
 lane_true  :: cast(lane_u32) 0xffff_ffff
+lane_offset :: lane_u32{0, 1, 2, 3, 4, 5, 6, 7} when LaneWidth == 8 else ( lane_u32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15} when LaneWidth == 16 else lane_u32{0, 1, 2, 3})
 lane_false_64 :: cast(lane_u64) 0
 lane_true_64  :: cast(lane_u64) 0xffff_ffff_ffff_ffff
 
