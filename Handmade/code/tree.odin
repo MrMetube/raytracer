@@ -3,12 +3,16 @@ package main
 Node_Index  :: distinct u16
 Value_Index :: distinct u32
 
+
 Tree_Node :: struct #align(32) {
     bounds:        Rectangle3,
-    first_value:   Value_Index,
-    value_count:   u16,
-    // @note(viktor): the other one must follow directly after the first
-    first_subnode: Node_Index,
+    // @note(viktor): if value_count == 0 then its subnode, else its value
+    value_count: u32,
+    first: struct #raw_union {
+        value:   Value_Index,
+        // @note(viktor): the other one must follow directly after the first
+        subnode: Node_Index,
+    },
 }
 
 Nil_Index  :: 0
@@ -28,7 +32,6 @@ tree_append_value :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Tree_Node, n
     assert(ok)
     append(values, value_index)
     node := &tree[node_index]
-    node.value_count += 1
 }
 
 tree_append_node :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Tree_Node, bounds: Rectangle3) {
@@ -37,7 +40,7 @@ tree_append_node :: proc (info: ^Tree_Build_Info, tree: ^[dynamic] Tree_Node, bo
     info.values[node_index] = make_dynamic_array(info.allocator, [dynamic] Value_Index, 0, 4)
 }
 
-tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: [] $Value, max_depth, min_values_per_node, max_values_per_node: u32) -> Tree_Build_Info {
+tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: [] $Value, max_depth: u32) -> Tree_Build_Info {
     clear(tree)
     
     // @cleanup
@@ -70,18 +73,13 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
     
     for len(stack) > 0 {
         it_index := pop(stack)
-        depth := pop(depths)
+        depth    := pop(depths)
+        if depth >= max_depth do continue
         
         node := &tree[it_index]
-        if cast(u32) node.value_count < max_values_per_node {
-            if depth >= max_depth do continue
-        }
-            
-        if cast(u32) node.value_count < min_values_per_node do continue
-        
         sub_bounds := tree_sub_bounds(node)
         
-        node.first_subnode = cast(Node_Index) len(tree)
+        node.first.subnode = cast(Node_Index) len(tree)
         tree_append_node(&info, tree, sub_bounds[0])
         // @cleanup tree may have been reallocated
         node = &tree[it_index]
@@ -92,12 +90,19 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
         node_values, ok := &info.values[it_index]
         assert(ok)
         for value_index in node_values {
+            // @waste we only need the split point
+            // @speed use the surface-area-heuristic, to get a better split point than .5
+            // do this along all axis and select the minimal split along that axis
+            // Cost = surface_of_a * value_count_of_a + surface_of_b * value_count_of_b
+            // do a fixed amount of random samples and select the minimal value
+            // @speed we can probably do test in parallel by doing it LaneWide
+            // Do not split if the cost of the split is greater than the cost of the node itself
             value_bounds := get_bounds(values[value_index])
             
-            into_index := node.first_subnode+1
+            into_index := node.first.subnode+1
             center := rectangle_get_center(value_bounds)
             if rectangle_contains_inclusive(sub_bounds[0], center) {
-                into_index = node.first_subnode+0
+                into_index = node.first.subnode+0
             } else {
                 assert(rectangle_contains_inclusive(sub_bounds[1], center))
             }
@@ -106,8 +111,8 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
         clear(node_values)
         node.value_count = 0
         
-        append(stack, node.first_subnode+0)
-        append(stack, node.first_subnode+1)
+        append(stack, node.first.subnode+0)
+        append(stack, node.first.subnode+1)
         append(depths, depth+1)
         append(depths, depth+1)
     }
@@ -131,11 +136,12 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
         assert(ok)
         
         node.bounds = rectangle_inverted_infinity(Rectangle3)
-        node.value_count = cast(u16) len(value_indices)
+        node.value_count = cast(u32) len(value_indices)
         if node.value_count != 0 {
-            node.first_value = next_free_index
+            node.first.value = next_free_index
+            
             for buffer_index, offset in value_indices {
-                value_index := node.first_value + cast(Value_Index) offset
+                value_index := node.first.value + cast(Value_Index) offset
                 assert(values[value_index] == {})
                 value := buffer[buffer_index]
                 values[value_index] = value
@@ -143,13 +149,15 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
                 value_bounds := get_bounds(value)
                 node.bounds = rectangle_union(node.bounds, value_bounds)
             }
+            
             next_free_index += cast(Value_Index) node.value_count
+        } else {
+            if node.first.subnode != Nil_Index {
+                append(stack, node.first.subnode+0)
+                append(stack, node.first.subnode+1)
+            }
         }
         
-        if node.first_subnode != Nil_Index {
-            append(stack, node.first_subnode+0)
-            append(stack, node.first_subnode+1)
-        }
     }
     
     assert(next_free_index == cast(Value_Index) len(buffer))
@@ -234,11 +242,11 @@ inspect :: proc (info: Tree_Build_Info, nodes: [] Tree_Node, it_index: Node_Inde
     result: Tree_Info
     
     result.depth = stat_init(depth)
-    result.values_per_node = stat_init(cast(u32) value_count)
+    result.values_per_node = stat_init(value_count)
     result.node_count = 1
     
-    if it.first_subnode != Nil_Index {
-        for sub_index in it.first_subnode..< it.first_subnode + Subnodes_Per_Node {
+    if it.value_count == 0 && it.first.subnode != Nil_Index {
+        for sub_index in it.first.subnode..< it.first.subnode + Subnodes_Per_Node {
             sub_info := inspect(info, nodes, sub_index, depth + 1)
             
             result.node_count += sub_info.node_count

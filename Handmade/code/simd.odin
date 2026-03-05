@@ -108,27 +108,20 @@ where Has(T, first_member), Has(Field(T, first_member), member_of_first_member) 
 
 ////////////////////////////////////////////////
 
-lane_gather :: proc { 
-    lane_gather_no_mask,       lane_gather_mask,
-    lane_gather_index_no_mask, lane_gather_index_mask,
-}
-
-lane_gather_v :: proc {
-    lane_gather_v_no_mask, lane_gather_v_mask, 
-}
+lane_gather       :: proc { lane_gather_no_mask,       lane_gather_mask       }
+lane_gather_index :: proc { lane_gather_index_no_mask, lane_gather_index_mask }
+lane_gather_v     :: proc { lane_gather_v_no_mask,     lane_gather_v_mask     }
 
 lane_gather_no_mask :: proc (lane: Lane($T)) -> #simd [LaneWidth] T {
     result := lane_gather_mask(lane, lane_true, T{})
     return result
 }
-lane_gather_mask :: proc (lane: Lane($T), mask: lane_u32, default: #simd [LaneWidth] T) -> #simd [LaneWidth] T 
-where !intrinsics.type_is_sliceable(intrinsics.type_base_type(T)), !intrinsics.type_is_array(intrinsics.type_base_type(T)) {
+lane_gather_mask :: proc (lane: Lane($T), mask: lane_u32, default: #simd [LaneWidth] T) -> #simd [LaneWidth] T {
     result := simd.gather(cast(lane_pmm) lane.p, default, mask)
     return result
 }
 
-lane_gather_index_no_mask :: proc (lane: Lane_Slice($T), index: lane_u32) -> #simd [LaneWidth] T 
-where !intrinsics.type_is_array(T) {
+lane_gather_index_no_mask :: proc (lane: Lane_Slice($T), index: lane_u32) -> #simd [LaneWidth] T {
     result := lane_gather_index_mask(lane, index, lane_true, T{})
     return result
 }

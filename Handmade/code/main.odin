@@ -96,17 +96,15 @@ main :: proc () {
     ////////////////////////////////////////////////
     
     Tree_Settings :: struct {
-        max_depth, min_values_per_node, max_values_per_node: u32
+        max_depth: u32
     }
     
     // @todo(viktor): make a plot of this: vary depth, min and max and create a csv, output is  inspection.values per node, node_count and depth
     triangle_settings: Tree_Settings
     triangle_settings.max_depth = 6
-    triangle_settings.min_values_per_node = 8
-    triangle_settings.max_values_per_node = 64
     
-    sphere_info   := tree_build(context.temp_allocator, &world.sphere_nodes,   world.spheres[:],   6,  8, 64)
-    triangle_info := tree_build(context.temp_allocator, &world.triangle_nodes, world.triangles[:], triangle_settings.max_depth, triangle_settings.min_values_per_node, triangle_settings.max_values_per_node)
+    sphere_info   := tree_build(context.temp_allocator, &world.sphere_nodes,   world.spheres[:],   6)
+    triangle_info := tree_build(context.temp_allocator, &world.triangle_nodes, world.triangles[:], triangle_settings.max_depth)
     inspection := inspect(triangle_info, world.triangle_nodes[:])
     {
         print_inspection(world.triangles[:], world.triangle_nodes[:], inspection)
@@ -392,24 +390,13 @@ main :: proc () {
             layout_advance(layout, 10)
             
             xx := cast(f32) triangle_settings.max_depth
-            yy := cast(f32) triangle_settings.min_values_per_node
-            zz := cast(f32) triangle_settings.max_values_per_node
-            
             rebuild := false
             display_slider(layout, 200, &xx, 1, 16, "Desired Depth %",  round(u32, xx))
-            display_slider(layout, 200, &yy, 1, zz, "Stop below % values", round(u32, yy))
-            display_slider(layout, 200, &zz, yy, 256, "Split above % values", round(u32, zz))
-            
-            if triangle_settings.max_depth           != round(u32, xx) do rebuild = true
-            if triangle_settings.min_values_per_node != round(u32, yy) do rebuild = true
-            if triangle_settings.max_values_per_node != round(u32, zz) do rebuild = true
-            
-            triangle_settings.max_depth           = round(u32, xx)
-            triangle_settings.min_values_per_node = round(u32, yy)
-            triangle_settings.max_values_per_node = round(u32, zz)
+            if triangle_settings.max_depth != round(u32, xx) do rebuild = true
+            triangle_settings.max_depth    = round(u32, xx)
             
             if rebuild {
-                triangle_info = tree_build(context.temp_allocator, &world.triangle_nodes, world.triangles[:], triangle_settings.max_depth, triangle_settings.min_values_per_node, triangle_settings.max_values_per_node)
+                triangle_info = tree_build(context.temp_allocator, &world.triangle_nodes, world.triangles[:], triangle_settings.max_depth)
                 inspection = inspect(triangle_info, world.triangle_nodes[:])
                 
                 fast_render.requested = true

@@ -490,31 +490,42 @@ traverse_tree_and_collect_values :: proc (values: [] [LaneWidth] Value_Index, no
         hit_mask, _ := hit_rectangle(neg_inv_o, inv_d, min, max, min_t, max_t)
         if hit_mask == lane_false do continue
         
-        first_subnode := lane_gather(lane_member(node, "first_subnode", Node_Index))
+        value_count := lane_gather_mask(lane_member(node, "value_count", u32), hit_mask, 0)
+        has_subnodes := equal(value_count, 0)
+        has_subnodes &= hit_mask
+        has_values   := ~has_subnodes
+        has_values   &= hit_mask
         
-        append_mask := hit_mask
-        append_mask &= not_equal(cast(lane_u32) first_subnode, Nil_Index)
-        x0 := lane_index(lane_index(stack, stack_count+0), lane_offset)
-        x1 := lane_index(lane_index(stack, stack_count+1), lane_offset)
-        lane_scatter(x0, first_subnode+0, append_mask)
-        lane_scatter(x1, first_subnode+1, append_mask)
-        conditional_assign(append_mask, &stack_count, stack_count+2)
+        first := lane_member(node, "first", type_of(Tree_Node{}.first))
+        // @speed these values are the same, except for which mask they use
+        first_subnode := lane_gather_mask(lane_member(first, "subnode", Node_Index),  has_subnodes, Nil_Index)
+        first_value   := lane_gather_mask(lane_member(first, "value",   Value_Index), has_values,   0)
+        has_subnodes  &= not_equal(cast(lane_u32) first_subnode, Nil_Index)
         
-        first_value := lane_gather_mask(lane_member(node, "first_value", Value_Index), hit_mask, 0)
-        value_count := lane_gather_mask(lane_member(node, "value_count", u16), hit_mask, 0)
+        if has_subnodes != lane_false {
+            // @speed test both children and append the closest one first
+            // that also requires that we check values inline and not afterwards. which is fine if we reduce value counts drastically with this.
+            x0 := lane_index(lane_index(stack, stack_count+0), lane_offset)
+            x1 := lane_index(lane_index(stack, stack_count+1), lane_offset)
+            lane_scatter(x0, first_subnode+0, has_subnodes)
+            lane_scatter(x1, first_subnode+1, has_subnodes)
+            conditional_assign(has_subnodes, &stack_count, stack_count+2)
+        }
         
-        value_index := first_value
-        end         := first_value + cast(lane_Value_Index) value_count
-        
-        for {
-            value_mask := less_than(value_index, end)
-            if value_mask == 0 do break
+        if has_values != lane_false {
+            value_index := first_value
+            end         := first_value + cast(lane_Value_Index) value_count
             
-            values_end := lane_index(values, values_len)
-            lane_scatter(values_end, lane_offset, value_index, value_mask)
-            
-            conditional_assign(value_mask, &values_len,  values_len+1)
-            conditional_assign(value_mask, &value_index, value_index+1)
+            for {
+                value_mask := less_than(value_index, end)
+                if value_mask == 0 do break
+                
+                values_end := lane_index(values, values_len)
+                lane_scatter(values_end, lane_offset, value_index, value_mask)
+                
+                conditional_assign(value_mask, &values_len,  values_len+1)
+                conditional_assign(value_mask, &value_index, value_index+1)
+            }
         }
     }
     
