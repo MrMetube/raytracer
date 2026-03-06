@@ -91,6 +91,10 @@ main :: proc () {
         // append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 5 })
         // append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
         
+        // 0 =   3488 triangles
+        // 1 =  19480 triangles, 5.5x 0
+        // 2 = 145620 triangles, 7.5x 1
+        
         load_teapot(&world.triangles, 0, 4)
     }
     

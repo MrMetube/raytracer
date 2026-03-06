@@ -27,12 +27,18 @@ Subnodes_Per_Node :: 2
 tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: [] $Value, max_depth: u32) {
     clear(tree)
     
-    values_bounds := make_dynamic_array(allocator, [dynamic] Rectangle3, 0, len(values))
     append_nothing(tree) // nil
     append_nothing(tree) // root
     if len(values) == 0 do return
     
     ////////////////////////////////////////////////
+    
+    Value_Info :: struct {
+        bounds: Rectangle3,
+        center: v3,
+    }
+        
+    value_infos := make_slice(allocator, [] Value_Info, len(values))
     
     root := &tree[Root_Index]
     root.bounds = rectangle_inverted_infinity(Rectangle3)
@@ -40,10 +46,11 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
     root_values := make_slice(allocator, [] Value_Index, len(values))
     for value_index in cast(Value_Index) 0 ..< cast(Value_Index) len(values) {
         value_bounds := get_bounds(values[value_index])
-        append(&values_bounds, value_bounds)
+        center := rectangle_get_center(value_bounds)
         
         root.bounds = rectangle_union(root.bounds, value_bounds)
         root_values[value_index] = value_index
+        value_infos[value_index] = { value_bounds, center }
     }
     
     root_area_half: f32
@@ -66,13 +73,13 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
     stack  := &_stack
     
     append(stack, Node_Info { Root_Index, root_cost, 0, root_values })
-        
+    
+    temp_node_values := make_slice(allocator, [] Value_Index, len(values))
+    
     for len(stack) > 0 {
         it := pop(stack)
         
         node := &tree[it.index]
-        
-        node_values := it.node_values
         
         // @speed we can probably do tests in parallel by doing it LaneWide
         
@@ -83,62 +90,56 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
         best_split_point: f32
         best_split_axis: int
         // @waste we make a second buffer, take two slices of it and throw away the original
-        best_node_values := make_slice(allocator, [] Value_Index, len(node_values))
+        best_node_values := temp_node_values[:len(it.node_values)]
         
         // @todo(viktor): reduce this to something reasonable once we have bigger, or just more models
         attempts :: 16384
         for split_axis in 0..<3 {
             Data :: struct {
                 split_axis: int,
-                values_bounds: [] Rectangle3,
+                value_infos: [] Value_Info,
             }
             
-            data := Data { split_axis, values_bounds[:] }
-            slice.sort_by_with_data(node_values[:], proc(a, b: Value_Index, data_p: pmm) -> bool {
+            data := Data { split_axis, value_infos[:] }
+            slice.sort_by_with_data(it.node_values, proc (a, b: Value_Index, data_p: pmm) -> bool {
                 data := cast(^Data) data_p
-                a_center := rectangle_get_center(data.values_bounds[a])
-                b_center := rectangle_get_center(data.values_bounds[b])
+                a_center := data.value_infos[a].center
+                b_center := data.value_infos[b].center
                 
                 return a_center[data.split_axis] < b_center[data.split_axis]
             }, &data)
             
+            dimension := rectangle_get_dimension(node.bounds)
             for i in 0 ..< attempts {
                 split_point := linear_remap(cast(f32) i, -1, attempts, 0, 1)
                 
-                dimension := rectangle_get_dimension(node.bounds)
-                a_area_half, b_area_half: f32
-                {
-                    a_dim := dimension
-                    a_dim[split_axis] *= split_point
-                    a_area_half = a_dim.y * a_dim.z + a_dim.x * a_dim.z + a_dim.x * a_dim.y
-                }
-                {
-                    b_dim := dimension
-                    b_dim[split_axis] *= (1-split_point)
-                    b_area_half = b_dim.y * b_dim.z + b_dim.x * b_dim.z + b_dim.x * b_dim.y
-                }
+                a_dim := dimension
+                b_dim := dimension
+                a_dim[split_axis] *= split_point
+                b_dim[split_axis] *= (1-split_point)
+                a_area_half := a_dim.y * a_dim.z + a_dim.x * a_dim.z + a_dim.x * a_dim.y
+                b_area_half := b_dim.y * b_dim.z + b_dim.x * b_dim.z + b_dim.x * b_dim.y
+                
                 middle := linear_blend(node.bounds.min[split_axis], node.bounds.max[split_axis], split_point)
                 
+                node_count := cast(u32) len(it.node_values)
+                
+                // @note(viktor): binary search the sorted node_values
                 a_count: u32
-                {
-                    left: u32
-                    for right := cast(u32) len(node_values); left < right; {
-                        it_index := (left + right) / 2
-                        
-                        value_index  := node_values[it_index]
-                        value_bounds := values_bounds[value_index]
-                        center := rectangle_get_center(value_bounds)
-                        
-                        if center[split_axis] < middle {
-                            left = it_index + 1
-                        } else {
-                            right = it_index
-                        }
-                    }
+                for right := node_count; a_count < right; {
+                    it_index := (a_count + right) / 2
                     
-                    a_count = left
+                    value_index  := it.node_values[it_index]
+                    value_bounds := value_infos[value_index]
+                    center       := value_bounds.center
+                    
+                    if center[split_axis] < middle {
+                        a_count = it_index + 1
+                    } else {
+                        right = it_index
+                    }
                 }
-                b_count := cast(u32) len(node_values) -  cast(u32) a_count
+                b_count := node_count - a_count
                 
                 a_cost := a_area_half * cast(f32) a_count
                 b_cost := b_area_half * cast(f32) b_count
@@ -147,7 +148,7 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
                 if min_cost > cost {
                     min_cost = cost
                     
-                    copy(best_node_values, node_values[:])
+                    copy(best_node_values, it.node_values)
                     best_a_count = a_count
                     
                     min_a_cost = a_cost
@@ -159,6 +160,8 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
         }
         
         if min_cost < it.cost {
+            copy(it.node_values, best_node_values)
+            
             middle := linear_blend(node.bounds.min[best_split_axis], node.bounds.max[best_split_axis], best_split_point)
             
             a_bounds := node.bounds
@@ -168,15 +171,14 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
             
             node.first.subnode = cast(Node_Index) len(tree)
             
-            sub_a_values := best_node_values[:best_a_count]
-            sub_b_values := best_node_values[best_a_count:]
+            sub_a_values := it.node_values[:best_a_count]
+            sub_b_values := it.node_values[best_a_count:]
             
             append(tree, Tree_Node { bounds = a_bounds })
             append(tree, Tree_Node { bounds = b_bounds })
             
             // @cleanup tree may have been reallocated
             node = &tree[it.index]
-            delete(it.node_values, allocator)
             
             if it.depth+1 < max_depth {
                 append(stack, Node_Info { node.first.subnode+0, min_a_cost, it.depth+1, sub_a_values })
@@ -189,7 +191,6 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
             final_node_values[it.index] = it.node_values
         }
     }
-    clear(&values_bounds)
     
     ////////////////////////////////////////////////
     

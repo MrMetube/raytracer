@@ -188,7 +188,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
     camera_x := vec_cast(lane_f32, camera.x)
     camera_y := vec_cast(lane_f32, camera.y)
     
-    backing_values: [4096] [LaneWidth] Value_Index
+    backing_values: [8192] [LaneWidth] Value_Index
     values := backing_values[:]
     
     triangle_tests: Stat(u32)
@@ -520,6 +520,9 @@ traverse_tree_and_collect_values :: proc (values: [] [LaneWidth] Value_Index, no
                 value_mask := less_than(value_index, end)
                 if value_mask == 0 do break
                 
+                when true {
+                    assert(less_than(values_len, values.len) == lane_true) 
+                }
                 values_end := lane_index(values, values_len)
                 lane_scatter(values_end, lane_offset, value_index, value_mask)
                 
