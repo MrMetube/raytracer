@@ -22,139 +22,68 @@ Root_Index :: 1
 
 Subnodes_Per_Node :: 2
 
-tree_append_value :: proc (values: ^map [Node_Index] [dynamic] Value_Index, node_index: Node_Index, value_index: Value_Index) {
-    node_values, ok := &values[node_index]
-    assert(ok)
-    append(node_values, value_index)
-}
-
-tree_append_node :: proc (values: ^map [Node_Index] [dynamic] Value_Index, tree: ^[dynamic] Tree_Node, bounds: Rectangle3) {
-    node_index := cast(Node_Index) len(tree)
-    append(tree, Tree_Node{ bounds = bounds })
-    values[node_index] = make_dynamic_array(values.allocator, [dynamic] Value_Index, 0, 4)
-}
-
+// @note(viktor): this is not idempotic, as the values are reordered.
+// A second build will encounter values in a different order compared to the first build.
 tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: [] $Value, max_depth: u32) {
     clear(tree)
     
-    // @waste only the leafs need values
-    all_values: map [Node_Index] [dynamic] Value_Index
-    all_values.allocator = allocator
-    
     values_bounds := make_dynamic_array(allocator, [dynamic] Rectangle3, 0, len(values))
-    tree_append_node(&all_values, tree, {}) // nil
-    tree_append_node(&all_values, tree, {}) // root
+    append_nothing(tree) // nil
+    append_nothing(tree) // root
     if len(values) == 0 do return
     
     ////////////////////////////////////////////////
     
     root := &tree[Root_Index]
     root.bounds = rectangle_inverted_infinity(Rectangle3)
+    
+    root_values := make_slice(allocator, [] Value_Index, len(values))
     for value_index in cast(Value_Index) 0 ..< cast(Value_Index) len(values) {
         value_bounds := get_bounds(values[value_index])
         append(&values_bounds, value_bounds)
         
         root.bounds = rectangle_union(root.bounds, value_bounds)
-        center := rectangle_get_center(value_bounds)
-        assert(rectangle_contains_inclusive(root.bounds, center))
-        tree_append_value(&all_values, Root_Index, value_index)
+        root_values[value_index] = value_index
     }
-    root.value_count = cast(u32) len(values)
     
     root_area_half: f32
     {
         dim := rectangle_get_dimension(root.bounds)
         root_area_half = dim.y * dim.z + dim.x * dim.z + dim.x * dim.y
     }
-    root_cost := root_area_half * cast(f32) root.value_count
+    root_cost := root_area_half * cast(f32) len(values)
+    
+    final_node_values: map[Node_Index] [] Value_Index
+    final_node_values.allocator = allocator
         
     Node_Info :: struct {
         index: Node_Index,
         cost:  f32,
         depth: u32,
+        node_values: [] Value_Index,
     }
     _stack  := make_dynamic_array(allocator, [dynamic] Node_Info, 0, max_depth)
     stack  := &_stack
     
-    clear(stack)
-    append(stack, Node_Info { Root_Index, root_cost, 0 })
-    /* 
-    
-render time 
-    before
-    233 ms
-    
-    after
-    220 ms
-    
-build time
-    1024
-        building tree took 108.23ms
-        tree info:
-                    nodes: 93
-                    depth: max = 6, avg = 4.95
-        values per node: max = 829, avg = 37.51
-    
-    8192
-        building tree took 847.5836ms
-        tree info:
-                    nodes: 93
-                    depth: max = 6, avg = 4.95
-        values per node: max = 829, avg = 37.51
+    append(stack, Node_Info { Root_Index, root_cost, 0, root_values })
         
-        building tree took 838.8014ms
-        tree info:
-                    nodes: 63
-                    depth: max = 6, avg = 4.79
-        values per node: max = 916, avg = 55.37
-        
-        building tree took 391.4135ms
-        tree info:
-                    nodes: 63
-                    depth: max = 6, avg = 4.79
-        values per node: max = 916, avg = 55.37
-        
-        building tree took 210.2519ms
-        tree info:
-                    nodes: 63
-                    depth: max = 6, avg = 4.79
-        values per node: max = 916, avg = 55.37
-        
-        building tree took 74.7704ms
-        tree info:
-                    nodes: 63
-                    depth: max = 6, avg = 4.79
-        values per node: max = 916, avg = 55.37
-        
-        building tree took 63.7527ms
-        tree info:
-                    nodes: 63
-                    depth: max = 6, avg = 4.79
-        values per node: max = 916, avg = 55.37
-    
-    16384
-        building tree took 125.1959ms
-        tree info:
-                    nodes: 79
-                    depth: max = 6, avg = 4.86
-        values per node: max = 829, avg = 44.15
-    */
-    
     for len(stack) > 0 {
         it := pop(stack)
         
         node := &tree[it.index]
         
-        node_values, ok := &all_values[it.index]
-        assert(ok)
+        node_values := it.node_values
         
         // @speed we can probably do tests in parallel by doing it LaneWide
         
         min_cost := +Infinity
         min_a_cost: f32
         min_b_cost: f32
+        best_a_count: u32
         best_split_point: f32
         best_split_axis: int
+        // @waste we make a second buffer, take two slices of it and throw away the original
+        best_node_values := make_slice(allocator, [] Value_Index, len(node_values))
         
         // @todo(viktor): reduce this to something reasonable once we have bigger, or just more models
         attempts :: 16384
@@ -163,6 +92,7 @@ build time
                 split_axis: int,
                 values_bounds: [] Rectangle3,
             }
+            
             data := Data { split_axis, values_bounds[:] }
             slice.sort_by_with_data(node_values[:], proc(a, b: Value_Index, data_p: pmm) -> bool {
                 data := cast(^Data) data_p
@@ -189,10 +119,10 @@ build time
                 }
                 middle := linear_blend(node.bounds.min[split_axis], node.bounds.max[split_axis], split_point)
                 
-                a_count: f32
+                a_count: u32
                 {
-                    left: int
-                    for right := len(node_values); left < right; {
+                    left: u32
+                    for right := cast(u32) len(node_values); left < right; {
                         it_index := (left + right) / 2
                         
                         value_index  := node_values[it_index]
@@ -206,16 +136,20 @@ build time
                         }
                     }
                     
-                    a_count = cast(f32) left
+                    a_count = left
                 }
-                b_count := cast(f32) len(node_values) - a_count
+                b_count := cast(u32) len(node_values) -  cast(u32) a_count
                 
-                a_cost := a_area_half * a_count
-                b_cost := b_area_half * b_count
+                a_cost := a_area_half * cast(f32) a_count
+                b_cost := b_area_half * cast(f32) b_count
                 cost := a_cost + b_cost
                 
                 if min_cost > cost {
                     min_cost = cost
+                    
+                    copy(best_node_values, node_values[:])
+                    best_a_count = a_count
+                    
                     min_a_cost = a_cost
                     min_b_cost = b_cost
                     best_split_point = split_point
@@ -232,36 +166,27 @@ build time
             a_bounds.max[best_split_axis] = middle
             b_bounds.min[best_split_axis] = middle
             
-            
             node.first.subnode = cast(Node_Index) len(tree)
-            tree_append_node(&all_values, tree, a_bounds)
-            tree_append_node(&all_values, tree, b_bounds)
+            
+            sub_a_values := best_node_values[:best_a_count]
+            sub_b_values := best_node_values[best_a_count:]
+            
+            append(tree, Tree_Node { bounds = a_bounds })
+            append(tree, Tree_Node { bounds = b_bounds })
+            
             // @cleanup tree may have been reallocated
             node = &tree[it.index]
-            
-            
-            
-            for value_index in node_values {
-                value_bounds := values_bounds[value_index]
-                
-                into_index := node.first.subnode+1
-                center := rectangle_get_center(value_bounds)
-                if rectangle_contains_inclusive(a_bounds, center) {
-                    into_index = node.first.subnode+0
-                } else {
-                    assert(rectangle_contains_inclusive(b_bounds, center))
-                }
-                tree_append_value(&all_values, into_index, value_index)
-            }
-            clear(node_values)
-            node.value_count = 0
-
-            
+            delete(it.node_values, allocator)
             
             if it.depth+1 < max_depth {
-                append(stack, Node_Info { node.first.subnode+0, min_a_cost, it.depth+1 })
-                append(stack, Node_Info { node.first.subnode+1, min_b_cost, it.depth+1 })
+                append(stack, Node_Info { node.first.subnode+0, min_a_cost, it.depth+1, sub_a_values })
+                append(stack, Node_Info { node.first.subnode+1, min_b_cost, it.depth+1, sub_b_values })
+            } else {
+                final_node_values[node.first.subnode+0] = sub_a_values
+                final_node_values[node.first.subnode+1] = sub_b_values
             }
+        } else {
+            final_node_values[it.index] = it.node_values
         }
     }
     clear(&values_bounds)
@@ -281,15 +206,14 @@ build time
         it := pop(stack)
         node := &tree[it.index]
         
-        value_indices, ok := all_values[it.index]
-        assert(ok)
+        node_values := final_node_values[it.index] or_else {}
         
         node.bounds = rectangle_inverted_infinity(Rectangle3)
-        node.value_count = cast(u32) len(value_indices)
+        node.value_count = cast(u32) len(node_values)
         if node.value_count != 0 {
             node.first.value = next_free_index
             
-            for buffer_index, offset in value_indices {
+            for buffer_index, offset in node_values {
                 value_index := node.first.value + cast(Value_Index) offset
                 assert(values[value_index] == {})
                 value := buffer[buffer_index]

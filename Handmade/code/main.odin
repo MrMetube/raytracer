@@ -102,6 +102,7 @@ main :: proc () {
     start := time.now()
     tree_build(context.temp_allocator, &world.triangle_nodes, world.triangles[:], triangles_max_depth)
     build_time := time.since(start)
+    print("build time %\n", fmt.tprint(build_time))
     
     inspection := inspect(world.triangle_nodes[:])
     {
