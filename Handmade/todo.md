@@ -1,5 +1,10 @@
 ## To be done
 
+- performance
+    - correct the tree traversal to visit closer subnodes and skip further based on hit,closest_t
+    - measure and compare inlined value hit test options
+        - reduce repetition in lane wise version
+
 - vary sample count over viewport, have a focus region with highest detail
 - think more about the response to a accumulated ray
     - do more than store it, get inspired by biology
@@ -11,11 +16,16 @@
     - Ensure that the refraction is correct
     - can we lerp it like .scatter
     - how does it interact with reflectance and reflecting in general
-- Postprocessing / filtering of noise images
+- Postprocessing / filtering of noisy images
     - How do cameras do this filtering?
     - How does the human eye do this? 
         - Does this require another color model(wavelengths) or is RGB fine?
 - Energy conservation
+
+- Code minimization
+    - replace handmade formatting and format with core:fmt
+    - replace arena with mem:arena if it is even needed
+    - replace random generator innerts with a better version (or core:math/rand if that is performant enough, and performance of rand is relevant)
 
 ### Editor
 - Make UI to add new objects to a scene

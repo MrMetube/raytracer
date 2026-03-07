@@ -146,7 +146,7 @@ push_size :: proc (arena: ^Arena, #any_int size_init: umm, #any_int default_alig
         }
         
         block_size := max(size, arena.minimum_block_size)
-        new_block := new(Platform_Memory_Block)
+        new_block  := new(Platform_Memory_Block)
         new_block.storage = make([] u8, block_size, context.allocator)
         new_block.allocation_flags = arena.allocation_flags
         
