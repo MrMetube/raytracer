@@ -19,7 +19,9 @@ Is_Optimized :: ODIN_OPTIMIZATION_MODE == .Speed
 main :: proc () {
     rl.SetTraceLogLevel(.WARNING)
     
-    init_spall(output_name = tprint("trace_%_%", Is_Optimized ? "Optimized" : "Debug", LaneWidth))
+    window_title := cprint("Handmade Ray %", (Is_Optimized ? "Optimized" :  "Debug"))
+    
+    init_spall(output_name = tprint("trace_%", Is_Optimized ? "optimized" : "debug"))
     
     _, logical_core_count, ok := si.cpu_core_count()
     assert(ok)
@@ -45,43 +47,10 @@ main :: proc () {
     load_brdf_merl("./BRDFDatabase/brdfs/purple-paint.binary", &world.materials[5].brdf, &world.all_brdf_values); material_names[5] = "purple-paint"
     load_brdf_merl("./BRDFDatabase/brdfs/white-marble.binary", &world.materials[6].brdf, &world.all_brdf_values); material_names[6] = "white-marble"
     
-    if false {
-        area_size := cast(f32) 20
-        append(&world.spheres, Sphere { center = { 0, 0, 0},   radius = 1,  material = 2 })
-        append(&world.spheres, Sphere { center = { 3,-2, 0.4}, radius = .1, material = 3 })
-        append(&world.spheres, Sphere { center = {-2,-1, 2},   radius = 1,  material = 1 })
-        append(&world.spheres, Sphere { center = { 1,-1, 3},   radius = 1,  material = 5 })
-        append(&world.spheres, Sphere { center = {-2, 3, 0},   radius = 2,  material = 6 })
+    {
+        clear(&world.planes)
+        clear(&world.triangles)
         
-        gen_entropy := seed_random_series(565)
-        for _ in 0..< square(area_size) * 1.2 {
-            radius := random_between_f32(&gen_entropy, 0.1, 0.4)
-            
-            bounds := radius + 0.05
-            
-            center: v3
-            center.z = bounds
-            
-            attemps: for _ in 0..< 10 {
-                center.xy = random_bilateral(&gen_entropy, v2) * (area_size - bounds)
-                for other in world.spheres {
-                    if length_squared(other.center - center) > square(other.radius + bounds) {
-                        break attemps
-                    }
-                }
-            }
-            
-            material := random_between_u32(&gen_entropy, 1, auto_cast len(world.materials) - 1)
-            append(&world.spheres, Sphere { center, radius, material })
-        }
-        
-        append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 6 })
-        append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size-0.1}, radius = area_size/5, material = 3 })
-        // append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
-        // append(&world.planes, Plane { normal = { 1, 0, 0}, tangent = {}, binormal = {}, center = {-area_size, 0, 0},     radius = area_size,   material = 2 })
-        // append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 2 })
-        // append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
-    } else {
         area_size := cast(f32) 5
         append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 6 })
         append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size-0.1}, radius = area_size/5, material = 3 })
@@ -102,7 +71,6 @@ main :: proc () {
     
     triangles_max_depth: u32 = 6
     
-    tree_build(context.temp_allocator, &world.sphere_nodes,   world.spheres[:],   6)
     start := time.now()
     tree_build(context.temp_allocator, &world.triangle_nodes, world.triangles[:], triangles_max_depth)
     build_time := time.since(start)
@@ -113,15 +81,6 @@ main :: proc () {
         print_inspection(world.triangles[:], world.triangle_nodes[:], inspection)
         // print_node(world.triangle_nodes[:])
     }
-    
-    //  2 476 ms
-    //  3 308 ms
-    //  4 194 ms
-    //  5 172 ms
-    //  6 154 ms
-    //  7 181 ms
-    //  8 248 ms
-    // 16   5 s 
     
     ////////////////////////////////////////////////
     
@@ -140,7 +99,7 @@ main :: proc () {
     
     window_size := v2i { 1920, 1080 }
     
-    rl.InitWindow(window_size.x, window_size.y, ctprint("Handmade Ray %", (Is_Optimized ? "Optimized" :  "Debug")))
+    rl.InitWindow(window_size.x, window_size.y, window_title)
     rl.SetTargetFPS(144)
     
     font := rl.LoadFontEx("./fonts/VictorMono-Bold.otf", FontSize, nil, 0)
@@ -171,18 +130,13 @@ main :: proc () {
     
     show_materials: bool
     show_planes: bool
-    show_spheres: bool
     quality_render_is_open: bool
     fast_render_is_open: bool = true
     
     quality_render: Render
     fast_render:    Render
     init_render(&quality_render, 64, 16, window_size, 2 when SpallDisabled else 8, core_count)
-    when false {
-        init_render(&fast_render,    64,  2, window_size, 6 when SpallDisabled else 12, core_count)
-    } else {
-        init_render(&fast_render,     8,  4, window_size, 6 when SpallDisabled else 12, core_count)
-    }
+    init_render(&fast_render,     8,  4, window_size, 6 when SpallDisabled else 12, core_count)
     defer close_work_queue_and_wait_for_threads(&quality_render.queue)
     defer close_work_queue_and_wait_for_threads(&fast_render.queue)
     
@@ -431,29 +385,6 @@ main :: proc () {
             }
             
             layout_unindent(layout)
-        }
-        
-        // @todo(viktor): Rebuild the octtree if the spheres are edited in any way
-        layout_advance(layout, FontSize)
-        if display_list(layout, &show_spheres, "Spheres") {
-            layout_indent(layout)
-            defer layout_unindent(layout)
-            
-            for &sphere, index in world.spheres {
-                material := cast(f32) sphere.material
-                display_line(layout, "Sphere %: %", index, material_names[sphere.material])
-                
-                layout_indent(layout)
-                defer layout_unindent(layout)
-                
-                display_slider(layout, 360, &material, 0, cast(f32) len(material_names)-0.51, "Material Index")
-                if sphere.material != round(u32, material) do fast_render.requested = true
-                sphere.material = round(u32, material)
-                if display_slider  (layout, 240, &sphere.radius, 0.001, 10, "Radius")                      do fast_render.requested = true
-                if display_slider_v(layout, 240, &sphere.center, -10, 10, "Center", flags = { .relative }) do fast_render.requested = true
-                
-                layout_advance(layout, 10)
-            }
         }
         
         layout_advance(layout, FontSize)

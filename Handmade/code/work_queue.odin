@@ -99,7 +99,7 @@ complete_all_work :: proc(queue: ^WorkQueue) {
         do_next_work_queue_entry(queue)
     }
     
-    atomic_compare_exchange_or_fail(&queue.completion_goal, queue.completion_goal, 0)
+    atomic_compare_exchange_or_fail(&queue.completion_goal,  queue.completion_goal,  0)
     atomic_compare_exchange_or_fail(&queue.completion_count, queue.completion_count, 0)
 }
 
@@ -149,4 +149,11 @@ worker_thread :: proc (parameter: pmm) {
     }
     
     atomic_add(&queue.closed_thread_count, 1)
+}
+
+atomic_compare_exchange_or_fail :: proc (destination: ^$T, old_value, new_value: T) -> (was_value: T) {
+    ok: bool
+    ok, was_value = atomic_compare_exchange(destination, old_value, new_value)
+    assert(ok)
+    return was_value
 }

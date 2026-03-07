@@ -253,16 +253,12 @@ tree_split_point :: proc (node: ^Tree_Node) -> (max_axis: int, split_point: f32)
     return max_axis, .5
 }
 
-get_bounds :: proc { get_bounds_triangle, get_bounds_sphere }
+get_bounds :: proc { get_bounds_triangle }
 get_bounds_triangle :: proc (triangle: Triangle) -> Rectangle3 {
     bounds := rectangle_inverted_infinity(Rectangle3)
     bounds = rectangle_union_point(bounds, triangle.a)
     bounds = rectangle_union_point(bounds, triangle.b)
     bounds = rectangle_union_point(bounds, triangle.c)
-    return bounds
-}
-get_bounds_sphere :: proc (sphere: Sphere) -> Rectangle3 {
-    bounds := rectangle_center_dimension(sphere.center, sphere.radius)
     return bounds
 }
 

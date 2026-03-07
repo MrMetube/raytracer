@@ -27,12 +27,6 @@ Plane :: struct {
     material: u32,
 }
 
-Sphere :: struct {
-    center:   v3,
-    radius:   f32,
-    material: u32,
-}
-
 Triangle :: struct {
     a: v3,
     b: v3,
@@ -384,36 +378,6 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
             
             ////////////////////////////////////////////////
             
-            if Use_Tree {
-                local_nil_value_lanes_tested: [LaneWidth] u32
-                
-                nodes := world.sphere_nodes
-                values_len := traverse_tree_and_collect_values(values[:], world.spheres[:], nodes[:], ray_o, ray_d, min_t, hit.closest_t, &hit, &local_nil_value_lanes_tested, &triangles_tested_lanes, &rectangles_tested_lanes)
-                
-                for lane in 0..<LaneWidth {
-                    values_len := extract(values_len, lane)
-                    for values_len != 0 {
-                        values_len -= 1
-                        
-                        value_index := values[values_len][lane]
-                        value := &world.spheres[value_index]
-                        hit_sphere(to_lane(value), ray_o, ray_d, min_t, &hit)
-                    }
-                }
-                
-                for i in 0..<len(local_nil_value_lanes_tested) {
-                    atomic_add(&world.nil_value_lanes_tested[i], local_nil_value_lanes_tested[i])
-                }
-            } else {
-                spheres := to_lane(world.spheres) // @cleanup
-                for index in 0 ..< cast(u32) len(world.spheres) {
-                    sphere := lane_index(spheres, index)
-                    hit_sphere(sphere, ray_o, ray_d, min_t, &hit)
-                }
-            }
-            
-            ////////////////////////////////////////////////
-            
             materials       := to_lane(world.materials)
             all_brdf_values := to_lane(world.all_brdf_values)
             
@@ -497,7 +461,6 @@ traverse_tree_and_collect_values :: proc (_values_stack: [] [LaneWidth] Value_In
         it_index := lane_gather(stack_top, it_mask, cast(lane_Node_Index) Nil_Index)
         
         node := lane_index(nodes, cast(lane_u32) it_index)
-        // hit_mask, _ := hit_rectangle(node, neg_inv_o, inv_d, min_t, max_t)
         
         // rectangles_tested_lanes^ += 1 & it_mask
         // hit_mask, _ := hit_rectangle(node, neg_inv_o, inv_d, min_t, hit.closest_t)
@@ -579,11 +542,7 @@ traverse_tree_and_collect_values :: proc (_values_stack: [] [LaneWidth] Value_In
                     if value_mask == 0 do break
                     
                     value := lane_index(values, value_index)
-                    when Value == Triangle {
-                        hit_triangle(value_mask, value, ray_o, ray_d, min_t, hit)
-                    } else {
-                        hit_sphere(value, ray_o, ray_d, min_t, hit)
-                    }
+                    hit_triangle(value_mask, value, ray_o, ray_d, min_t, hit)
                     
                     conditional_assign(value_mask, &value_index, value_index+1)
                     
@@ -625,11 +584,7 @@ traverse_tree_and_collect_values :: proc (_values_stack: [] [LaneWidth] Value_In
                         
                         value_mask := not_equal(value_index , 0)
                         triangles_tested_lanes^ += 1 & equal(lane_offset, cast(lane_u32) lane) & value_mask
-                        when Value == Triangle {
-                            hit_triangle(value_mask, value, ray_o, ray_d, min_t, hit)
-                        } else {
-                            hit_sphere(value, ray_o, ray_d, min_t, hit)
-                        }
+                        hit_triangle(value_mask, value, ray_o, ray_d, min_t, hit)
                     }
                     local_nil_value_lanes_tested[0] = count_x8
                     
@@ -644,11 +599,7 @@ traverse_tree_and_collect_values :: proc (_values_stack: [] [LaneWidth] Value_In
                         value := lane_index(values, value_index)
                         value_mask := not_equal(value_index, 0) & load_mask
                         triangles_tested_lanes^ += 1 & equal(lane_offset, cast(lane_u32) lane) & value_mask
-                        when Value == Triangle {
-                            hit_triangle(value_mask, value, ray_o, ray_d, min_t, hit)
-                        } else {
-                            hit_sphere(value, ray_o, ray_d, min_t, hit)
-                        }
+                        hit_triangle(value_mask, value, ray_o, ray_d, min_t, hit)
                     }
                     if lane_hit.did_hit == lane_false do continue
                     
@@ -757,41 +708,6 @@ hit_triangle :: proc (not_nil_mask: lane_u32, triangle: Lane(Triangle), ray_o, r
     binormal := normalize_or_zero(cross(normal, tangent))
     
     update_hit(hit, hit_mask, t, material, ray_o + t*ray_d, normal, tangent, binormal)
-}
-
-hit_sphere :: proc (sphere: Lane(Sphere), ray_o, ray_d: lane_v3, min_t: lane_f32, hit: ^Hit_Info) {
-    // @note(viktor): if sphere_index == 0 its the Nil sphere
-    // then the root will be NaN making the t_mask zero, so no hit can be registered
-    center   := lane_gather_v(lane_member(sphere, "center",   v3))
-    radius   := lane_gather(  lane_member(sphere, "radius",   f32))
-    material := lane_gather(  lane_member(sphere, "material", u32))
-    
-    local_origin := ray_o - center
-    a := dot(ray_d, ray_d)
-    b := 2 * dot(local_origin, ray_d)
-    c := dot(local_origin, local_origin) - square(radius)
-    root_term := square(b) - 4*a*c
-    root := square_root(root_term)
-    root_mask := greater_equal(root_term, 0)
-    if root_mask == lane_false do return
-    
-    t_pos := (-b + root) / (2 * a)
-    t_neg := (-b - root) / (2 * a)
-    
-    t := t_pos
-    pick_mask := greater_than(t_neg, min_t) & less_than(t_neg, t)
-    conditional_assign(pick_mask, &t, t_neg)
-    
-    hit_mask := greater_than(t, min_t) & less_than(t, hit.closest_t)
-    hit_mask &= root_mask
-    if hit_mask == lane_false do return
-    
-    next_o := ray_o + t*ray_d
-    normal   := normalize_or_zero(next_o - center)
-    tangent  := normalize_or_zero(cross(lane_v3{0, 0, 1}, normal))
-    binormal := cross(normal, tangent)
-    
-    update_hit(hit, hit_mask, t, material, next_o, normal, tangent, binormal)
 }
 
 update_hit :: proc (hit: ^Hit_Info, hit_mask: lane_u32, t: lane_f32, material: lane_u32, next_o: lane_v3, normal, tangent, binormal: lane_v3) {

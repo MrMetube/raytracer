@@ -34,9 +34,7 @@ Image :: struct {
 
 // @volatile also update the render's world copying
 World :: struct {
-    sphere_nodes:   [dynamic] Tree_Node,
     triangle_nodes: [dynamic] Tree_Node,
-    spheres:   [dynamic] Sphere,
     triangles: [dynamic] Triangle,
     
     planes:    [dynamic] Plane,
@@ -96,17 +94,13 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: i32, camera: C
     render.world.all_brdf_values = world.all_brdf_values
     
     // @volatile
-    make_by_pointer(&render.world.spheres,        len(world.spheres),        render.allocator)
     make_by_pointer(&render.world.planes,         len(world.planes),         render.allocator)
     make_by_pointer(&render.world.triangles,      len(world.triangles),      render.allocator)
-    make_by_pointer(&render.world.sphere_nodes,   len(world.sphere_nodes),   render.allocator)
     make_by_pointer(&render.world.triangle_nodes, len(world.triangle_nodes), render.allocator)
     make_by_pointer(&render.world.materials,      len(world.materials),      render.allocator)
     
-    copy(render.world.spheres[:],        world.spheres[:])
     copy(render.world.planes[:],         world.planes[:])
     copy(render.world.triangles[:],      world.triangles[:])
-    copy(render.world.sphere_nodes[:],   world.sphere_nodes[:])
     copy(render.world.triangle_nodes[:], world.triangle_nodes[:])
     copy(render.world.materials[:],      world.materials[:])
     
