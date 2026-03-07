@@ -25,7 +25,7 @@ main :: proc () {
     
     _, logical_core_count, ok := si.cpu_core_count()
     assert(ok)
-    core_count := cast(i32) logical_core_count - 1
+    core_count := cast(u32) logical_core_count - 1
     
     world: World
     
@@ -135,8 +135,8 @@ main :: proc () {
     
     quality_render: Render
     fast_render:    Render
-    init_render(&quality_render, 64, 16, window_size, 2 when SpallDisabled else 8, core_count)
-    init_render(&fast_render,     8,  4, window_size, 6 when SpallDisabled else 12, core_count)
+    init_render(&quality_render, 64, 16, window_size, 2 when SpallDisabled else 8, core_count, "quality render")
+    init_render(&fast_render,     8,  4, window_size, 6 when SpallDisabled else 12, core_count, "fast render")
     defer close_work_queue_and_wait_for_threads(&quality_render.queue)
     defer close_work_queue_and_wait_for_threads(&fast_render.queue)
     

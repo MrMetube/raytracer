@@ -3,57 +3,11 @@ package main
 
 import "base:builtin"
 
-Array :: struct ($T: typeid) {
-    data:  [] T,
-    count: i64,
-}
 String_Builder :: [dynamic] u8
-FixedArray :: struct ($N: i64, $T: typeid) {
-    data:  [N]T,
-    count: i64,
-}
 
 append :: proc { 
-    append_fixed_array, append_array, append_array_, append_array_many, append_fixed_array_many, append_string, 
-    builtin.append_elem, builtin.append_elems, builtin.append_soa_elems, builtin.append_soa_elem,
+    append_string, builtin.append_elem, builtin.append_elems, builtin.append_soa_elems, builtin.append_soa_elem,
 }
-@(require_results) append_array_ :: proc (a: ^Array($T)) -> (result: ^T) {
-    result = &a.data[a.count]
-    a.count += 1
-    return result
-}
-append_array :: proc (a: ^Array($T), value: T) -> (result: ^T) {
-    a.data[a.count] = value
-    result = append_array_(a)
-    return result
-}
-append_fixed_array :: proc (a: ^FixedArray($N, $T), value: T) -> (result: ^T) {
-    a.data[a.count] = value
-    result = &a.data[a.count]
-    a.count += 1
-    return result
-}
-append_array_many :: proc (a: ^Array($T), values: [] T) -> (result: [] T) {
-    start := a.count
-    for &value in values {
-        a.data[a.count] = value
-        a.count += 1
-    }
-    
-    result = a.data[start:a.count]
-    return result
-}
-append_fixed_array_many :: proc (a: ^FixedArray($N, $T), values: [] T) -> (result: [] T) {
-    start := a.count
-    for &value in values {
-        a.data[a.count] = value
-        a.count += 1
-    }
-    
-    result = a.data[start:a.count]
-    return result
-}
-
 append_string :: proc (a: ^String_Builder, value: string) -> (result: string) {
     append(a, ..(transmute([] u8) value))
     return cast(string) a[:]
@@ -75,28 +29,11 @@ peek :: proc (a: [dynamic] $T) -> (result: ^T) {
     return result
 }
 
-slice :: proc{ slice_fixed_array, slice_array, slice_array_pointer }
-slice_fixed_array :: proc (array: ^FixedArray($N, $T)) -> [] T {
-    return array.data[:array.count]
-}
-slice_array :: proc (array: Array($T)) -> [] T {
-    return array.data[:array.count]
-}
-slice_array_pointer :: proc (array: ^Array($T)) -> [] T {
-    return array.data[:array.count]
-}
-
 to_string :: proc (sb: String_Builder) -> string {
     return cast(string) sb[:]
 }
 
-rest :: proc{ rest_fixed_array, rest_array, rest_dynamic_array }
-rest_fixed_array :: proc (array: ^FixedArray($N, $T)) -> [] T {
-    return array.data[array.count:]
-}
-rest_array :: proc (array: Array($T)) -> [] T {
-    return array.data[array.count:]
-}
+rest :: proc{ rest_dynamic_array }
 rest_dynamic_array :: proc (array: [dynamic] $T) -> [] T {
     return slice_from_parts(raw_data(array), cap(array))
 }
@@ -104,23 +41,6 @@ rest_dynamic_array :: proc (array: [dynamic] $T) -> [] T {
 set_len :: proc (array: ^[dynamic] $T, len: int) {
     raw := cast(^Raw_Dynamic_Array) array
     raw.len = len
-}
-
-clear :: proc { array_clear, builtin.clear_dynamic_array, builtin.clear_map, }
-array_clear :: proc (a: ^Array($T)) {
-    a.count = 0
-}
-
-ordered_remove :: proc { builtin.ordered_remove, ordered_remove_array }
-ordered_remove_array :: proc (a: ^Array($T), #any_int index: i64) {
-    data := slice(a^)
-    copy(data[index:], data[index+1:])
-    a.count -= 1
-}
-unordered_remove :: proc { builtin.unordered_remove, unordered_remove_array }
-unordered_remove_array :: proc (a: ^Array($T), #any_int index: i64) {
-    swap(&a.data[index], &a.data[a.count-1])
-    a.count -= 1
 }
 
 ////////////////////////////////////////////////

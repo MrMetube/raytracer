@@ -25,7 +25,7 @@
 - Code minimization
     - replace handmade formatting and format with core:fmt
     - replace arena with mem:arena if it is even needed
-    - replace random generator innerts with a better version (or core:math/rand if that is performant enough, and performance of rand is relevant)
+    - replace random generator with math xorshiro, which seems to be a continuation of the original xor-shift
 
 ### Editor
 - Make UI to add new objects to a scene

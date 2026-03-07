@@ -7,6 +7,9 @@ import win "core:sys/windows"
 WorkQueueCallback :: #type proc(data: pmm)
 
 WorkQueue :: struct {
+    name: string,
+    worker_count: u32,
+    
     semaphore_handle: win.HANDLE,
     
     completion_goal, 
@@ -31,27 +34,31 @@ WorkQueueEntry :: struct {
 CreateThreadInfo :: struct {
     queue: ^WorkQueue,
     index: u32,
+    name_index: u32,
 }
 
 @(private="file") created_thread_count: u32 = 1
+@(private="file") infos: [1024]CreateThreadInfo
 
-////////////////////////////////////////////////
-
-init_work_queue :: proc(queue: ^WorkQueue, infos: []CreateThreadInfo) {
-    queue.semaphore_handle = win.CreateSemaphoreW(nil, 0, auto_cast len(infos), nil)
+init_work_queue :: proc (queue: ^WorkQueue, name: string, count: u32) {
+    queue.semaphore_handle = win.CreateSemaphoreW(nil, 0, auto_cast count, nil)
+    queue.name = name
     
-    for &info in infos {
+    for &info, index in infos[created_thread_count:][:count] {
         info.queue = queue
         info.index = created_thread_count
+        info.name_index = 1 + auto_cast index
         created_thread_count += 1
+        
         // @note(viktor): When I use the windows call I can at most create 4 threads at once,
         // any more calls to create thread in this call of the init function fail silently
         // A further call for the low_priority_queue then is able to create 4 more threads.
         //     result := win.CreateThread(nil, 0, thread_proc, info, thread_index, nil)
         
         thread.create_and_start_with_data(&info, worker_thread)
-        queue.thread_count += 1
     }
+    
+    queue.worker_count = count
 }
 
 close_work_queue_and_wait_for_threads :: proc (queue: ^WorkQueue) {
@@ -138,6 +145,8 @@ worker_thread :: proc (parameter: pmm) {
     
     init_spall_thread(auto_cast context.user_index, begin_deffered = false)
     atomic_add(&queue.opened_thread_count, 1)
+    
+    win.SetThreadDescription(win.GetCurrentThread(), win.utf8_to_wstring(sprint("%: %", queue.name, info.name_index)))
     
     for {
         should_sleep := do_next_work_queue_entry(queue)

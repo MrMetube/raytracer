@@ -228,6 +228,7 @@ modulus_v :: proc(value: [$N]f32, divisor: [N]f32) -> (result: [N]f32) {
     return result
 }
 
+// @cleanup these array to simd to array
 round :: proc { round_f, round_v }
 round_f :: proc($T: typeid, f: $F) -> T 
 where !intrinsics.type_is_array(F)
@@ -235,7 +236,9 @@ where !intrinsics.type_is_array(F)
     return  cast(T) (f < 0 ? -math.round(-f) : math.round(f))
 }
 round_v :: proc($T: typeid, v: [$N]$F) -> (result: [N]T) {
-    #no_bounds_check #unroll for i in 0..<N do result[i] = cast(T) math.round(v[i]) 
+    #no_bounds_check #unroll for i in 0..<N {
+        result[i] = cast(T) math.round(v[i]) 
+    }
     return result
 }
 
@@ -343,38 +346,41 @@ arm :: proc(angle: f32) -> (result: v2) {
     return result
 }
 
-dot :: proc(a: $V/[$N] $E, b: V) -> (result:  E) {
-    result = a.x * b.x + a.y * b.y
-    when N >= 3 do result += a.z * b.z
-    when N >= 4 do result += a.w * b.w
+dot :: proc(a: $V/[$N] $E, b: V) -> E {
+    result := fused_mul_add(a.x, b.x, 0)
+    result  = fused_mul_add(a.y, b.y, result)
+    when N >= 3 do result = fused_mul_add(a.z, b.z, result)
+    when N >= 4 do result = fused_mul_add(a.w, b.w, result)
     return result
 }
 
-cross :: proc(a: $V/[3]$Element, b: V) -> (result: V) {
-    result = {
-        a.y*b.z - a.z*b.y,
-        a.z*b.x - a.x*b.z,
-        a.x*b.y - a.y*b.x,
-    }
+cross :: proc(a: $V/[3]$Element, b: V) -> V {
+    result: V
+    result.x = a.y*b.z - a.z*b.y
+    result.y = a.z*b.x - a.x*b.z
+    result.z = a.x*b.y - a.y*b.x
     
     return result
 }
 
 reflect :: proc(v, axis: $V) -> V {
-    return v - 2 * dot(v, axis) * axis
+    result := v - 2 * dot(v, axis) * axis
+    return result
 }
 project :: proc(v, axis: $V) -> V {
-    return v - 1 * dot(v, axis) * axis
+    result := v - 1 * dot(v, axis) * axis
+    return result
 }
 
 length :: proc(vec: $V/ [$N] $T) -> (result: T) {
-    length_squared := length_squared(vec)
-    result = square_root(length_squared)
+    squared_length := length_squared(vec)
+    result = square_root(squared_length)
     return result
 }
 
 length_squared :: proc(vec: $V/ [$N] $T) -> T {
-    return dot(vec, vec)
+    result := dot(vec, vec)
+    return result
 }
 
 normalize :: proc(vec: $V) -> (result: V) {

@@ -62,7 +62,7 @@ Camera :: struct {
 
 ////////////////////////////////////////////////
 
-init_render :: proc (render: ^Render, rays_per_pixel: u32, max_bounce_count: u32, window_size: v2i, image_size_factor: i32, core_count: i32) {
+init_render :: proc (render: ^Render, rays_per_pixel: u32, max_bounce_count: u32, window_size: v2i, image_size_factor: i32, thread_count: u32, name: string,) {
     render.rays_per_pixel   = rays_per_pixel
     render.max_bounce_count = max_bounce_count
     render.image_size_factor = image_size_factor
@@ -71,8 +71,7 @@ init_render :: proc (render: ^Render, rays_per_pixel: u32, max_bounce_count: u32
     
     init_render_image(render, window_size)
     
-    create_infos := make_slice(context.allocator, [] CreateThreadInfo, core_count) // @leak
-    init_work_queue(&render.queue, create_infos)
+    init_work_queue(&render.queue, name, thread_count)
 }
 
 init_render_image :: proc (render: ^Render, window_size: v2i) {
@@ -86,7 +85,7 @@ init_render_image :: proc (render: ^Render, window_size: v2i) {
     render.image.data   = make_slice(context.allocator, [] Color, render.image.width * render.image.height)
 }
 
-begin_render :: proc (render: ^Render, world: ^World, core_count: i32, camera: Camera) {
+begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: Camera) {
     render.active = true
     
     render.world.render_stats = {}
@@ -106,7 +105,7 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: i32, camera: C
     
     image := render.image
     zero_slice(image.data)
-    tile_size: v2i = max(image.width, image.height) / core_count
+    tile_size: v2i = max(image.width, image.height) / cast(i32) core_count
     
     tile_cols  := (image.width  + tile_size.x - 1) / tile_size.x
     tile_rows  := (image.height + tile_size.y - 1) / tile_size.y

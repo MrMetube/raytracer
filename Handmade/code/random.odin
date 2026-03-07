@@ -10,10 +10,8 @@ RandomSeries :: struct {
 
 seed_random_series :: proc(#any_int seed: u32) -> (result: RandomSeries) {
     result = { state = seed }
-    for i in u32(0)..<LaneWidth {
-        (cast(^[LaneWidth]u32) &result.state)[i] ~= (i + 58564) * seed
-    }
-    return 
+    result.state ~= (lane_offset + 58564) * seed
+    return result
 }
 
 next_random_lane_u32 :: xor_shift
@@ -25,36 +23,40 @@ xor_shift :: proc (series: ^RandomSeries) ->  (x: lane_u32) {
     // @note(viktor): Reference xor_shift from https://en.wikipedia.org/wiki/Xorshift
     x = series.state 
         
-    x ~= shift_left(x, 13)
+    x ~= shift_left( x, 13)
     x ~= shift_right(x, 17)
-    x ~= shift_left(x,  5)
+    x ~= shift_left( x,  5)
     
     series.state = x
     
     return x
 }
 
-random_unilateral :: proc(series: ^RandomSeries, $T: typeid) -> (result: T) #no_bounds_check {
-    when intrinsics.type_is_array(T) {
-        E :: intrinsics.type_elem_type(T)
-        #unroll for i in 0..<len(T) {
-            result[i] = random_unilateral(series, E)
-        }
-    } else {
-        unilateral := cast(lane_f32) (shift_right(next_random_lane_u32(series), 1)) / cast(lane_f32) (max(u32) >> 1)
-        when intrinsics.type_is_simd_vector(T) {
-            result = cast(T) unilateral
-        } else {
-            result = cast(T) extract(unilateral, 0)
-        }
+// @todo(viktor): why are all results less than 0.001 ?
+random_unilateral :: proc { random_unilateral_scalar, random_unilateral_array, random_unilateral_vector }
+random_unilateral_scalar :: proc(series: ^RandomSeries, $T: typeid) -> T where !intrinsics.type_is_simd_vector(T), !intrinsics.type_is_array(T) {
+    unilateral := random_unilateral_vector(series, #simd [LaneWidth] T)
+    result := extract(unilateral, 0)
+    return result
+}
+random_unilateral_array :: proc (series: ^RandomSeries, $T: typeid/ [$N] $E) -> T {
+    result: T
+    // @todo(viktor): why not get one wide random value and extract N lanes?
+    #no_bounds_check #unroll for i in 0..<len(T) {
+        result[i] = random_unilateral(series, E)
     }
-    
-    // @todo(viktor): why are all results less than 0.001 ?
+    return result
+}
+random_unilateral_vector :: proc (series: ^RandomSeries, $T: typeid/ #simd [$N] $E) -> T {
+    random_value := next_random_lane_u32(series)
+    unilateral := cast(lane_f32) (shift_right(random_value, 1)) / cast(lane_f32) (max(u32) >> 1)
+    result := unilateral
     return result
 }
 
 random_bilateral :: proc(series: ^RandomSeries, $T: typeid) -> (result: T) {
-    result = random_unilateral(series, T) * 2 - 1
+    result = random_unilateral(series, T)
+    result = result * 2 - 1
     return result
 }
 
