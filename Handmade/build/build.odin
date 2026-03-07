@@ -1,10 +1,10 @@
 package build
 
-import "core:os"
-
 native   :: true
 optimize :: !false
 pedantic :: false
+
+import "core:os"
 
 main :: proc () {
     init_build(run_from_data = true, wait = true)

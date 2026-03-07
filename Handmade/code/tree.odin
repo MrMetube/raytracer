@@ -2,7 +2,7 @@ package main
 
 import "core:slice"
 
-Node_Index  :: distinct u16
+Node_Index  :: distinct u32
 Value_Index :: distinct u32
 
 
@@ -56,7 +56,7 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
     root_area_half: f32
     {
         dim := rectangle_get_dimension(root.bounds)
-        root_area_half = dim.y * dim.z + dim.x * dim.z + dim.x * dim.y
+        root_area_half = dim.y * dim.z + dim.x * (dim.z + dim.y)
     }
     root_cost := root_area_half * cast(f32) len(values)
     
@@ -117,8 +117,8 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
                 b_dim := dimension
                 a_dim[split_axis] *= split_point
                 b_dim[split_axis] *= (1-split_point)
-                a_area_half := a_dim.y * a_dim.z + a_dim.x * a_dim.z + a_dim.x * a_dim.y
-                b_area_half := b_dim.y * b_dim.z + b_dim.x * b_dim.z + b_dim.x * b_dim.y
+                a_area_half := fused_mul_add(a_dim.y, a_dim.z, a_dim.x * (a_dim.z + a_dim.y))
+                b_area_half := fused_mul_add(b_dim.y, b_dim.z, b_dim.x * (b_dim.z + b_dim.y))
                 
                 middle := linear_blend(node.bounds.min[split_axis], node.bounds.max[split_axis], split_point)
                 

@@ -460,6 +460,21 @@ when LaneWidth == 1 {
         return result
     }
 } else {
+    ternary :: proc (mask: $M, then_value: $T, else_value: T) -> T {
+        result: T
+        
+        when intrinsics.type_is_array(T) {
+            #no_bounds_check #unroll for i in 0..<len(T) {
+                result[i] = ternary(mask, then_value[i], else_value[i])
+            }
+        } else {
+            result = simd.select(mask, then_value, else_value)
+        }
+        
+        return result
+    }
+    
+    // @todo(viktor): which calls to this want to be a ternary?
     conditional_assign :: proc (mask: $M, dest: ^$D, value: D) {
         when intrinsics.type_is_array(D) {
             #no_bounds_check #unroll for i in 0..<len(D) {

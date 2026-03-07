@@ -352,18 +352,30 @@ main :: proc () {
         layout_advance(layout, 10)
         
         layout_begin_horizontal(layout)
-            if display_button_highlighted(layout, "Normal", Debug_View == 0) { Debug_View = 0; fast_render.requested = true }
+            if display_button_highlighted(layout, "Normal",     Debug_View == 0) { Debug_View = 0; fast_render.requested = true }
             layout_advance(layout, 10)
-            if display_button_highlighted(layout, "Tests", Debug_View == 1)  { Debug_View = 1; fast_render.requested = true }
+            if display_button_highlighted(layout, "Triangles",  Debug_View == 1) { Debug_View = 1; fast_render.requested = true }
+            layout_advance(layout, 10)
+            if display_button_highlighted(layout, "Rectangles", Debug_View == 2) { Debug_View = 2; fast_render.requested = true }
+            layout_advance(layout, 10)
+            if display_button_highlighted(layout, "Both",       Debug_View == 3) { Debug_View = 3; fast_render.requested = true }
         layout_end_horizontal(layout)
         layout_advance(layout, 10)
         
         layout_begin_horizontal(layout)
-            if display_slider(layout, 100, &Test_Threshold, 10, 10000, "Test Threshold", flags = { .logarithmic }) {
+            if display_slider(layout, 100, &Triangle_Threshold, 10, 10000, "Triangle Threshold", flags = { .logarithmic }) {
                 fast_render.requested = true
             }
             layout_advance(layout, 10)
-            display_line(layout, "%", view_magnitude(cast(u32) Test_Threshold, precision = 1))
+            display_line(layout, "%", view_magnitude(cast(u32) Triangle_Threshold, precision = 1))
+        layout_end_horizontal(layout)
+        layout_advance(layout, 10)
+        layout_begin_horizontal(layout)
+            if display_slider(layout, 100, &Rectangle_Threshold, 10, 10000, "Rectangle Threshold", flags = { .logarithmic }) {
+                fast_render.requested = true
+            }
+            layout_advance(layout, 10)
+            display_line(layout, "%", view_magnitude(cast(u32) Rectangle_Threshold, precision = 1))
         layout_end_horizontal(layout)
         layout_advance(layout, 10)
         
@@ -371,6 +383,14 @@ main :: proc () {
             display_toggle(layout, "Display Progress", &render_display_progress)
             layout_advance(layout, 10)
             display_toggle(layout, "Use Tree", &Use_Tree)
+            if Use_Tree {
+                layout_advance(layout, 10)
+                display_toggle(layout, "Use Stack", &Use_Value_Stack)
+                if !Use_Value_Stack {
+                    layout_advance(layout, 10)
+                    display_toggle(layout, "Use Lanes", &Use_Lanes)
+                }
+            }
         layout_end_horizontal(layout)
         layout_advance(layout, 10)
         
