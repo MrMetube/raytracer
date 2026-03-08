@@ -3,6 +3,8 @@ package main
 import "core:time"
 import rl "vendor:raylib"
 
+// @todo(viktor): if we know the number of triangles N then we know that tree can never have more then 2N-1 nodes
+// because if each leaf has only one triangle then we have N leaves + N/2 parents + N/4 ... -> N leaves + N branches
 Model :: struct {
     triangles: [dynamic] Triangle,
     tree:      [dynamic] Tree_Node,

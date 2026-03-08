@@ -121,8 +121,8 @@ main :: proc () {
     ////////////////////////////////////////////////
     
     camera: Camera
-    camera.p = {0, -7, 1}
-    camera.z = normalize_or_zero(camera.p)
+    camera.p = {0, -7, 3}
+    camera.z = normalize_or_zero(camera.p - {0, 0, 1})
     camera.x = normalize_or_zero(cross(v3{0, 0, 1}, camera.z))
     camera.y = normalize_or_zero(cross(camera.z, camera.x))
     

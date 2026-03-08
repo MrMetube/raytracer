@@ -41,24 +41,21 @@ tree_build :: proc (tree: ^[dynamic] Tree_Node, triangles: [dynamic] Triangle) {
     
     ////////////////////////////////////////////////
     
-    Triangle_Info :: struct {
-        bounds: Rectangle3,
-        center: v3,
-    }
-        
-    triangle_infos := make_slice(allocator, [] Triangle_Info, len(triangles))
+    triangle_centers := make_slice(allocator, [] v3, len(triangles))
     
     root := &tree[Root_Index]
     root.bounds = rectangle_inverted_infinity(Rectangle3)
     
     root_values := make_slice(allocator, [] Value_Index, len(triangles))
     for value_index in cast(Value_Index) 0 ..< cast(Value_Index) len(triangles) {
-        bounds := get_bounds(triangles[value_index])
-        center := rectangle_get_center(bounds)
+        triangle := triangles[value_index]
+        center := (triangle.a + triangle.b + triangle.c) / 3
         
-        root.bounds = rectangle_union(root.bounds, bounds)
+        root.bounds = rectangle_union_point(root.bounds, triangle.a)
+        root.bounds = rectangle_union_point(root.bounds, triangle.b)
+        root.bounds = rectangle_union_point(root.bounds, triangle.c)
         root_values[value_index] = value_index
-        triangle_infos[value_index] = { bounds, center }
+        triangle_centers[value_index] = center
     }
     
     root_area_half: f32
@@ -100,19 +97,20 @@ tree_build :: proc (tree: ^[dynamic] Tree_Node, triangles: [dynamic] Triangle) {
         // @waste we make a second buffer, take two slices of it and throw away the original
         best_node_values := temp_node_values[:len(it.node_values)]
         
+        // @speed only check on the value centers at each axis, inbetween regions have constant cost
         // @todo(viktor): reduce this to something reasonable once we have bigger, or just more models
         attempts :: 16384
         for split_axis in 0..<3 {
             Data :: struct {
                 split_axis: int,
-                value_infos: [] Triangle_Info,
+                triangle_centers: [] v3,
             }
             
-            data := Data { split_axis, triangle_infos[:] }
+            data := Data { split_axis, triangle_centers }
             slice.sort_by_with_data(it.node_values, proc (a, b: Value_Index, data_p: pmm) -> bool {
                 data := cast(^Data) data_p
-                a_center := data.value_infos[a].center
-                b_center := data.value_infos[b].center
+                a_center := data.triangle_centers[a]
+                b_center := data.triangle_centers[b]
                 
                 return a_center[data.split_axis] < b_center[data.split_axis]
             }, &data)
@@ -137,9 +135,8 @@ tree_build :: proc (tree: ^[dynamic] Tree_Node, triangles: [dynamic] Triangle) {
                 for right := node_count; a_count < right; {
                     it_index := (a_count + right) / 2
                     
-                    value_index  := it.node_values[it_index]
-                    value_bounds := triangle_infos[value_index]
-                    center       := value_bounds.center
+                    value_index := it.node_values[it_index]
+                    center      := triangle_centers[value_index]
                     
                     if center[split_axis] < middle {
                         a_count = it_index + 1
@@ -227,8 +224,9 @@ tree_build :: proc (tree: ^[dynamic] Tree_Node, triangles: [dynamic] Triangle) {
                 value := buffer[buffer_index]
                 triangles[value_index] = value
                 
-                value_bounds := get_bounds(value)
-                node.bounds = rectangle_union(node.bounds, value_bounds)
+                node.bounds = rectangle_union_point(node.bounds, value.a)
+                node.bounds = rectangle_union_point(node.bounds, value.b)
+                node.bounds = rectangle_union_point(node.bounds, value.c)
             }
             
             next_free_index += cast(Value_Index) node.value_count
@@ -242,15 +240,6 @@ tree_build :: proc (tree: ^[dynamic] Tree_Node, triangles: [dynamic] Triangle) {
     }
     
     assert(next_free_index == cast(Value_Index) len(buffer))
-}
-
-get_bounds :: proc { get_bounds_triangle }
-get_bounds_triangle :: proc (triangle: Triangle) -> Rectangle3 {
-    bounds := rectangle_inverted_infinity(Rectangle3)
-    bounds = rectangle_union_point(bounds, triangle.a)
-    bounds = rectangle_union_point(bounds, triangle.b)
-    bounds = rectangle_union_point(bounds, triangle.c)
-    return bounds
 }
 
 ////////////////////////////////////////////////

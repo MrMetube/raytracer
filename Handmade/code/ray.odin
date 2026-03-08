@@ -416,10 +416,10 @@ cast_rays :: proc (stats: ^Render_Stats, models: [] Model, materials: [] Materia
 Use_Value_Stack := false
 Use_Lanes := false
 
-traverse_tree_and_collect_values :: proc (_values_stack: [] [LaneWidth] Value_Index, triangles: Lane_Slice(Triangle), nodes: [] Tree_Node, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32, hit: ^Hit_Info, local_nil_value_lanes_tested: ^[LaneWidth] u32, triangles_tested_lanes, rectangles_tested_lanes: ^lane_u32) -> (_values_len: lane_u32) {
+traverse_tree_and_collect_values :: proc (_values_stack: [] [LaneWidth] Value_Index, triangles: Lane_Slice(Triangle), tree: [] Tree_Node, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32, hit: ^Hit_Info, local_nil_value_lanes_tested: ^[LaneWidth] u32, triangles_tested_lanes, rectangles_tested_lanes: ^lane_u32) -> (_values_len: lane_u32) {
     spall_proc()
     
-    nodes        := to_lane(nodes)
+    tree          := to_lane(tree)
     _values_stack := to_lane(_values_stack)
     
     inv_d := 1 / ray_d
@@ -439,7 +439,7 @@ traverse_tree_and_collect_values :: proc (_values_stack: [] [LaneWidth] Value_In
         
         it_index := lane_gather(stack_top, it_mask, cast(lane_Node_Index) Nil_Index)
         
-        node := lane_index(nodes, cast(lane_u32) it_index)
+        node := lane_index(tree, cast(lane_u32) it_index)
         
         // rectangles_tested_lanes^ += 1 & it_mask
         // hit_mask, _ := hit_rectangle(node, neg_inv_o, inv_d, min_t, hit.closest_t)
@@ -462,11 +462,12 @@ traverse_tree_and_collect_values :: proc (_values_stack: [] [LaneWidth] Value_In
         has_subnodes  &= not_equal(cast(lane_u32) first_subnode, Nil_Index)
         
         if has_subnodes != lane_false {
+            spall_scope("has subnodes")
             index_0 := first_subnode+0
             index_1 := first_subnode+1
             
-            node0 := lane_index(nodes, cast(lane_u32) index_0)
-            node1 := lane_index(nodes, cast(lane_u32) index_1)
+            node0 := lane_index(tree, cast(lane_u32) index_0)
+            node1 := lane_index(tree, cast(lane_u32) index_1)
             
             hit0, tmin0 := hit_rectangle(node0, neg_inv_o, inv_d, min_t, hit.closest_t)
             hit1, tmin1 := hit_rectangle(node1, neg_inv_o, inv_d, min_t, hit.closest_t)
@@ -483,8 +484,8 @@ traverse_tree_and_collect_values :: proc (_values_stack: [] [LaneWidth] Value_In
             append_near &= hit_near
             append_far  &= hit_far
             
-            x0 := lane_index(lane_index(stack, stack_count+0),            lane_offset)
-            x1 := lane_index(lane_index(stack, stack_count+1&append_far), lane_offset)
+            x0 := lane_index(lane_index(stack, stack_count + 0),            lane_offset)
+            x1 := lane_index(lane_index(stack, stack_count + (1 & append_far)), lane_offset)
             lane_scatter(x0, node_far,  append_far)
             lane_scatter(x1, node_near, append_near)
             conditional_assign(append_far,  &stack_count, stack_count + 1)
@@ -492,6 +493,7 @@ traverse_tree_and_collect_values :: proc (_values_stack: [] [LaneWidth] Value_In
         }
         
         if has_values != lane_false {
+            spall_scope("has values")
             value_count := first_value + node_value_count
             
             if Use_Value_Stack {
