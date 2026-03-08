@@ -29,8 +29,11 @@ Subnodes_Per_Node :: 2
 
 // @note(viktor): this is not idempotic, as the values are reordered.
 // A second build may encounter values in a different order compared to the first build.
-tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, triangles: [dynamic] Triangle, max_depth: u32) {
+tree_build :: proc (tree: ^[dynamic] Tree_Node, triangles: [dynamic] Triangle) {
     clear(tree)
+    
+    max_depth := Tree_Max_Depth
+    allocator := context.temp_allocator
     
     append_nothing(tree) // nil
     append_nothing(tree) // root

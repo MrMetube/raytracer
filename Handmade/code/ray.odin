@@ -51,8 +51,7 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, all_brdf_values: ^[d
         dest.count, data = (cast(^uv3) &data[0])^, data[size_of(uv3):]
         
         total_count := dest.count[0] * dest.count[1] * dest.count[2]
-        temp_values := (cast([^]f64) &data[0])[:total_count * len(v3)]
-        // :BelowHorizon we currently check and handle negative values in the raytracer by defaulting to no color , but this could be handled here right?
+        temp_values := slice_from_parts(f64, &data[0], total_count * len(v3))
         
         file_size := cast(umm) &data[0] + auto_cast len(data)
         read_size := cast(umm) &temp_values[0] + auto_cast len(temp_values) * size_of(f64)
@@ -69,7 +68,7 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, all_brdf_values: ^[d
             result.g = cast(f32) temp_values[i + total_count * 1]
             result.b = cast(f32) temp_values[i + total_count * 2]
             
-            // @note(viktor): a value of -1 indicates that the reflection would be below the horizon :BelowHorizon
+            // @note(viktor): a value of -1 indicates that the reflection would be below the horizon
             result = vec_max(result, 0)
             
             // @note(viktor): prescale the values per channel
@@ -99,7 +98,7 @@ Debug_View := 0
 Triangle_Threshold : f32 = 500
 Rectangle_Threshold : f32 = 1000
 
-render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle2i, entropy: ^RandomSeries, rays_per_pixel, max_bounce_count: u32) {
+render_tile :: proc(render_stats: ^Render_Stats, models: [] Model, materials: [] Material, brdf_data: [] v3, camera: Camera, image: Image, rect: Rectangle2i, entropy: ^RandomSeries, rays_per_pixel, max_bounce_count: u32) {
     film_distance :: 1
     film_center := vec_cast(lane_f32, camera.p - film_distance * camera.z)
     
@@ -122,7 +121,7 @@ render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle
             film_x := -1 + 2 * cast(f32) px / image_size.x
             film_p := vec_cast(lane_f32, film_x, film_y)
             
-            cast_info := cast_rays(world, film_p, entropy, pixel_size, half_film_size, film_center, camera, rays_per_pixel, max_bounce_count)
+            cast_info := cast_rays(render_stats, models, materials, brdf_data, film_p, entropy, pixel_size, half_film_size, film_center, camera, rays_per_pixel, max_bounce_count)
             
             bounces_computed += cast_info.bounces_computed
             loops_computed   += cast_info.loops_computed
@@ -151,12 +150,12 @@ render_tile :: proc(world: ^World, camera: Camera, image: Image, rect: Rectangle
                 image.data[pixel_index] = pixel
             }
         }
-        atomic_add(&world.pixels_done, auto_cast rectangle_get_dimension(rect).x)
+        atomic_add(&render_stats.pixels_done, auto_cast rectangle_get_dimension(rect).x)
     }
     
-    atomic_add(&world.bounces_computed, bounces_computed)
-    atomic_add(&world.loops_computed, loops_computed)
-    atomic_add(&world.tiles_retired, 1)
+    atomic_add(&render_stats.bounces_computed, bounces_computed)
+    atomic_add(&render_stats.loops_computed, loops_computed)
+    atomic_add(&render_stats.tiles_retired, 1)
 }
 
 Hit_Info :: struct {
@@ -174,7 +173,7 @@ Cast_Info :: struct {
     bounces_computed, loops_computed, triangles_tested, rectangles_tested: u64,
 }
 
-cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries,  pixel_size: lane_v2, half_film_size: lane_v2, film_center: lane_v3, camera: Camera, rays_per_pixel, max_bounce_count: u32) -> Cast_Info {
+cast_rays :: proc (stats: ^Render_Stats, models: [] Model, materials: [] Material, brdf_data: [] v3, init_film_p: lane_v2, entropy: ^RandomSeries,  pixel_size: lane_v2, half_film_size: lane_v2, film_center: lane_v3, camera: Camera, rays_per_pixel, max_bounce_count: u32) -> Cast_Info {
     spall_proc()
     final_color_lanes: lane_v3
     
@@ -219,7 +218,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
             
             ////////////////////////////////////////////////
             
-            for model in world.models {
+            for model in models {
                 triangles := model.triangles
                 nodes     := model.tree
                 
@@ -339,8 +338,8 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
                         local_nil_value_lanes_tested[0] += min_len
                     }
                     
-                    for i in 0..<len(world.nil_value_lanes_tested) {
-                        atomic_add(&world.nil_value_lanes_tested[i], local_nil_value_lanes_tested[i])
+                    for i in 0..<len(stats.nil_value_lanes_tested) {
+                        atomic_add(&stats.nil_value_lanes_tested[i], local_nil_value_lanes_tested[i])
                     }
                 } else {
                     {
@@ -357,8 +356,8 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
             
             ////////////////////////////////////////////////
             
-            materials       := to_lane(world.materials)
-            all_brdf_values := to_lane(world.all_brdf_values)
+            materials := to_lane(materials)
+            brdf_data := to_lane(brdf_data)
             
             material        := lane_index(materials, hit.material)
             hit_emit        := lane_gather_v(lane_member(material, "emit",        type_of(Material{}.emit)))
@@ -383,7 +382,7 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
             
             next_d := linear_blend(pure_bounce, random_bounce, hit_scatter)
             
-            reflectance := brdf_lookup(all_brdf_values, materials, hit.material, -ray_d, hit.normal, hit.tangent, hit.binormal, next_d)
+            reflectance := brdf_lookup(brdf_data, materials, hit.material, -ray_d, hit.normal, hit.tangent, hit.binormal, next_d)
             reflectance *= hit_reflect
             conditional_assign(hit.did_hit, &attenuation, attenuation * reflectance)
             
@@ -404,10 +403,10 @@ cast_rays :: proc (world: ^World, init_film_p: lane_v2, entropy: ^RandomSeries, 
     result.triangles_tested  = cast(u64) horizontal_add(triangles_tested_lanes)
     result.rectangles_tested = cast(u64) horizontal_add(rectangles_tested_lanes)
     
-    atomic_add(&world.all_triangle_tests.count, all_triangle_tests.count)
-    atomic_add(&world.all_triangle_tests.sum,   all_triangle_tests.sum)
-    atomic_add(&world.triangle_tests.count, triangle_tests.count)
-    atomic_add(&world.triangle_tests.sum,   triangle_tests.sum)
+    atomic_add(&stats.all_triangle_tests.count, all_triangle_tests.count)
+    atomic_add(&stats.all_triangle_tests.sum,   all_triangle_tests.sum)
+    atomic_add(&stats.triangle_tests.count, triangle_tests.count)
+    atomic_add(&stats.triangle_tests.sum,   triangle_tests.sum)
     
     return result
 }
@@ -562,6 +561,7 @@ traverse_tree_and_collect_values :: proc (_values_stack: [] [LaneWidth] Value_In
                     }
                     local_nil_value_lanes_tested[0] = count_x8
                     
+                    // @todo(viktor): we could also loop once more above, and mask the last iteration
                     if remainder != 0 {
                         local_nil_value_lanes_tested[LaneWidth-remainder] += 1
                         index := first + count_x8

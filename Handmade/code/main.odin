@@ -16,6 +16,8 @@ Use_Tree := true
 
 Is_Optimized :: ODIN_OPTIMIZATION_MODE == .Speed
 
+Tree_Max_Depth: u32 = 6
+
 main :: proc () {
     rl.SetTraceLogLevel(.WARNING)
     
@@ -47,14 +49,10 @@ main :: proc () {
     load_brdf_merl("./BRDFDatabase/brdfs/purple-paint.binary", &world.materials[5].brdf, &world.all_brdf_values); material_names[5] = "purple-paint"
     load_brdf_merl("./BRDFDatabase/brdfs/white-marble.binary", &world.materials[6].brdf, &world.all_brdf_values); material_names[6] = "white-marble"
     
-    Tree_Max_Depth: u32 = 6
-    
     // @todo(viktor): fixed Buffer of models and return indices
     reserve(&world.models, 128)
     
     area_size := cast(f32) 5
-    // append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 6 })
-    // append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size-0.1}, radius = area_size/5, material = 3 })
     
     // append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
     // append(&world.planes, Plane { normal = { 1, 0, 0}, tangent = {}, binormal = {}, center = {-area_size, 0, 0},     radius = area_size,   material = 1 })
@@ -78,7 +76,7 @@ main :: proc () {
             t.c.z += 5
         }
         
-        tree_build(context.temp_allocator, &plane.tree, plane.triangles, Tree_Max_Depth)
+        tree_build(&plane.tree, plane.triangles)
     }
     { // ground
         plane := world_create_model(&world)
@@ -97,7 +95,7 @@ main :: proc () {
             t.c.xy *= 500
         }
         
-        tree_build(context.temp_allocator, &plane.tree, plane.triangles, Tree_Max_Depth)
+        tree_build(&plane.tree, plane.triangles)
     }
     
     
@@ -111,7 +109,7 @@ main :: proc () {
     load_teapot(&teapot.triangles, 0, 4)
     
     start := time.now()
-    tree_build(context.temp_allocator, &teapot.tree, teapot.triangles, Tree_Max_Depth)
+    tree_build(&teapot.tree, teapot.triangles)
     build_time := time.since(start)
     print("build time %\n", fmt.tprint(build_time))
     
@@ -123,13 +121,8 @@ main :: proc () {
     ////////////////////////////////////////////////
     
     camera: Camera
-    if !false {
-        camera.p = {0, -7, 2.149546}
-        camera.z = {-0.064219, -0.991897, 0.109620}
-    } else {
-        camera.p = {0, -7, 1}
-        camera.z = normalize_or_zero(camera.p)
-    }
+    camera.p = {0, -7, 1}
+    camera.z = normalize_or_zero(camera.p)
     camera.x = normalize_or_zero(cross(v3{0, 0, 1}, camera.z))
     camera.y = normalize_or_zero(cross(camera.z, camera.x))
     
@@ -293,7 +286,7 @@ main :: proc () {
                     
                     render.active = false
                     render.end = time.now()
-                    print_render_results(&render.world, render.start, render.end)
+                    print_render_results(&render.stats, render.start, render.end)
                     
                     free_all(render.allocator)
                     reload = true
@@ -414,7 +407,7 @@ main :: proc () {
             
             if rebuild {
                 start = time.now()
-                tree_build(context.temp_allocator, &teapot.tree, teapot.triangles, Tree_Max_Depth)
+                tree_build(&teapot.tree, teapot.triangles)
                 build_time = time.since(start)
                 print("building tree took %\n", fmt.tprint(build_time))
                 inspection = inspect(teapot.tree)
@@ -538,7 +531,7 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
             
             if render.active && !work_is_completed(&render.queue){
                 total_pixels := render.image.width * render.image.height
-                done_percentage := cast(f32) render.world.pixels_done / cast(f32) total_pixels
+                done_percentage := cast(f32) render.stats.pixels_done / cast(f32) total_pixels
                 
                 layout_advance(layout, 10)
                 bar_p := layout.at

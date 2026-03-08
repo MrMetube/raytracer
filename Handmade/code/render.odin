@@ -15,16 +15,17 @@ World :: struct {
     materials: [dynamic] Material,
     all_brdf_values: [dynamic] v3,
     
-    using render_stats: struct {
-        bounces_computed: u64,
-        loops_computed:   u64,
-        tiles_retired:    u32,
-        pixels_done:      u32,
-        nil_value_lanes_tested: [LaneWidth] u32,
-        
-        // @note(viktor): only sum and count -> avg are valid
-        all_triangle_tests, triangle_tests: Stat(u32),
-    },
+}
+
+Render_Stats :: struct {
+    bounces_computed: u64,
+    loops_computed:   u64,
+    tiles_retired:    u32,
+    pixels_done:      u32,
+    nil_value_lanes_tested: [LaneWidth] u32,
+    
+    // @note(viktor): only sum and count -> avg are valid
+    all_triangle_tests, triangle_tests: Stat(u32),
 }
 
 Render :: struct {
@@ -32,8 +33,6 @@ Render :: struct {
     active:    bool,
     
     start, end: time.Time,
-    
-    world: World,
     
     image:   Image,
     texture: rl.Texture,
@@ -46,6 +45,11 @@ Render :: struct {
     max_bounce_count: u32,
     
     image_size_factor: i32,
+    
+    models:    [] Model,
+    materials: [] Material,
+    brdf_data: [] v3,
+    stats: Render_Stats,
 }
 
 Color :: [4] u8
@@ -98,22 +102,23 @@ init_render_image :: proc (render: ^Render, window_size: v2i) {
 }
 
 begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: Camera) {
+    free_all(render.allocator)
+    
     render.active = true
     
-    render.world.render_stats = {}
-    
+    render.stats = {}
     
     // @volatile
-    render.world.models = make_dynamic_array(render.allocator, [dynamic] Model, len(world.models), len(world.models))
-    for model in world.models {
+    render.models = make_slice(render.allocator, [] Model, len(world.models))
+    for model, index in world.models {
         render_model: Model
         render_model.triangles = make_shallow_copy(model.triangles, render.allocator)
-        render_model.tree      = make_shallow_copy(model.tree, render.allocator)
-        append(&render.world.models, render_model)
+        render_model.tree      = make_shallow_copy(model.tree,      render.allocator)
+        render.models[index] = render_model
     }
     
-    render.world.all_brdf_values = world.all_brdf_values
-    render.world.materials       = make_shallow_copy(world.materials, render.allocator)
+    render.brdf_data = world.all_brdf_values[:]
+    render.materials = make_shallow_copy(world.materials, render.allocator)[:]
     
     zero_slice(render.image.data)
     tile_size := cast(v2i) max(render.image.width, render.image.height) / cast(i32) core_count
@@ -123,7 +128,11 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     tile_count := tile_cols * tile_rows
     
     Work :: struct {
-        world:   ^World,
+        stats: ^Render_Stats,
+        models: [] Model,
+        materials: [] Material,
+        brdf_data: [] v3,
+        
         camera:  Camera,
         image:   Image, 
         rect:    Rectangle2i, 
@@ -145,19 +154,31 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
             
             work := &works[work_index]
             work_index += 1
-            work ^= { &render.world, camera, render.image, rect, entropy, render.rays_per_pixel, render.max_bounce_count }
+            work ^= { 
+                &render.stats, 
+                render.models, 
+                render.materials, 
+                render.brdf_data, 
+                camera, 
+                render.image, 
+                rect, 
+                entropy, 
+                render.rays_per_pixel, 
+                render.max_bounce_count
+            }
             
             enqueue_work_or_do_immediatly(&render.queue, proc(work: ^Work) {
-                render_tile(work.world, work.camera, work.image, work.rect, &work.entropy, work.rays_per_pixel, work.max_bounce_count)
+                render_tile(work.stats, work.models, work.materials, work.brdf_data, work.camera, work.image, work.rect, &work.entropy, work.rays_per_pixel, work.max_bounce_count)
             }, work)
         }
     }
 }
 
-print_render_results :: proc (world: ^World, start, end: time.Time) {
+print_render_results :: proc (stats: ^Render_Stats, start, end: time.Time) {
     total_time := time.diff(start, end)
-    bounces_computed := volatile_load(&world.bounces_computed)
-    loops_computed   := volatile_load(&world.loops_computed)
+    
+    bounces_computed := volatile_load(&stats.bounces_computed)
+    loops_computed   := volatile_load(&stats.loops_computed)
     wasted_bounces   := loops_computed - bounces_computed
     nanoseconds := safe_ratio_or_zero(time.duration_nanoseconds(total_time), cast(i64) bounces_computed)
     print("Raycasting time: %s\n  bounces %\n  total bounces %\n  wasted bounces % (% %%)\n  time per ray %\n", 
@@ -171,14 +192,14 @@ print_render_results :: proc (world: ^World, start, end: time.Time) {
     
     total_lanes: u32
     wasted_lanes: u32
-    for e, i in world.nil_value_lanes_tested {
+    for e, i in stats.nil_value_lanes_tested {
         total_lanes += e
         wasted_lanes += e * cast(u32) i
     }
     
     print("Lane utilization for hit tests:\n")
     print("  Empty lanes: [")
-    for e, i in world.nil_value_lanes_tested {
+    for e, i in stats.nil_value_lanes_tested {
         if i > 0 do print(", ")
         print("% = % %%", i, view_percentage_ratio(safe_ratio_or_zero(cast(f64) e, cast(f64) total_lanes)))
     }
@@ -187,8 +208,8 @@ print_render_results :: proc (world: ^World, start, end: time.Time) {
     print("  Wasted lanes: % % %%\n", view_magnitude(wasted_lanes), view_percentage_ratio(safe_ratio_or_zero(cast(f64) wasted_lanes, cast(f64) (total_lanes * LaneWidth))))
     
     {
-        tests := &world.triangle_tests
-        total := &world.all_triangle_tests
+        tests := &stats.triangle_tests
+        total := &stats.all_triangle_tests
         stat_finalize(tests)
         stat_finalize(total)
         wasted := total.sum - tests.sum
