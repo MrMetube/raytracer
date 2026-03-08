@@ -47,39 +47,77 @@ main :: proc () {
     load_brdf_merl("./BRDFDatabase/brdfs/purple-paint.binary", &world.materials[5].brdf, &world.all_brdf_values); material_names[5] = "purple-paint"
     load_brdf_merl("./BRDFDatabase/brdfs/white-marble.binary", &world.materials[6].brdf, &world.all_brdf_values); material_names[6] = "white-marble"
     
-    {
-        clear(&world.planes)
-        clear(&world.triangles)
+    Tree_Max_Depth: u32 = 6
+    
+    // @todo(viktor): fixed Buffer of models and return indices
+    reserve(&world.models, 128)
+    
+    area_size := cast(f32) 5
+    // append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 6 })
+    // append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size-0.1}, radius = area_size/5, material = 3 })
+    
+    // append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
+    // append(&world.planes, Plane { normal = { 1, 0, 0}, tangent = {}, binormal = {}, center = {-area_size, 0, 0},     radius = area_size,   material = 1 })
+    // append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 5 })
+    // append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
+    
+    { // light
+        plane := world_create_model(&world)
         
-        area_size := cast(f32) 5
-        append(&world.planes, Plane { normal = { 0, 0, 1}, tangent = {}, binormal = {}, center = { 0, 0, 0},             radius = +Infinity,   material = 6 })
-        append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size-0.1}, radius = area_size/5, material = 3 })
+        v0 := v3 {-1, -1, 0}
+        v1 := v3 {-1,  1, 0}
+        v2 := v3 { 1,  1, 0}
+        v3 := v3 { 1, -1, 0}
         
-        // append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
-        // append(&world.planes, Plane { normal = { 1, 0, 0}, tangent = {}, binormal = {}, center = {-area_size, 0, 0},     radius = area_size,   material = 1 })
-        // append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 5 })
-        // append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
+        append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 3})
+        append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 3})
         
-        // 0 =   3488 triangles
-        // 1 =  19480 triangles, 5.5x 0
-        // 2 = 145620 triangles, 7.5x 1
+        for &t in plane.triangles {
+            t.a.z += 5
+            t.b.z += 5
+            t.c.z += 5
+        }
         
-        load_teapot(&world.triangles, 0, 4)
+        tree_build(context.temp_allocator, &plane.tree, plane.triangles, Tree_Max_Depth)
+    }
+    { // ground
+        plane := world_create_model(&world)
+        
+        v0 := v3 {-1, -1, 0}
+        v1 := v3 {-1,  1, 0}
+        v2 := v3 { 1,  1, 0}
+        v3 := v3 { 1, -1, 0}
+        
+        append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 6})
+        append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 6})
+        
+        for &t in plane.triangles {
+            t.a.xy *= 500
+            t.b.xy *= 500
+            t.c.xy *= 500
+        }
+        
+        tree_build(context.temp_allocator, &plane.tree, plane.triangles, Tree_Max_Depth)
     }
     
-    ////////////////////////////////////////////////
     
-    triangles_max_depth: u32 = 6
+    
+    // 0 =   3488 triangles
+    // 1 =  19480 triangles, 5.5x 0
+    // 2 = 145620 triangles, 7.5x 1
+    
+    teapot := world_create_model(&world)
+    clear(&teapot.triangles)
+    load_teapot(&teapot.triangles, 0, 4)
     
     start := time.now()
-    tree_build(context.temp_allocator, &world.triangle_nodes, world.triangles[:], triangles_max_depth)
+    tree_build(context.temp_allocator, &teapot.tree, teapot.triangles, Tree_Max_Depth)
     build_time := time.since(start)
     print("build time %\n", fmt.tprint(build_time))
     
-    inspection := inspect(world.triangle_nodes[:])
+    inspection := inspect(teapot.tree)
     {
-        print_inspection(world.triangles[:], world.triangle_nodes[:], inspection)
-        // print_node(world.triangle_nodes[:])
+        print_inspection(teapot.triangles, inspection)
     }
     
     ////////////////////////////////////////////////
@@ -367,47 +405,24 @@ main :: proc () {
             display_line(layout, "values per node: max = %, avg = %", inspection.values_per_node.max, view_float(inspection.values_per_node.avg, precision = 2))
             layout_advance(layout, 10)
             
-            xx := cast(f32) triangles_max_depth
+            xx := cast(f32) Tree_Max_Depth
             rebuild := false
             display_slider(layout, 200, &xx, 1, 16, "Desired Depth %",  round(u32, xx))
-            if triangles_max_depth != round(u32, xx) do rebuild = true
-            triangles_max_depth    = round(u32, xx)
+            if Tree_Max_Depth != round(u32, xx) do rebuild = true
+            Tree_Max_Depth    = round(u32, xx)
             if display_button(layout, "rebuild") do rebuild = true
             
             if rebuild {
                 start = time.now()
-                tree_build(context.temp_allocator, &world.triangle_nodes, world.triangles[:], triangles_max_depth)
+                tree_build(context.temp_allocator, &teapot.tree, teapot.triangles, Tree_Max_Depth)
                 build_time = time.since(start)
                 print("building tree took %\n", fmt.tprint(build_time))
-                inspection = inspect(world.triangle_nodes[:])
+                inspection = inspect(teapot.tree)
                 
                 fast_render.requested = true
             }
             
             layout_unindent(layout)
-        }
-        
-        layout_advance(layout, FontSize)
-        if display_list(layout, &show_planes, "Planes") {
-            layout_indent(layout)
-            defer layout_unindent(layout)
-            
-            for &plane, index in world.planes {
-                material := cast(f32) plane.material
-                display_line(layout, "Plane %: %", index, material_names[plane.material])
-                
-                layout_indent(layout)
-                defer layout_unindent(layout)
-                
-                display_slider(layout, 360, &material, 0, cast(f32) len(material_names)-0.51, "Material Index")
-                if plane.material != round(u32, material) do fast_render.requested = true
-                plane.material = round(u32, material)
-                
-                if display_slider  (layout, 240, &plane.radius, 0.1, 1000, "Radius", flags = { .logarithmic }) do fast_render.requested = true
-                if display_slider_v(layout, 240, &plane.center, -10, 10,   "Center", flags = { .relative })    do fast_render.requested = true
-                
-                layout_advance(layout, 10)
-            }
         }
         
         layout_advance(layout, FontSize)

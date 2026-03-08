@@ -3,6 +3,30 @@ package main
 import "core:time"
 import rl "vendor:raylib"
 
+Model :: struct {
+    triangles: [dynamic] Triangle,
+    tree:      [dynamic] Tree_Node,
+}
+
+// @volatile also update the render's world copying
+World :: struct {
+    models: [dynamic] Model,
+    
+    materials: [dynamic] Material,
+    all_brdf_values: [dynamic] v3,
+    
+    using render_stats: struct {
+        bounces_computed: u64,
+        loops_computed:   u64,
+        tiles_retired:    u32,
+        pixels_done:      u32,
+        nil_value_lanes_tested: [LaneWidth] u32,
+        
+        // @note(viktor): only sum and count -> avg are valid
+        all_triangle_tests, triangle_tests: Stat(u32),
+    },
+}
+
 Render :: struct {
     requested: bool,
     active:    bool,
@@ -32,32 +56,20 @@ Image :: struct {
     height: i32,
 }
 
-// @volatile also update the render's world copying
-World :: struct {
-    triangle_nodes: [dynamic] Tree_Node,
-    triangles: [dynamic] Triangle,
-    
-    planes:    [dynamic] Plane,
-    materials: [dynamic] Material,
-    all_brdf_values: [dynamic] v3,
-    
-    using render_stats: struct {
-        bounces_computed: u64,
-        loops_computed:   u64,
-        tiles_retired:    u32,
-        pixels_done:      u32,
-        nil_value_lanes_tested: [LaneWidth] u32,
-        
-        // @note(viktor): only sum and count -> avg are valid
-        all_triangle_tests, triangle_tests: Stat(u32),
-    },
-}
-
 Camera :: struct {
     x: v3,
     y: v3,
     z: v3,
     p: v3,
+}
+
+////////////////////////////////////////////////
+
+world_create_model :: proc (world: ^World) -> ^Model {
+    model_index := len(world.models)
+    append_nothing(&world.models)
+    result := &world.models[model_index]
+    return result
 }
 
 ////////////////////////////////////////////////
@@ -90,25 +102,24 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     
     render.world.render_stats = {}
     
-    render.world.all_brdf_values = world.all_brdf_values
     
     // @volatile
-    make_by_pointer(&render.world.planes,         len(world.planes),         render.allocator)
-    make_by_pointer(&render.world.triangles,      len(world.triangles),      render.allocator)
-    make_by_pointer(&render.world.triangle_nodes, len(world.triangle_nodes), render.allocator)
-    make_by_pointer(&render.world.materials,      len(world.materials),      render.allocator)
+    render.world.models = make_dynamic_array(render.allocator, [dynamic] Model, len(world.models), len(world.models))
+    for model in world.models {
+        render_model: Model
+        render_model.triangles = make_shallow_copy(model.triangles, render.allocator)
+        render_model.tree      = make_shallow_copy(model.tree, render.allocator)
+        append(&render.world.models, render_model)
+    }
     
-    copy(render.world.planes[:],         world.planes[:])
-    copy(render.world.triangles[:],      world.triangles[:])
-    copy(render.world.triangle_nodes[:], world.triangle_nodes[:])
-    copy(render.world.materials[:],      world.materials[:])
+    render.world.all_brdf_values = world.all_brdf_values
+    render.world.materials       = make_shallow_copy(world.materials, render.allocator)
     
-    image := render.image
-    zero_slice(image.data)
-    tile_size: v2i = max(image.width, image.height) / cast(i32) core_count
+    zero_slice(render.image.data)
+    tile_size := cast(v2i) max(render.image.width, render.image.height) / cast(i32) core_count
     
-    tile_cols  := (image.width  + tile_size.x - 1) / tile_size.x
-    tile_rows  := (image.height + tile_size.y - 1) / tile_size.y
+    tile_cols  := (render.image.width  + tile_size.x - 1) / tile_size.x
+    tile_rows  := (render.image.height + tile_size.y - 1) / tile_size.y
     tile_count := tile_cols * tile_rows
     
     Work :: struct {
@@ -128,13 +139,13 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     for row in 0..<tile_rows {
         for col in 0..<tile_cols {
             rect := rectangle_min_dimension(tile_size * {col, row}, tile_size)
-            rect  = rectangle_intersection(rect, rectangle_min_dimension(i32(0), 0, image.width, image.height))
+            rect  = rectangle_intersection(rect, rectangle_min_dimension(i32(0), 0, render.image.width, render.image.height))
             
             entropy := seed_random_series(1842098778 + row * 984612097 + col * 237711 + cast(i32) work_index)
             
             work := &works[work_index]
             work_index += 1
-            work ^= { &render.world, camera, image, rect, entropy, render.rays_per_pixel, render.max_bounce_count }
+            work ^= { &render.world, camera, render.image, rect, entropy, render.rays_per_pixel, render.max_bounce_count }
             
             enqueue_work_or_do_immediatly(&render.queue, proc(work: ^Work) {
                 render_tile(work.world, work.camera, work.image, work.rect, &work.entropy, work.rays_per_pixel, work.max_bounce_count)

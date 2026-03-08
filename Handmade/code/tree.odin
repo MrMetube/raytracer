@@ -29,33 +29,33 @@ Subnodes_Per_Node :: 2
 
 // @note(viktor): this is not idempotic, as the values are reordered.
 // A second build may encounter values in a different order compared to the first build.
-tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: [] $Value, max_depth: u32) {
+tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, triangles: [dynamic] Triangle, max_depth: u32) {
     clear(tree)
     
     append_nothing(tree) // nil
     append_nothing(tree) // root
-    if len(values) == 0 do return
+    if len(triangles) == 0 do return
     
     ////////////////////////////////////////////////
     
-    Value_Info :: struct {
+    Triangle_Info :: struct {
         bounds: Rectangle3,
         center: v3,
     }
         
-    value_infos := make_slice(allocator, [] Value_Info, len(values))
+    triangle_infos := make_slice(allocator, [] Triangle_Info, len(triangles))
     
     root := &tree[Root_Index]
     root.bounds = rectangle_inverted_infinity(Rectangle3)
     
-    root_values := make_slice(allocator, [] Value_Index, len(values))
-    for value_index in cast(Value_Index) 0 ..< cast(Value_Index) len(values) {
-        value_bounds := get_bounds(values[value_index])
-        center := rectangle_get_center(value_bounds)
+    root_values := make_slice(allocator, [] Value_Index, len(triangles))
+    for value_index in cast(Value_Index) 0 ..< cast(Value_Index) len(triangles) {
+        bounds := get_bounds(triangles[value_index])
+        center := rectangle_get_center(bounds)
         
-        root.bounds = rectangle_union(root.bounds, value_bounds)
+        root.bounds = rectangle_union(root.bounds, bounds)
         root_values[value_index] = value_index
-        value_infos[value_index] = { value_bounds, center }
+        triangle_infos[value_index] = { bounds, center }
     }
     
     root_area_half: f32
@@ -63,7 +63,7 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
         dim := rectangle_get_dimension(root.bounds)
         root_area_half = dim.y * dim.z + dim.x * (dim.z + dim.y)
     }
-    root_cost := root_area_half * cast(f32) len(values)
+    root_cost := root_area_half * cast(f32) len(triangles)
     
     final_node_values: map[Node_Index] [] Value_Index
     final_node_values.allocator = allocator
@@ -79,7 +79,7 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
     
     append(stack, Node_Info { Root_Index, root_cost, 0, root_values })
     
-    temp_node_values := make_slice(allocator, [] Value_Index, len(values))
+    temp_node_values := make_slice(allocator, [] Value_Index, len(triangles))
     
     for len(stack) > 0 {
         it := pop(stack)
@@ -102,10 +102,10 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
         for split_axis in 0..<3 {
             Data :: struct {
                 split_axis: int,
-                value_infos: [] Value_Info,
+                value_infos: [] Triangle_Info,
             }
             
-            data := Data { split_axis, value_infos[:] }
+            data := Data { split_axis, triangle_infos[:] }
             slice.sort_by_with_data(it.node_values, proc (a, b: Value_Index, data_p: pmm) -> bool {
                 data := cast(^Data) data_p
                 a_center := data.value_infos[a].center
@@ -135,7 +135,7 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
                     it_index := (a_count + right) / 2
                     
                     value_index  := it.node_values[it_index]
-                    value_bounds := value_infos[value_index]
+                    value_bounds := triangle_infos[value_index]
                     center       := value_bounds.center
                     
                     if center[split_axis] < middle {
@@ -199,9 +199,8 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
     
     ////////////////////////////////////////////////
     
-    buffer := make_slice(allocator, [] Value, len(values))
-    copy(buffer, values)
-    zero(values) 
+    buffer := make_shallow_copy(triangles, allocator)
+    zero(triangles[:])
     
     next_free_index: Value_Index
     
@@ -221,9 +220,9 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
             
             for buffer_index, offset in node_values {
                 value_index := node.first.value + cast(Value_Index) offset
-                assert(values[value_index] == {})
+                assert(triangles[value_index] == {})
                 value := buffer[buffer_index]
-                values[value_index] = value
+                triangles[value_index] = value
                 
                 value_bounds := get_bounds(value)
                 node.bounds = rectangle_union(node.bounds, value_bounds)
@@ -283,7 +282,7 @@ Tree_Info :: struct {
     node_count: u32,
 }
 
-inspect :: proc (nodes: [] Tree_Node, it_index: Node_Index = Root_Index, depth : u32 = 0) -> Tree_Info {
+inspect :: proc (nodes: [dynamic] Tree_Node, it_index: Node_Index = Root_Index, depth : u32 = 0) -> Tree_Info {
     it := nodes[it_index]
     value_count := it.value_count
     
@@ -312,7 +311,7 @@ inspect :: proc (nodes: [] Tree_Node, it_index: Node_Index = Root_Index, depth :
     return result
 }
 
-print_inspection :: proc (values: [] $Value, nodes: [] Tree_Node, inspection: Tree_Info) {
+print_inspection :: proc (values: [dynamic] Triangle, inspection: Tree_Info) {
     if len(values) > 0 {
         print("tree info:\n")
         print("            nodes: %\n", inspection.node_count)

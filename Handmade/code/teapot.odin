@@ -5,6 +5,8 @@ import "core:strings"
 import "core:strconv"
 
 load_teapot :: proc (triangles: ^[dynamic] Triangle, utah: u32, material: u32) {
+    clear(triangles)
+    
     data, err := os.read_entire_file_from_path(tprint("./teapot_bezier%.tris", utah), context.temp_allocator)
     assert(err == nil)
     
