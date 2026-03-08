@@ -1,3 +1,4 @@
+#+vet !unused-procedures
 #+no-instrumentation
 package main
 
@@ -142,7 +143,7 @@ lane_gather_index_mask :: proc (lane: Lane_Slice($T), index: lane_u32, mask: lan
 lane_gather_v_no_mask :: proc (lane: Lane($T/ [$N] $E)) -> [N] #simd [LaneWidth] E {
     result: [N] #simd [LaneWidth] E
     #no_bounds_check #unroll for channel_index in cast(u32) 0..<N {
-        index : Lane(E) = lane_index(lane, cast(lane_u32) channel_index)
+        index := lane_index(lane, cast(lane_u32) channel_index)
         result[channel_index] = lane_gather(index)
     }
     return result
@@ -150,7 +151,7 @@ lane_gather_v_no_mask :: proc (lane: Lane($T/ [$N] $E)) -> [N] #simd [LaneWidth]
 lane_gather_v_mask :: proc (lane: Lane($T/ [$N] $E), mask: lane_u32, default: [N] #simd [LaneWidth] E) -> [N] #simd [LaneWidth] E {
     result: [N] #simd [LaneWidth] E
     #no_bounds_check #unroll for channel_index in cast(u32) 0..<N {
-        index : Lane(E) = lane_index(lane, cast(lane_u32) channel_index)
+        index := lane_index(lane, cast(lane_u32) channel_index)
         result[channel_index] = lane_gather(index, mask, default[channel_index])
     }
     return result

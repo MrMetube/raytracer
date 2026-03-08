@@ -22,6 +22,9 @@ main :: proc () {
         build_native(native)
         append(cmd, "-custom-attribute:printlike")
         build_pedantic(pedantic)
+        if false {
+            append(cmd, "-vet-packages:main -vet-unused-procedures")
+        }
         
         end_build(cmd)
     }

@@ -62,9 +62,9 @@ Camera :: struct {
 
 ////////////////////////////////////////////////
 
-init_render :: proc (render: ^Render, rays_per_pixel: u32, max_bounce_count: u32, window_size: v2i, image_size_factor: i32, thread_count: u32, name: string,) {
-    render.rays_per_pixel   = rays_per_pixel
-    render.max_bounce_count = max_bounce_count
+init_render :: proc (render: ^Render, rays_per_pixel: u32, max_bounce_count: u32, window_size: v2i, image_size_factor: i32, thread_count: u32, name: string) {
+    render.rays_per_pixel    = rays_per_pixel
+    render.max_bounce_count  = max_bounce_count
     render.image_size_factor = image_size_factor
     
     render.allocator = arena_allocator(&render.arena)

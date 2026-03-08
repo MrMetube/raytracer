@@ -5,6 +5,11 @@ import "core:slice"
 Node_Index  :: distinct u32
 Value_Index :: distinct u32
 
+// @important 
+// Currently the 2 subnodes are always append on even-odd indices.
+// That means they are on the same cacheline.
+// This is because Nil and Root are appended as a pair and then
+// all subnodes are always appended as pairs.
 
 Tree_Node :: struct #align(32) {
     bounds:        Rectangle3,
@@ -23,7 +28,7 @@ Root_Index :: 1
 Subnodes_Per_Node :: 2
 
 // @note(viktor): this is not idempotic, as the values are reordered.
-// A second build will encounter values in a different order compared to the first build.
+// A second build may encounter values in a different order compared to the first build.
 tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: [] $Value, max_depth: u32) {
     clear(tree)
     
@@ -235,22 +240,6 @@ tree_build :: proc (allocator: Allocator, tree: ^[dynamic] Tree_Node, values: []
     }
     
     assert(next_free_index == cast(Value_Index) len(buffer))
-}
-
-tree_split_point :: proc (node: ^Tree_Node) -> (max_axis: int, split_point: f32) {
-    dimension := rectangle_get_dimension(node.bounds)
-    
-    max_axis = 0
-    max_dim  := dimension[max_axis]
-    for axis in 1..<len(dimension) {
-        dim := dimension[axis]
-        if max_dim < dim {
-            max_dim  = dim
-            max_axis = axis
-        }
-    }
-    
-    return max_axis, .5
 }
 
 get_bounds :: proc { get_bounds_triangle }

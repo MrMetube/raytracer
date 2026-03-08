@@ -421,8 +421,8 @@ main :: proc () {
                 layout_indent(layout)
                 defer layout_unindent(layout)
                 
-                if display_slider(layout, 240, &material.scatter,     0,  1, "Scatter") do fast_render.requested = true
-                if display_slider(layout, 240, &material.emit_factor, 0, 10, "Emittance") do fast_render.requested = true
+                if display_slider(layout, 240, &material.scatter,  0,   1, "Scatter") do fast_render.requested = true
+                if display_slider(layout, 240, &material.emit_factor, 1, 1000, "Emittance", flags = {.logarithmic}) do fast_render.requested = true
                 
                 layout_advance(layout, 10)
                 layout_begin_horizontal(layout)
