@@ -166,7 +166,7 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
                 rect, 
                 entropy, 
                 render.rays_per_pixel, 
-                render.max_bounce_count
+                render.max_bounce_count,
             }
             
             enqueue_work_or_do_immediatly(&render.queue, proc(work: ^Work) {

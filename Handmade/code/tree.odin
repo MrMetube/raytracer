@@ -213,7 +213,6 @@ tree_build :: proc (tree: ^[dynamic] Tree_Node, triangles: [dynamic] Triangle) {
         
         node_values := final_node_values[it.index] or_else {}
         
-        node.bounds = rectangle_inverted_infinity(Rectangle3)
         node.value_count = cast(u32) len(node_values)
         if node.value_count != 0 {
             node.first.value = next_free_index
@@ -224,9 +223,6 @@ tree_build :: proc (tree: ^[dynamic] Tree_Node, triangles: [dynamic] Triangle) {
                 value := buffer[buffer_index]
                 triangles[value_index] = value
                 
-                node.bounds = rectangle_union_point(node.bounds, value.a)
-                node.bounds = rectangle_union_point(node.bounds, value.b)
-                node.bounds = rectangle_union_point(node.bounds, value.c)
             }
             
             next_free_index += cast(Value_Index) node.value_count
@@ -236,10 +232,29 @@ tree_build :: proc (tree: ^[dynamic] Tree_Node, triangles: [dynamic] Triangle) {
                 append(stack, Node_Info { index = node.first.subnode+1 })
             }
         }
-        
     }
     
     assert(next_free_index == cast(Value_Index) len(buffer))
+    
+    // refit
+    for node_index := len(tree)-1; node_index > 0; node_index -= 1 {
+        node := &tree[node_index]
+        
+        bounds := rectangle_inverted_infinity(Rectangle3)
+        if node.value_count != 0 {
+            for offset in 0..<node.value_count {
+                value := triangles[node.first.value + auto_cast offset]
+                bounds = rectangle_union_point(bounds, value.a)
+                bounds = rectangle_union_point(bounds, value.b)
+                bounds = rectangle_union_point(bounds, value.c)
+            }
+        } else {
+            bounds = rectangle_union(bounds, tree[node.first.subnode+0].bounds)
+            bounds = rectangle_union(bounds, tree[node.first.subnode+1].bounds)
+        }
+        node.bounds = bounds
+    }
+    
 }
 
 ////////////////////////////////////////////////

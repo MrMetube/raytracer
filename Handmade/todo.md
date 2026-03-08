@@ -1,10 +1,5 @@
 ## To be done
 
-- performance
-    - correct the tree traversal to visit closer subnodes and skip further based on hit,closest_t
-    - measure and compare inlined value hit test options
-        - reduce repetition in lane wise version
-
 - vary sample count over viewport, have a focus region with highest detail
 - think more about the response to a accumulated ray
     - do more than store it, get inspired by biology

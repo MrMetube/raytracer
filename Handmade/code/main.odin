@@ -52,8 +52,6 @@ main :: proc () {
     // @todo(viktor): fixed Buffer of models and return indices
     reserve(&world.models, 128)
     
-    area_size := cast(f32) 5
-    
     // append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
     // append(&world.planes, Plane { normal = { 1, 0, 0}, tangent = {}, binormal = {}, center = {-area_size, 0, 0},     radius = area_size,   material = 1 })
     // append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 5 })
@@ -86,8 +84,8 @@ main :: proc () {
         v2 := v3 { 1,  1, 0}
         v3 := v3 { 1, -1, 0}
         
-        append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 6})
-        append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 6})
+        append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 1})
+        append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 1})
         
         for &t in plane.triangles {
             t.a.xy *= 500
@@ -159,8 +157,8 @@ main :: proc () {
         rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_DISABLED, None)
     }
     
+    show_tree_info: bool
     show_materials: bool
-    show_planes: bool
     quality_render_is_open: bool
     fast_render_is_open: bool = true
     
@@ -368,14 +366,6 @@ main :: proc () {
             display_toggle(layout, "Display Progress", &render_display_progress)
             layout_advance(layout, 10)
             display_toggle(layout, "Use Tree", &Use_Tree)
-            if Use_Tree {
-                layout_advance(layout, 10)
-                display_toggle(layout, "Use Stack", &Use_Value_Stack)
-                if !Use_Value_Stack {
-                    layout_advance(layout, 10)
-                    display_toggle(layout, "Use Lanes", &Use_Lanes)
-                }
-            }
         layout_end_horizontal(layout)
         layout_advance(layout, 10)
         
@@ -388,8 +378,7 @@ main :: proc () {
         }
         layout_advance(layout, 10)
         
-        display_line(layout, "Tree")
-        {
+        if display_list(layout, &show_tree_info, "Tree") {
             layout_indent(layout)
             
             display_line(layout, "build took %", fmt.tprint(build_time))
