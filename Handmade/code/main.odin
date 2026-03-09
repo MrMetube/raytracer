@@ -16,7 +16,8 @@ Use_Tree := true
 
 Is_Optimized :: ODIN_OPTIMIZATION_MODE == .Speed
 
-Tree_Max_Depth: u32 = 6
+// @cleanup after this is tested with a huge model for build time
+Tree_Max_Depth: u32 = 32
 
 main :: proc () {
     rl.SetTraceLogLevel(.WARNING)
@@ -57,6 +58,7 @@ main :: proc () {
     // append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 5 })
     // append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
     
+    // @cleanup 
     { // light
         plane := world_create_model(&world)
         
@@ -104,7 +106,7 @@ main :: proc () {
     
     teapot := world_create_model(&world)
     clear(&teapot.triangles)
-    load_teapot(&teapot.triangles, 0, 4)
+    load_teapot(&teapot.triangles, 1, 4)
     
     start := time.now()
     tree_build(&teapot.tree, teapot.triangles)
@@ -157,7 +159,7 @@ main :: proc () {
         rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_DISABLED, None)
     }
     
-    show_tree_info: bool
+    show_tree_info: bool = true
     show_materials: bool
     quality_render_is_open: bool
     fast_render_is_open: bool = true
@@ -389,7 +391,7 @@ main :: proc () {
             
             xx := cast(f32) Tree_Max_Depth
             rebuild := false
-            display_slider(layout, 200, &xx, 1, 16, "Desired Depth %",  round(u32, xx))
+            display_slider(layout, 200, &xx, 1, 32, "Desired Depth %",  round(u32, xx))
             if Tree_Max_Depth != round(u32, xx) do rebuild = true
             Tree_Max_Depth    = round(u32, xx)
             if display_button(layout, "rebuild") do rebuild = true

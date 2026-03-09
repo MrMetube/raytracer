@@ -95,7 +95,7 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, all_brdf_values: ^[d
 ////////////////////////////////////////////////
 
 Debug_View := 0
-Triangle_Threshold : f32 = 500
+Triangle_Threshold  : f32 = 500
 Rectangle_Threshold : f32 = 1000
 
 render_tile :: proc(render_stats: ^Render_Stats, models: [] Model, materials: [] Material, brdf_data: [] v3, camera: Camera, image: Image, rect: Rectangle2i, entropy: ^RandomSeries, rays_per_pixel, max_bounce_count: u32) {
@@ -351,11 +351,13 @@ traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree:
                     spall_scope("subnodes")
                     index0 := node.first.subnode + 0
                     index1 := node.first.subnode + 1
-
+                    
                     // @waste 6 lanes are wasted
-                    indices  := cast(lane_u32) node.first.subnode + lane_u32{0,1, 0,0,0,0,0,0}
+                    offsets  := lane_offset & less_than(lane_offset, Subnodes_Per_Node)
+                    indices  := cast(lane_u32) node.first.subnode + offsets
                     subnodes := lane_index(to_lane(tree), indices)
                     
+                    // @todo(viktor): is this needed? isnt it already done after hit triangle tests?
                     closest_t := simd.reduce_min(lane_hit.closest_t)
                     
                     hit_mask, tmin := hit_rectangle(subnodes, lane_neg_inv_o, lane_inv_d, min_t, closest_t)
@@ -565,7 +567,6 @@ brdf_lookup :: proc (all_brdf_values: Lane_Slice(v3), materials: Lane_Slice(Mate
     diff_y_inner := dot(diff_y, lw)
     diff_z_inner := dot(hw, lw)
     
-    // @speed if needed the trancendental functions could be widened
     f0: lane_f32
     f1: lane_f32
     f2: lane_f32
