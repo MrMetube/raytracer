@@ -10,8 +10,6 @@ import rl "vendor:raylib"
 
 FontSize :: 20
 
-Use_Tree := true
-
 ////////////////////////////////////////////////
 
 Is_Optimized :: ODIN_OPTIMIZATION_MODE == .Speed
@@ -270,7 +268,7 @@ main :: proc () {
     fast_render.requested = true
     fast_image_is_focussed: bool = true
     
-    mouse_is_look: bool
+    move_camera: bool
     ddp: v3
     dp: v3
     for !rl.WindowShouldClose() {
@@ -286,36 +284,32 @@ main :: proc () {
         dlook: v2
         
         if !rl.IsWindowFocused() {
-            mouse_is_look = false
+            move_camera = false
             rl.ShowCursor()
         } else {
-            
-            if rl.IsKeyDown(.A) do dddp += {-1, 0,  0}
-            if rl.IsKeyDown(.D) do dddp += { 1, 0,  0}
-            if rl.IsKeyDown(.W) do dddp += { 0, 0, -1}
-            if rl.IsKeyDown(.S) do dddp += { 0, 0,  1}
-            
-            if rl.IsKeyDown(.SPACE)      do dddp += {0, 1,  0}
-            if rl.IsKeyDown(.LEFT_SHIFT) do dddp += {0,-1,  0}
-            
-            if !rl.IsMouseButtonDown(.RIGHT) {
-                ddp *= 0.1
-            }
-            
             if rl.IsMouseButtonPressed(.MIDDLE) {
-                mouse_is_look = !mouse_is_look
+                move_camera = !move_camera
             }
             
-            if mouse_is_look {
+            if move_camera {
+                if rl.IsKeyDown(.A) do dddp += {-1, 0,  0}
+                if rl.IsKeyDown(.D) do dddp += { 1, 0,  0}
+                if rl.IsKeyDown(.W) do dddp += { 0, 0, -1}
+                if rl.IsKeyDown(.S) do dddp += { 0, 0,  1}
+                
+                if rl.IsKeyDown(.SPACE)      do dddp += {0, 1,  0}
+                if rl.IsKeyDown(.LEFT_SHIFT) do dddp += {0,-1,  0}
+                
+                if !rl.IsMouseButtonDown(.RIGHT) {
+                    ddp *= 0.1
+                }
+            
                 dlook = -rl.GetMouseDelta()
-            }
-            
-            if mouse_is_look {
                 rl.HideCursor()
                 rl.SetMousePosition(window_size.x / 2, window_size.y / 2)
-            } else do rl.ShowCursor()
-            
-            if rl.IsKeyPressed(.Q) do Use_Tree = !Use_Tree
+            } else {
+                rl.ShowCursor()
+            }
             
             if rl.IsKeyPressed(.R) {
                 fast_render.requested = true
@@ -363,8 +357,6 @@ main :: proc () {
         for &render in renders {
             if !render.active {
                 if render.requested {
-                    render.requested = false
-                    
                     begin_render(render, &world, core_count, camera)
                 }
             } else {
@@ -454,8 +446,6 @@ main :: proc () {
         
         layout_begin_horizontal(layout)
             display_toggle(layout, "Display Progress", &render_display_progress)
-            layout_advance(layout, 10)
-            display_toggle(layout, "Use Tree", &Use_Tree)
         layout_end_horizontal(layout)
         layout_advance(layout, 10)
         
@@ -559,6 +549,10 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
             condition := is_focused
             display_toggle(layout, "Focus", &condition)
             result = !is_focused && condition == true
+            if render.active {
+                layout_advance(layout, 5)
+                display_toggle(layout, "Cancel Render", &render.canceled)
+            }
         layout_end_horizontal(layout)
         
         layout_begin_horizontal(layout)
@@ -579,23 +573,22 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
             display_line(layout, "bounces %", render.max_bounce_count)
         layout_end_horizontal(layout)
             
-        if !render.active {
-            layout_begin_horizontal(layout)
+        layout_begin_horizontal(layout)
+            if !render.active {
                 before := render.image_size_factor
                 if display_button(layout, "-") do render.image_size_factor -= 1
                 layout_advance(layout, 5)
                 if display_button(layout, "+") do render.image_size_factor += 1
-                render.image_size_factor = clamp(render.image_size_factor, 1, 32)
+                render.image_size_factor = clamp(render.image_size_factor, 1, 16)
                 
                 if render.image_size_factor != before {
                     init_render_image(render, window_size)
                 }
-                layout_advance(layout, 5)
-                display_line(layout, "size factor %", render.image_size_factor)
-            layout_end_horizontal(layout)
-        } else {
-            layout_advance(layout, FontSize)
-        }
+            }
+                
+            layout_advance(layout, 5)
+            display_line(layout, "size factor %", render.image_size_factor)
+        layout_end_horizontal(layout)
         
         layout_begin_horizontal(layout)
             end := render.active ? time.now() : render.end

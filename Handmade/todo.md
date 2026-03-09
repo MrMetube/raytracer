@@ -1,10 +1,5 @@
 ## To be done
 
-- cancel a render
-- only do camera movement on focus/middle mouse
-- remove Use_Tree
-- just hide renderscale buttons not also the label
-
 - vary sample count over viewport, have a focus region with highest detail
 - think more about the response to a accumulated ray
     - do more than store it, get inspired by biology

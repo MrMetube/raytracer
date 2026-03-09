@@ -98,7 +98,16 @@ Debug_View := 0
 Triangle_Threshold  : f32 = 500
 Rectangle_Threshold : f32 = 1000
 
-render_tile :: proc(render_stats: ^Render_Stats, models: [] Model, materials: [] Material, brdf_data: [] v3, camera: Camera, image: Image, rect: Rectangle2i, entropy: ^RandomSeries, rays_per_pixel, max_bounce_count: u32) {
+render_tile :: proc(render: ^Render, camera: Camera, rect: Rectangle2i, entropy: ^RandomSeries) {
+    image            := render.image
+    models           := render.models
+    materials        := render.materials
+    brdf_data        := render.brdf_data
+    render_stats     := &render.stats
+    rays_per_pixel   := render.rays_per_pixel
+    max_bounce_count := render.max_bounce_count
+    
+    
     film_distance :: 1
     film_center := vec_cast(lane_f32, camera.p - film_distance * camera.z)
     
@@ -115,9 +124,11 @@ render_tile :: proc(render_stats: ^Render_Stats, models: [] Model, materials: []
     pixel_size := 1. / vec_cast(lane_f32, image_size)
     
     bounces_computed, loops_computed: u64
-    for py in rect.min.y ..< rect.max.y {
+    loop: for py in rect.min.y ..< rect.max.y {
         film_y := -1 + 2 * cast(f32) py / image_size.y
         for px in rect.min.x ..< rect.max.x {
+            if render.canceled do break loop
+            
             film_x := -1 + 2 * cast(f32) px / image_size.x
             film_p := vec_cast(lane_f32, film_x, film_y)
             
@@ -221,22 +232,12 @@ cast_rays :: proc (stats: ^Render_Stats, models: [] Model, materials: [] Materia
                 
                 if len(nodes) == 0 || len(triangles) == 0 do continue
                 
-                if Use_Tree {
-                    local_nil_value_lanes_tested: [LaneWidth] u32
-                    
-                    traverse_tree_and_collect_values(to_lane(triangles), nodes[:], ray_o, ray_d, min_t, &hit, &local_nil_value_lanes_tested, &triangles_tested_lanes, &rectangles_tested_lanes)
-                    
-                    for i in 0..<len(stats.nil_value_lanes_tested) {
-                        atomic_add(&stats.nil_value_lanes_tested[i], local_nil_value_lanes_tested[i])
-                    }
-                } else {
-                    for index in 0 ..< cast(Value_Index) len(triangles) {
-                        triangles := to_lane(triangles)
-                        triangle := lane_index(triangles, cast(lane_u32) index)
-                        hit_triangle(lane_true, triangle, ray_o, ray_d, min_t, &hit)
-                    }
-                    stat_update(&triangle_tests, cast(u32) len(triangles) * LaneWidth)
-                    stat_update(&all_triangle_tests, cast(u32) len(triangles) * LaneWidth)
+                local_nil_value_lanes_tested: [LaneWidth] u32
+                
+                traverse_tree_and_collect_values(to_lane(triangles), nodes[:], ray_o, ray_d, min_t, &hit, &local_nil_value_lanes_tested, &triangles_tested_lanes, &rectangles_tested_lanes)
+                
+                for i in 0..<len(stats.nil_value_lanes_tested) {
+                    atomic_add(&stats.nil_value_lanes_tested[i], local_nil_value_lanes_tested[i])
                 }
             }
             

@@ -29,6 +29,7 @@ Render_Stats :: struct {
 
 Render :: struct {
     requested: bool,
+    canceled: bool,
     active:    bool,
     
     start, end: time.Time,
@@ -104,6 +105,8 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     free_all(render.allocator)
     
     render.active = true
+    render.canceled = false
+    render.requested = false
     
     render.stats = {}
     
@@ -127,17 +130,10 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     tile_count := tile_cols * tile_rows
     
     Work :: struct {
-        stats: ^Render_Stats,
-        models: [] Model,
-        materials: [] Material,
-        brdf_data: [] v3,
-        
+        render: ^Render,
         camera:  Camera,
-        image:   Image, 
         rect:    Rectangle2i, 
         entropy: RandomSeries,
-        rays_per_pixel:   u32,
-        max_bounce_count: u32,
     }
     
     works := make_slice(render.allocator, [] Work, tile_count)
@@ -154,20 +150,14 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
             work := &works[work_index]
             work_index += 1
             work ^= { 
-                &render.stats, 
-                render.models, 
-                render.materials, 
-                render.brdf_data, 
+                render, 
                 camera, 
-                render.image, 
                 rect, 
                 entropy, 
-                render.rays_per_pixel, 
-                render.max_bounce_count,
             }
             
             enqueue_work_or_do_immediatly(&render.queue, proc(work: ^Work) {
-                render_tile(work.stats, work.models, work.materials, work.brdf_data, work.camera, work.image, work.rect, &work.entropy, work.rays_per_pixel, work.max_bounce_count)
+                render_tile(work.render, work.camera, work.rect, &work.entropy)
             }, work)
         }
     }
