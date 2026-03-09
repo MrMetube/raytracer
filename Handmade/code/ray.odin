@@ -341,59 +341,77 @@ traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree:
         for stack_count != 0 {
             stack_count -= 1
             it_index := stack[stack_count]
-            assert(it_index != 0)
-            stack[stack_count] = {}
-            
             node := &tree[it_index]
             
             if node.value_count == 0 {
-                if node.first.subnode != Nil_Index {
-                    spall_scope("subnodes")
-                    index0 := node.first.subnode + 0
-                    index1 := node.first.subnode + 1
+                spall_scope("subnodes")
+                
+                indices  := cast(lane_u32) node.first.subnode + lane_offset
+                subnodes := lane_index(to_lane(tree), indices)
+                
+                // @todo(viktor): is this needed? isnt it already done after hit triangle tests?
+                closest_t := simd.reduce_min(lane_hit.closest_t)
+                
+                hit_mask, tmin := hit_rectangle(subnodes, lane_neg_inv_o, lane_inv_d, min_t, closest_t)
+                rectangles_tested_lanes^ += Subnodes_Per_Node
                     
-                    // @waste 6 lanes are wasted
-                    offsets  := lane_offset & less_than(lane_offset, Subnodes_Per_Node)
-                    indices  := cast(lane_u32) node.first.subnode + offsets
-                    subnodes := lane_index(to_lane(tree), indices)
+                if hit_mask != lane_false {
+                    tt := simd.to_array(tmin)
+                    index: [LaneWidth] u32 = max(u32)
+                    sorted := cast(lane_f32) +Infinity
                     
-                    // @todo(viktor): is this needed? isnt it already done after hit triangle tests?
-                    closest_t := simd.reduce_min(lane_hit.closest_t)
-                    
-                    hit_mask, tmin := hit_rectangle(subnodes, lane_neg_inv_o, lane_inv_d, min_t, closest_t)
-                    rectangles_tested_lanes^ += Subnodes_Per_Node & equal(lane_offset, cast(lane_u32) lane)
-                    
-                    near := index0
-                    far  := index1
-                    hit_near := extract(hit_mask, 0) != 0
-                    hit_far  := extract(hit_mask, 1) != 0
-                    tmin_0 := extract(tmin, 0)
-                    tmin_1 := extract(tmin, 1)
-                    
-                    if tmin_1 < tmin_0 {
-                        swap(&near, &far)
-                        swap(&hit_near, &hit_far)
+                    for t, ti in tt {
+                        if extract(hit_mask, ti) != 0 {
+                            // t  = 5
+                            // at = 2
+                            //      2 4 5 8
+                            // gt = 1 1 0 0 
+                            greater_count := horizontal_add(1 & greater_equal(cast(lane_f32) t, sorted))
+                            
+                            simd_insert_at :: proc (vector: $V/ #simd[$N] $T, value: T, #any_int index: u32) -> V {
+                                rotate :: simd.lanes_rotate_right
+                                result := transmute(lane_u32) vector            &    less_than(lane_offset, cast(lane_u32) index) 
+                                result |= transmute(lane_u32) (cast(V) value)   &        equal(lane_offset, cast(lane_u32) index)
+                                result |= transmute(lane_u32) rotate(vector, 1) & greater_than(lane_offset, cast(lane_u32) index)
+                                return transmute(V) result
+                            }
+                            
+                            sorted = simd_insert_at(sorted, t, greater_count)
+                            index  = transmute([8] u32) simd_insert_at(transmute(lane_u32) index,  cast(u32) ti, greater_count)
+                        }
                     }
                     
-                    if hit_near {
-                        stack[stack_count] = near
-                        stack_count += 1
+                    when false {
+                        hit_count := horizontal_add(hit_mask & 1)
+                        for i in 0..<LaneWidth-1 {
+                            if i < auto_cast hit_count {
+                                assert(sorted[i] <= sorted[i+1])
+                            }
+                        }
                     }
-                    if hit_far {
-                        stack[stack_count] = far
-                        stack_count += 1
+                    
+                    for i in index {
+                        if i != max(u32) && extract(hit_mask, i) != 0 {
+                            subindex := node.first.subnode + cast(Node_Index) i
+                            stack[stack_count] = subindex
+                            stack_count += 1
+                        }
                     }
                 }
             } else {
+                spall_scope("values")
+                
+                spall_begin("triangle loop")
                 start := cast(u32) node.first.value
                 end   := cast(u32) node.first.value + node.value_count
                 
-                for value_index := start; value_index < end+8; value_index += 8 {
+                for value_index := start; value_index < (end + LaneWidth); value_index += LaneWidth {
                     index := value_index + lane_offset
                     value_mask := less_than(index, cast(lane_u32) end)
                     triangle := lane_index(triangles, index)
                     hit_triangle(value_mask, triangle, lane_ray_o, lane_ray_d, min_t, &lane_hit)
                 }
+                spall_end()
                 
                 spall_begin("triangle reduce")
                 closest_t := +Infinity
@@ -416,7 +434,7 @@ traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree:
                 spall_end()
                 
                 triangles_tested_lanes^ += (node.value_count) & equal(lane_offset, cast(lane_u32) lane)
-                local_nil_value_lanes_tested[0] += node.value_count / LaneWidth
+                local_nil_value_lanes_tested[0] += (node.value_count / LaneWidth) * LaneWidth
                 remainder := node.value_count % LaneWidth
                 if remainder != 0 {
                     local_nil_value_lanes_tested[8 - remainder] += 1

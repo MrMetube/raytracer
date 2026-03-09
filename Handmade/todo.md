@@ -1,6 +1,9 @@
 ## To be done
 
-- now that subnodes are tested wide, we can have 8 subnodes per node
+- cancel a render
+- only do camera movement on focus/middle mouse
+- remove Use_Tree
+- just hide renderscale buttons not also the label
 
 - vary sample count over viewport, have a focus region with highest detail
 - think more about the response to a accumulated ray
@@ -17,8 +20,13 @@
 
 - Postprocessing / filtering of noisy images
     - How do cameras do this filtering?
+        - bayer filters and proprietary de-mosaic-ing
     - How does the human eye do this? 
-        - Does this require another color model(wavelengths) or is RGB fine?
+        - response-curve to certain wave lengths
+        - and cones are bundled/summed, whilst rods are individual signals
+        - and responses supress another, leaving "afterimages"
+        - this requires a wavelength per ray, instead of a color
+            - how to sample a texture's colors as wavelengths?
 - Energy conservation
 
 - load multiple models
