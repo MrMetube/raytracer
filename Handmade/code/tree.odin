@@ -42,6 +42,7 @@ tree_build :: proc (tree: ^[dynamic] Tree_Node, triangles: [dynamic] Triangle) {
     ////////////////////////////////////////////////
     
     triangle_centers := make_slice(allocator, [] v3, len(triangles))
+    triangle_bounds  := make_slice(allocator, [] Rectangle3, len(triangles))
     
     root := &tree[Root_Index]
     root.bounds = rectangle_inverted_infinity(Rectangle3)
@@ -50,11 +51,15 @@ tree_build :: proc (tree: ^[dynamic] Tree_Node, triangles: [dynamic] Triangle) {
     for value_index in cast(Value_Index) 0 ..< cast(Value_Index) len(triangles) {
         triangle := triangles[value_index]
         center := (triangle.a + triangle.b + triangle.c) / 3
+        bounds := rectangle_inverted_infinity(Rectangle3)
+        bounds = rectangle_union_point(bounds, triangle.a)
+        bounds = rectangle_union_point(bounds, triangle.b)
+        bounds = rectangle_union_point(bounds, triangle.c)
         
-        root.bounds = rectangle_union_point(root.bounds, triangle.a)
-        root.bounds = rectangle_union_point(root.bounds, triangle.b)
-        root.bounds = rectangle_union_point(root.bounds, triangle.c)
+        root.bounds = rectangle_union(root.bounds, bounds)
+        
         root_values[value_index] = value_index
+        triangle_bounds[value_index] = bounds
         triangle_centers[value_index] = center
     }
     
@@ -65,135 +70,44 @@ tree_build :: proc (tree: ^[dynamic] Tree_Node, triangles: [dynamic] Triangle) {
     }
     root_cost := root_area_half * cast(f32) len(triangles)
     
-    final_node_values: map[Node_Index] [] Value_Index
-    final_node_values.allocator = allocator
+    final_indices: map[Node_Index] [] Value_Index
+    final_indices.allocator = allocator
         
-    Node_Info :: struct {
-        index: Node_Index,
-        cost:  f32,
-        depth: u32,
-        node_values: [] Value_Index,
-    }
     _stack  := make_dynamic_array(allocator, [dynamic] Node_Info, 0, max_depth)
     stack  := &_stack
     
     append(stack, Node_Info { Root_Index, root_cost, 0, root_values })
     
-    temp_node_values := make_slice(allocator, [] Value_Index, len(triangles))
+    temp_indices := make_slice(allocator, [] Value_Index, len(triangles))
     
     for len(stack) > 0 {
         it := pop(stack)
         
         node := &tree[it.index]
         
-        // @speed we can probably do tests in parallel by doing it LaneWide
+        better, sub_a, sub_b := split_node(tree[:], node, it, triangle_centers, triangle_bounds, temp_indices)
         
-        min_cost := +Infinity
-        min_a_cost: f32
-        min_b_cost: f32
-        best_a_count: u32
-        best_split_point: f32
-        best_split_axis: int
-        // @waste we make a second buffer, take two slices of it and throw away the original
-        best_node_values := temp_node_values[:len(it.node_values)]
-        
-        // @speed only check on the value centers at each axis, inbetween regions have constant cost
-        // @todo(viktor): reduce this to something reasonable once we have bigger, or just more models
-        attempts :: 16384
-        for split_axis in 0..<3 {
-            Data :: struct {
-                split_axis: int,
-                triangle_centers: [] v3,
-            }
-            
-            data := Data { split_axis, triangle_centers }
-            slice.sort_by_with_data(it.node_values, proc (a, b: Value_Index, data_p: pmm) -> bool {
-                data := cast(^Data) data_p
-                a_center := data.triangle_centers[a]
-                b_center := data.triangle_centers[b]
-                
-                return a_center[data.split_axis] < b_center[data.split_axis]
-            }, &data)
-            
-            dimension := rectangle_get_dimension(node.bounds)
-            for i in 0 ..< attempts {
-                split_point := linear_remap(cast(f32) i, -1, attempts, 0, 1)
-                
-                a_dim := dimension
-                b_dim := dimension
-                a_dim[split_axis] *= split_point
-                b_dim[split_axis] *= (1-split_point)
-                a_area_half := fused_mul_add(a_dim.y, a_dim.z, a_dim.x * (a_dim.z + a_dim.y))
-                b_area_half := fused_mul_add(b_dim.y, b_dim.z, b_dim.x * (b_dim.z + b_dim.y))
-                
-                middle := linear_blend(node.bounds.min[split_axis], node.bounds.max[split_axis], split_point)
-                
-                node_count := cast(u32) len(it.node_values)
-                
-                // @note(viktor): binary search the sorted node_values
-                a_count: u32
-                for right := node_count; a_count < right; {
-                    it_index := (a_count + right) / 2
-                    
-                    value_index := it.node_values[it_index]
-                    center      := triangle_centers[value_index]
-                    
-                    if center[split_axis] < middle {
-                        a_count = it_index + 1
-                    } else {
-                        right = it_index
-                    }
-                }
-                b_count := node_count - a_count
-                
-                a_cost := a_area_half * cast(f32) a_count
-                b_cost := b_area_half * cast(f32) b_count
-                cost := a_cost + b_cost
-                
-                if min_cost > cost {
-                    min_cost = cost
-                    
-                    copy(best_node_values, it.node_values)
-                    best_a_count = a_count
-                    
-                    min_a_cost = a_cost
-                    min_b_cost = b_cost
-                    best_split_point = split_point
-                    best_split_axis  = split_axis
-                }
-            }
-        }
-        
-        if min_cost < it.cost {
-            copy(it.node_values, best_node_values)
-            
-            middle := linear_blend(node.bounds.min[best_split_axis], node.bounds.max[best_split_axis], best_split_point)
-            
-            a_bounds := node.bounds
-            b_bounds := node.bounds
-            a_bounds.max[best_split_axis] = middle
-            b_bounds.min[best_split_axis] = middle
-            
+        if better {
             node.first.subnode = cast(Node_Index) len(tree)
             
-            sub_a_values := it.node_values[:best_a_count]
-            sub_b_values := it.node_values[best_a_count:]
+            sub_a_values := sub_a.values
+            sub_b_values := sub_b.values
             
-            append(tree, Tree_Node { bounds = a_bounds })
-            append(tree, Tree_Node { bounds = b_bounds })
+            append(tree, Tree_Node { bounds = sub_a.bounds })
+            append(tree, Tree_Node { bounds = sub_b.bounds })
             
             // @cleanup tree may have been reallocated
             node = &tree[it.index]
             
             if it.depth+1 < max_depth {
-                append(stack, Node_Info { node.first.subnode+0, min_a_cost, it.depth+1, sub_a_values })
-                append(stack, Node_Info { node.first.subnode+1, min_b_cost, it.depth+1, sub_b_values })
+                append(stack, Node_Info { node.first.subnode+0, sub_a.min_cost, it.depth+1, sub_a_values })
+                append(stack, Node_Info { node.first.subnode+1, sub_b.min_cost, it.depth+1, sub_b_values })
             } else {
-                final_node_values[node.first.subnode+0] = sub_a_values
-                final_node_values[node.first.subnode+1] = sub_b_values
+                final_indices[node.first.subnode+0] = sub_a_values
+                final_indices[node.first.subnode+1] = sub_b_values
             }
         } else {
-            final_node_values[it.index] = it.node_values
+            final_indices[it.index] = it.indices
         }
     }
     
@@ -211,18 +125,17 @@ tree_build :: proc (tree: ^[dynamic] Tree_Node, triangles: [dynamic] Triangle) {
         it := pop(stack)
         node := &tree[it.index]
         
-        node_values := final_node_values[it.index] or_else {}
+        indices := final_indices[it.index] or_else {}
         
-        node.value_count = cast(u32) len(node_values)
+        node.value_count = cast(u32) len(indices)
         if node.value_count != 0 {
             node.first.value = next_free_index
             
-            for buffer_index, offset in node_values {
+            for buffer_index, offset in indices {
                 value_index := node.first.value + cast(Value_Index) offset
                 assert(triangles[value_index] == {})
                 value := buffer[buffer_index]
                 triangles[value_index] = value
-                
             }
             
             next_free_index += cast(Value_Index) node.value_count
@@ -255,6 +168,135 @@ tree_build :: proc (tree: ^[dynamic] Tree_Node, triangles: [dynamic] Triangle) {
         node.bounds = bounds
     }
     
+}
+
+Split_Node :: struct {
+    min_cost: f32,
+    values: [] Value_Index,
+    bounds: Rectangle3,
+}
+
+split_node :: proc (tree: [] Tree_Node, node: ^Tree_Node, it: Node_Info, triangle_centers: [] v3, triangle_bounds: [] Rectangle3, temp_indices: [] Value_Index) -> (bool, Split_Node, Split_Node) {
+    // @speed we can probably do tests in parallel by doing it LaneWide
+    
+    min_cost := +Infinity
+    min_a_cost: f32
+    min_b_cost: f32
+    best_a_bounds: Rectangle3
+    best_b_bounds: Rectangle3
+    best_a_count: u32
+    best_split_point: f32
+    best_split_axis: int
+    
+    best_indices := temp_indices[:len(it.indices)]
+    
+    for split_axis in 0..<3 {
+        Data :: struct {
+            split_axis: int,
+            triangle_centers: [] v3,
+        }
+        
+        data := Data { split_axis, triangle_centers }
+        slice.sort_by_with_data(it.indices, proc (a, b: Value_Index, data_p: pmm) -> bool {
+            data := cast(^Data) data_p
+            a_center := data.triangle_centers[a]
+            b_center := data.triangle_centers[b]
+            
+            return a_center[data.split_axis] < b_center[data.split_axis]
+        }, &data)
+        
+        for i in 0..<len(it.indices)-1 {
+            node_index := it.indices[i]
+            next_node_index := it.indices[i+1]
+            node_center := triangle_centers[node_index][split_axis]
+            next_center := triangle_centers[next_node_index][split_axis]
+            split_point := linear_blend(node_center, next_center, 0.5)
+            
+            a_cost, b_cost, a_count := calculate_split_cost(node, split_axis, split_point, it, triangle_centers, triangle_bounds)
+            cost := a_cost + b_cost
+            
+            if min_cost > cost {
+                min_cost = cost
+                
+                copy(best_indices, it.indices)
+                best_a_count = a_count
+                
+                min_a_cost = a_cost
+                min_b_cost = b_cost
+                best_split_point = split_point
+                best_split_axis  = split_axis
+            }
+        }
+    }
+    
+    better := min_cost < it.cost
+    sub_a: Split_Node
+    sub_b: Split_Node
+    
+    if better {
+        copy(it.indices, best_indices)
+        
+        node.first.subnode = cast(Node_Index) len(tree)
+        
+        sub_a.values = it.indices[:best_a_count]
+        sub_b.values = it.indices[best_a_count:]
+        sub_a.min_cost = min_a_cost
+        sub_b.min_cost = min_b_cost
+        sub_a.bounds = best_a_bounds
+        sub_b.bounds = best_b_bounds
+    }
+    
+    return better, sub_a, sub_b
+}
+
+Node_Info :: struct {
+    index: Node_Index,
+    cost:  f32,
+    depth: u32,
+    indices: [] Value_Index,
+}
+calculate_split_cost :: proc (node: ^Tree_Node, split_axis: int, middle: f32, it: Node_Info, triangle_centers: [] v3, triangle_bounds: [] Rectangle3) -> (f32, f32, u32) {
+                    
+    node_count := cast(u32) len(it.indices)
+    
+    // @note(viktor): binary search the sorted indices
+    a_count: u32
+    for right := node_count; a_count < right; {
+        it_index := (a_count + right) / 2
+        
+        value_index := it.indices[it_index]
+        center      := triangle_centers[value_index]
+        
+        if center[split_axis] < middle {
+            a_count = it_index + 1
+        } else {
+            right = it_index
+        }
+    }
+    b_count := node_count - a_count
+    
+    a_bounds := rectangle_inverted_infinity(Rectangle3)
+    b_bounds := rectangle_inverted_infinity(Rectangle3)
+    for index in 0..<a_count {
+        value_index := it.indices[index]
+        bounds := triangle_bounds[value_index]
+        a_bounds = rectangle_union(a_bounds, bounds)
+    }
+    for index in a_count..<node_count {
+        value_index := it.indices[index]
+        bounds := triangle_bounds[value_index]
+        b_bounds = rectangle_union(b_bounds, bounds)
+    }
+    
+    a_dim := rectangle_get_dimension(a_bounds)
+    b_dim := rectangle_get_dimension(b_bounds)
+    a_area_half := fused_mul_add(a_dim.y, a_dim.z, a_dim.x * (a_dim.z + a_dim.y))
+    b_area_half := fused_mul_add(b_dim.y, b_dim.z, b_dim.x * (b_dim.z + b_dim.y))
+    
+    a_cost := a_area_half * cast(f32) a_count
+    b_cost := b_area_half * cast(f32) b_count
+    
+    return a_cost, b_cost, a_count
 }
 
 ////////////////////////////////////////////////

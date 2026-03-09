@@ -230,15 +230,13 @@ cast_rays :: proc (stats: ^Render_Stats, models: [] Model, materials: [] Materia
                         atomic_add(&stats.nil_value_lanes_tested[i], local_nil_value_lanes_tested[i])
                     }
                 } else {
-                    {
-                        for index in 0 ..< cast(Value_Index) len(triangles) {
-                            triangles := to_lane(triangles)
-                            triangle := lane_index(triangles, cast(lane_u32) index)
-                            hit_triangle(lane_true, triangle, ray_o, ray_d, min_t, &hit)
-                        }
-                        stat_update(&triangle_tests, cast(u32) len(triangles) * LaneWidth)
-                        stat_update(&all_triangle_tests, cast(u32) len(triangles) * LaneWidth)
+                    for index in 0 ..< cast(Value_Index) len(triangles) {
+                        triangles := to_lane(triangles)
+                        triangle := lane_index(triangles, cast(lane_u32) index)
+                        hit_triangle(lane_true, triangle, ray_o, ray_d, min_t, &hit)
                     }
+                    stat_update(&triangle_tests, cast(u32) len(triangles) * LaneWidth)
+                    stat_update(&all_triangle_tests, cast(u32) len(triangles) * LaneWidth)
                 }
             }
             
@@ -302,6 +300,8 @@ cast_rays :: proc (stats: ^Render_Stats, models: [] Model, materials: [] Materia
 ////////////////////////////////////////////////
 
 traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree: [] Tree_Node, ray_o, ray_d: lane_v3, min_t: lane_f32, hit: ^Hit_Info, local_nil_value_lanes_tested: ^[LaneWidth] u32, triangles_tested_lanes, rectangles_tested_lanes: ^lane_u32) {
+    spall_proc()
+    
     inv_d := 1 / ray_d
     neg_inv_o := -(ray_o * inv_d)
     
@@ -313,6 +313,7 @@ traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree:
     stack := backing[:]
     
     for lane in 0..<LaneWidth {
+        spall_begin("lane extract")
         inv_d     := extract_v3(inv_d, lane)
         neg_inv_o := extract_v3(neg_inv_o, lane)
         lane_inv_d := vec_cast(lane_f32, inv_d)
@@ -331,10 +332,12 @@ traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree:
         lane_hit.normal    = vec_cast(lane_f32, extract_v3(hit.normal,    lane))
         lane_hit.tangent   = vec_cast(lane_f32, extract_v3(hit.tangent,   lane))
         lane_hit.binormal  = vec_cast(lane_f32, extract_v3(hit.binormal,  lane))
+        spall_end()
         
         stack[0] = Root_Index
         stack_count = 1
         
+        spall_begin("traversal")
         for stack_count != 0 {
             stack_count -= 1
             it_index := stack[stack_count]
@@ -345,6 +348,7 @@ traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree:
             
             if node.value_count == 0 {
                 if node.first.subnode != Nil_Index {
+                    spall_scope("subnodes")
                     index0 := node.first.subnode + 0
                     index1 := node.first.subnode + 1
 
@@ -388,7 +392,8 @@ traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree:
                     triangle := lane_index(triangles, index)
                     hit_triangle(value_mask, triangle, lane_ray_o, lane_ray_d, min_t, &lane_hit)
                 }
-                    
+                
+                spall_begin("triangle reduce")
                 closest_t := +Infinity
                 closest_triangle_lane := -1
                 for x in 0..<LaneWidth {
@@ -406,6 +411,7 @@ traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree:
                 lane_hit.normal    = vec_cast(lane_f32, extract_v3(lane_hit.normal,   closest_triangle_lane))
                 lane_hit.tangent   = vec_cast(lane_f32, extract_v3(lane_hit.tangent,  closest_triangle_lane))
                 lane_hit.binormal  = vec_cast(lane_f32, extract_v3(lane_hit.binormal, closest_triangle_lane))
+                spall_end()
                 
                 triangles_tested_lanes^ += (node.value_count) & equal(lane_offset, cast(lane_u32) lane)
                 local_nil_value_lanes_tested[0] += node.value_count / LaneWidth
@@ -415,11 +421,13 @@ traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree:
                 }
             }
         }
+        spall_end()
         
         min_lane: int = -1
         min_closest_t := extract(hit.closest_t, lane)
         if greater_equal(lane_hit.closest_t, cast(lane_f32) min_closest_t) == lane_true do continue
         
+        spall_begin("lane replace")
         for n in 0..<LaneWidth {
             t := extract(lane_hit.closest_t, n)
             if min_closest_t > t {
@@ -435,6 +443,8 @@ traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree:
         replace_v3(&hit.normal,   lane, extract_v3(lane_hit.normal,   min_lane))
         replace_v3(&hit.tangent,  lane, extract_v3(lane_hit.tangent,  min_lane))
         replace_v3(&hit.binormal, lane, extract_v3(lane_hit.binormal, min_lane))
+        
+        spall_end()
     }
 }
 

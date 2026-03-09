@@ -1,11 +1,11 @@
 ## To be done
 
+- now that subnodes are tested wide, we can have 8 subnodes per node
+
 - vary sample count over viewport, have a focus region with highest detail
 - think more about the response to a accumulated ray
     - do more than store it, get inspired by biology
 
-- Simplify to only one render primitive(triangles)
-    - check assumptions, specialize for triangles, what is really needed
 - Investigate the BRDF table usage (is it still using the wrong indices with the Lane typing?)
 
 - Simulate more light behaviour

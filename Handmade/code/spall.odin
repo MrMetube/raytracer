@@ -10,7 +10,7 @@ SpallDisabled   :: true
 SpallBufferSize :: 1 * Gigabyte
 
 spall_ctx: spall.Context
-@(thread_local) spall_buffer: spall.Buffer
+@(private="file", thread_local) spall_buffer: spall.Buffer
 @(private="file", thread_local) backing_buffer: [] u8
 
 ////////////////////////////////////////////////
