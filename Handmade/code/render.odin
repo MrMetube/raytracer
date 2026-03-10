@@ -88,12 +88,14 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     
     render.stats = {}
     
+    spall_begin("render copy")
     // @volatile
     render.models = make_slice(render.allocator, [] Model, len(world.models))
     for model, index in world.models {
         render_model: Model
         render_model.triangles = make_shallow_copy(model.triangles, render.allocator)
         render_model.tree      = make_shallow_copy(model.tree,      render.allocator)
+        render_model.translation = model.translation
         render.models[index] = render_model
     }
     
@@ -101,8 +103,9 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     render.materials = make_shallow_copy(world.materials, render.allocator)[:]
     
     zero_slice(render.image.data)
-    tile_size := cast(v2i) max(render.image.width, render.image.height) / cast(i32) core_count
+    spall_end()
     
+    tile_size := cast(v2i) max(render.image.width, render.image.height) / cast(i32) core_count
     tile_cols  := (render.image.width  + tile_size.x - 1) / tile_size.x
     tile_rows  := (render.image.height + tile_size.y - 1) / tile_size.y
     tile_count := tile_cols * tile_rows

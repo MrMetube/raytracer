@@ -57,7 +57,8 @@ main :: proc () {
         layout_init(layout, font, Jasmine, font_size)
     }
     
-    show_tree_info: bool = true
+    show_tree_info: bool
+    show_models: bool
     show_materials: bool
     quality_render_is_open: bool
     fast_render_is_open: bool = true
@@ -90,7 +91,7 @@ main :: proc () {
         rl.ClearBackground({0x18, 0x18, 0x18, 0xff})
         
         delta_time := rl.GetFrameTime()
-        
+        layout.dt = delta_time
         speed: f32 = 60
         dddp: v3
         dlook: v2
@@ -132,15 +133,15 @@ main :: proc () {
             dlook *= 100/vec_cast(f32, window_size) * delta_time
             up :: v3{0,0,1}
             
-            yaw   := axis_angle_rotation(camera.y,                            dlook.x)
-            pitch := axis_angle_rotation(normalize(multiply3(yaw, camera.x)), dlook.y)
+            yaw   := axis_angle_rotation(camera.y,                           dlook.x)
+            pitch := axis_angle_rotation(normalize(multiply(yaw, camera.x)), dlook.y)
             
-            new_z := multiply3(pitch * yaw, camera.z)
+            new_z := multiply(pitch * yaw, camera.z)
             
             if abs(dot(new_z, up)) < 0.9999 {
                 camera.z = new_z
             } else {
-                camera.z = multiply3(yaw, camera.z)
+                camera.z = multiply(yaw, camera.z)
             }
             
             camera.x = normalize_or_zero(cross(up, camera.z))
@@ -290,6 +291,22 @@ main :: proc () {
         }
         
         layout_advance(layout, layout.font_size)
+        if display_list(layout, &show_models, "Models") {
+            layout_indent(layout)
+            defer layout_unindent(layout)
+            for &model, model_index in world.models {
+                display_line(layout, "Model %", model_index)
+                
+                layout_indent(layout)
+                defer layout_unindent(layout)
+                
+                if display_slider(layout, 100, &model.translation.x, -100, 100, "translate x", flags={.relative}) do fast_render.requested = true
+                if display_slider(layout, 100, &model.translation.y, -100, 100, "translate y", flags={.relative}) do fast_render.requested = true
+                if display_slider(layout, 100, &model.translation.z, -100, 100, "translate z", flags={.relative}) do fast_render.requested = true
+            }
+        }
+        
+        layout_advance(layout, layout.font_size)
         if display_list(layout, &show_materials, "Materials") {
             layout_indent(layout)
             defer layout_unindent(layout)
@@ -381,22 +398,22 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
             layout_advance(layout, 5)
             display_line(layout, "bounces %", render.max_bounce_count)
         layout_end_horizontal(layout)
-            
+        
         layout_begin_horizontal(layout)
             if !render.active {
                 before := render.image_size_factor
-                if display_button(layout, "-") do render.image_size_factor -= 1
+                if display_button(layout, "-") do render.image_size_factor += 1
                 layout_advance(layout, 5)
-                if display_button(layout, "+") do render.image_size_factor += 1
+                if display_button(layout, "+") do render.image_size_factor -= 1
                 render.image_size_factor = clamp(render.image_size_factor, 1, 16)
                 
                 if render.image_size_factor != before {
                     init_render_image(render, window_size)
                 }
             }
-                
+            
             layout_advance(layout, 5)
-            display_line(layout, "size factor %", render.image_size_factor)
+            display_line(layout, "resolution %x%", render.image.width, render.image.height)
         layout_end_horizontal(layout)
         
         layout_begin_horizontal(layout)

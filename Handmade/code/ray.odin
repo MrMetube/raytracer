@@ -234,7 +234,12 @@ cast_rays :: proc (stats: ^Render_Stats, models: [] Model, materials: [] Materia
                 
                 local_nil_value_lanes_tested: [LaneWidth] u32
                 
-                traverse_tree_and_collect_values(to_lane(triangles), nodes[:], ray_o, ray_d, min_t, &hit, &local_nil_value_lanes_tested, &triangles_tested_lanes, &rectangles_tested_lanes)
+                translation := vec_cast(lane_f32, model.translation)
+                
+                model_ray_o := ray_o - translation
+                hit_before := hit.did_hit
+                traverse_tree_and_collect_values(to_lane(triangles), nodes[:], model_ray_o, ray_d, min_t, &hit, &local_nil_value_lanes_tested, &triangles_tested_lanes, &rectangles_tested_lanes)
+                conditional_assign(~hit_before & hit.did_hit, &hit.next_o, hit.next_o + translation)
                 
                 for i in 0..<len(stats.nil_value_lanes_tested) {
                     atomic_add(&stats.nil_value_lanes_tested[i], local_nil_value_lanes_tested[i])
@@ -314,14 +319,14 @@ traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree:
     stack := backing[:]
     
     for lane in 0..<LaneWidth {
-        spall_begin("lane extract")
-        inv_d     := extract_v3(inv_d, lane)
-        neg_inv_o := extract_v3(neg_inv_o, lane)
-        lane_inv_d := vec_cast(lane_f32, inv_d)
+        // @waste this should not need to be destructured, just create it in this form
+        inv_d          := extract_v3(inv_d, lane)
+        neg_inv_o      := extract_v3(neg_inv_o, lane)
+        lane_inv_d     := vec_cast(lane_f32, inv_d)
         lane_neg_inv_o := vec_cast(lane_f32, neg_inv_o)
         
-        ray_d     := extract_v3(ray_d, lane)
-        ray_o     := extract_v3(ray_o, lane)
+        ray_d      := extract_v3(ray_d, lane)
+        ray_o      := extract_v3(ray_o, lane)
         lane_ray_d := vec_cast(lane_f32, ray_d)
         lane_ray_o := vec_cast(lane_f32, ray_o)
         
@@ -329,11 +334,10 @@ traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree:
         lane_hit.closest_t =     cast(lane_f32) extract(hit.closest_t, lane)
         lane_hit.did_hit   =     cast(lane_u32) extract(hit.did_hit,   lane)
         lane_hit.material  =     cast(lane_u32) extract(hit.material,  lane)
-        lane_hit.next_o    = vec_cast(lane_f32, extract_v3(hit.next_o,    lane))
-        lane_hit.normal    = vec_cast(lane_f32, extract_v3(hit.normal,    lane))
-        lane_hit.tangent   = vec_cast(lane_f32, extract_v3(hit.tangent,   lane))
-        lane_hit.binormal  = vec_cast(lane_f32, extract_v3(hit.binormal,  lane))
-        spall_end()
+        lane_hit.next_o    = vec_cast(lane_f32, extract_v3(hit.next_o,   lane))
+        lane_hit.normal    = vec_cast(lane_f32, extract_v3(hit.normal,   lane))
+        lane_hit.tangent   = vec_cast(lane_f32, extract_v3(hit.tangent,  lane))
+        lane_hit.binormal  = vec_cast(lane_f32, extract_v3(hit.binormal, lane))
         
         stack[0] = Root_Index
         stack_count = 1
@@ -350,53 +354,40 @@ traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree:
                 indices  := cast(lane_u32) node.first.subnode + lane_offset
                 subnodes := lane_index(to_lane(tree), indices)
                 
-                // @todo(viktor): is this needed? isnt it already done after hit triangle tests?
-                closest_t := simd.reduce_min(lane_hit.closest_t)
+                // @note(viktor): they are all the same value
+                closest_t := extract(lane_hit.closest_t, 0)
                 
                 hit_mask, tmin := hit_rectangle(subnodes, lane_neg_inv_o, lane_inv_d, min_t, closest_t)
                 rectangles_tested_lanes^ += Subnodes_Per_Node
-                    
+                
                 if hit_mask != lane_false {
+                    spall_scope("append sorted")
                     tt := simd.to_array(tmin)
-                    index: [LaneWidth] u32 = max(u32)
-                    sorted := cast(lane_f32) +Infinity
+                    sorted_index: [LaneWidth] u32 = max(u32)
+                    sorted_tmin := cast(lane_f32) +Infinity
                     
                     for t, ti in tt {
                         if extract(hit_mask, ti) != 0 {
-                            // t  = 5
-                            // at = 2
-                            //      2 4 5 8
-                            // gt = 1 1 0 0 
-                            greater_count := horizontal_add(1 & greater_equal(cast(lane_f32) t, sorted))
+                            greater_count := horizontal_add(1 & greater_equal(cast(lane_f32) t, sorted_tmin))
                             
-                            simd_insert_at :: proc (vector: $V/ #simd[$N] $T, value: T, #any_int index: u32) -> V {
+                            simd_insert_at :: proc (vector: $V/ #simd[$N] $T, value: T, index: lane_u32) -> V {
                                 rotate :: simd.lanes_rotate_right
-                                result := transmute(lane_u32) vector            &    less_than(lane_offset, cast(lane_u32) index) 
-                                result |= transmute(lane_u32) (cast(V) value)   &        equal(lane_offset, cast(lane_u32) index)
-                                result |= transmute(lane_u32) rotate(vector, 1) & greater_than(lane_offset, cast(lane_u32) index)
+                                result := transmute(lane_u32) vector            &    less_than(lane_offset, index) 
+                                result |= transmute(lane_u32) (cast(V) value)   &        equal(lane_offset, index)
+                                result |= transmute(lane_u32) rotate(vector, 1) & greater_than(lane_offset, index)
                                 return transmute(V) result
                             }
                             
-                            sorted = simd_insert_at(sorted, t, greater_count)
-                            index  = transmute([8] u32) simd_insert_at(transmute(lane_u32) index,  cast(u32) ti, greater_count)
+                            sorted_tmin  = simd_insert_at(sorted_tmin, t, greater_count)
+                            sorted_index = transmute([8] u32) simd_insert_at(transmute(lane_u32) sorted_index,  cast(u32) ti, greater_count)
                         }
                     }
                     
-                    when false {
-                        hit_count := horizontal_add(hit_mask & 1)
-                        for i in 0..<LaneWidth-1 {
-                            if i < auto_cast hit_count {
-                                assert(sorted[i] <= sorted[i+1])
-                            }
-                        }
-                    }
-                    
-                    for i in index {
-                        if i != max(u32) && extract(hit_mask, i) != 0 {
-                            subindex := node.first.subnode + cast(Node_Index) i
-                            stack[stack_count] = subindex
-                            stack_count += 1
-                        }
+                    hit_count := horizontal_add(hit_mask & 1)
+                    for index, it_index in sorted_index[:hit_count] {
+                        subindex := node.first.subnode + cast(Node_Index) index
+                        stack[stack_count] = subindex
+                        stack_count += 1
                     }
                 }
             } else {
@@ -406,11 +397,13 @@ traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree:
                 start := cast(u32) node.first.value
                 end   := cast(u32) node.first.value + node.value_count
                 
-                for value_index := start; value_index < (end + LaneWidth); value_index += LaneWidth {
+                for value_index := start; value_index < end; value_index += LaneWidth {
                     index := value_index + lane_offset
-                    value_mask := less_than(index, cast(lane_u32) end)
+                    
+                    mask     := less_than(index, cast(lane_u32) end)
                     triangle := lane_index(triangles, index)
-                    hit_triangle(value_mask, triangle, lane_ray_o, lane_ray_d, min_t, &lane_hit)
+                    // @waste we really only need the closest hit, why store all 8
+                    hit_triangle(mask, triangle, lane_ray_o, lane_ray_d, min_t, &lane_hit)
                 }
                 spall_end()
                 
@@ -448,7 +441,6 @@ traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree:
         min_closest_t := extract(hit.closest_t, lane)
         if greater_equal(lane_hit.closest_t, cast(lane_f32) min_closest_t) == lane_true do continue
         
-        spall_begin("lane replace")
         for n in 0..<LaneWidth {
             t := extract(lane_hit.closest_t, n)
             if min_closest_t > t {
@@ -464,8 +456,6 @@ traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree:
         replace_v3(&hit.normal,   lane, extract_v3(lane_hit.normal,   min_lane))
         replace_v3(&hit.tangent,  lane, extract_v3(lane_hit.tangent,  min_lane))
         replace_v3(&hit.binormal, lane, extract_v3(lane_hit.binormal, min_lane))
-        
-        spall_end()
     }
 }
 
@@ -546,10 +536,6 @@ hit_triangle :: proc (not_nil_mask: lane_u32, triangle: Lane(Triangle), ray_o, r
     binormal := normalize_or_zero(cross(normal, tangent))
     
     next_o := ray_o + t*ray_d
-    update_hit(hit, hit_mask, t, material, next_o, normal, tangent, binormal)
-}
-
-update_hit :: proc (hit: ^Hit_Info, hit_mask: lane_u32, t: lane_f32, material: lane_u32, next_o: lane_v3, normal, tangent, binormal: lane_v3) {
     conditional_assign(hit_mask, &hit.closest_t, t)
     conditional_assign(hit_mask, &hit.did_hit, lane_true)
     

@@ -1,6 +1,5 @@
 package build
 
-native   :: true
 optimize :: !false
 pedantic :: false
 
@@ -19,7 +18,7 @@ main :: proc () {
         build_meander()
         
         build_optimizations(optimize)
-        build_native(native)
+        build_native()
         append(cmd, "-custom-attribute:printlike")
         build_pedantic(pedantic)
         if false {

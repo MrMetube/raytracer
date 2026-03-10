@@ -15,6 +15,7 @@ World :: struct {
 Model :: struct {
     triangles: [dynamic] Triangle,
     tree:      [] Tree_Node,
+    translation: v3,
 }
 
 ////////////////////////////////////////////////
@@ -69,12 +70,7 @@ teapot_scene :: proc (world: ^World) -> (^Model, time.Duration) {
         append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 3})
         append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 3})
         
-        for &t in plane.triangles {
-            t.a.z += 4
-            t.b.z += 4
-            t.c.z += 4
-        }
-        
+        plane.translation = {0,0,4}
         tree_build(&plane.tree, plane.triangles)
     }
     { // ground
@@ -96,93 +92,87 @@ teapot_scene :: proc (world: ^World) -> (^Model, time.Duration) {
         
         tree_build(&plane.tree, plane.triangles)
     }
-    { // top
-        plane := world_create_model(world)
-        
-        v0 := v3 {-1, -1, 0}
-        v1 := v3 {-1,  1, 0}
-        v2 := v3 { 1,  1, 0}
-        v3 := v3 { 1, -1, 0}
-        
-        append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 6})
-        append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 6})
-        
-        for &t in plane.triangles {
-            t.a.xy *= 4
-            t.b.xy *= 4
-            t.c.xy *= 4
-            t.a.z += 4
-            t.b.z += 4
-            t.c.z += 4
+    if !false {
+        { // top
+            plane := world_create_model(world)
+            
+            v0 := v3 {-1, -1, 0}
+            v1 := v3 {-1,  1, 0}
+            v2 := v3 { 1,  1, 0}
+            v3 := v3 { 1, -1, 0}
+            
+            append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 6})
+            append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 6})
+            
+            plane.translation = {0,0,4}
+            for &t in plane.triangles {
+                t.a.xy *= 4
+                t.b.xy *= 4
+                t.c.xy *= 4
+            }
+            
+            tree_build(&plane.tree, plane.triangles)
         }
-        
-        tree_build(&plane.tree, plane.triangles)
-    }
-    { // back
-        plane := world_create_model(world)
-        
-        v0 := v3 {-1, 0, -1}
-        v1 := v3 {-1, 0,  1}
-        v2 := v3 { 1, 0,  1}
-        v3 := v3 { 1, 0, -1}
-        
-        append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 6})
-        append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 6})
-        
-        for &t in plane.triangles {
-            t.a.xz *= 4
-            t.b.xz *= 4
-            t.c.xz *= 4
-            t.a.y += 4
-            t.b.y += 4
-            t.c.y += 4
+        { // back
+            plane := world_create_model(world)
+            
+            v0 := v3 {-1, 0, -1}
+            v1 := v3 {-1, 0,  1}
+            v2 := v3 { 1, 0,  1}
+            v3 := v3 { 1, 0, -1}
+            
+            append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 6})
+            append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 6})
+            
+            plane.translation = {0,4,0}
+            for &t in plane.triangles {
+                t.a.xz *= 4
+                t.b.xz *= 4
+                t.c.xz *= 4
+            }
+            
+            tree_build(&plane.tree, plane.triangles)
         }
-        
-        tree_build(&plane.tree, plane.triangles)
-    }
-    { // right
-        plane := world_create_model(world)
-        
-        v0 := v3 {0, -1, -1}
-        v1 := v3 {0, -1,  1}
-        v2 := v3 {0,  1,  1}
-        v3 := v3 {0,  1, -1}
-        
-        append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 5})
-        append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 5})
-        
-        for &t in plane.triangles {
-            t.a.yz *= 4
-            t.b.yz *= 4
-            t.c.yz *= 4
-            t.a.x += 4
-            t.b.x += 4
-            t.c.x += 4
+        { // right
+            plane := world_create_model(world)
+            
+            v0 := v3 {0, -1, -1}
+            v1 := v3 {0, -1,  1}
+            v2 := v3 {0,  1,  1}
+            v3 := v3 {0,  1, -1}
+            
+            append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 5})
+            append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 5})
+            
+            plane.translation = {4,0,0}
+            for &t in plane.triangles {
+                t.a.yz *= 4
+                t.b.yz *= 4
+                t.c.yz *= 4
+            }
+            
+            tree_build(&plane.tree, plane.triangles)
         }
-        
-        tree_build(&plane.tree, plane.triangles)
-    }
-    { // left
-        plane := world_create_model(world)
-        
-        v0 := v3 {0, -1, -1}
-        v1 := v3 {0, -1,  1}
-        v2 := v3 {0,  1,  1}
-        v3 := v3 {0,  1, -1}
-        
-        append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 4})
-        append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 4})
-        
-        for &t in plane.triangles {
-            t.a.yz *= 4
-            t.b.yz *= 4
-            t.c.yz *= 4
-            t.a.x -= 4
-            t.b.x -= 4
-            t.c.x -= 4
+        { // left
+            plane := world_create_model(world)
+            
+            v0 := v3 {0, -1, -1}
+            v1 := v3 {0, -1,  1}
+            v2 := v3 {0,  1,  1}
+            v3 := v3 {0,  1, -1}
+            
+            append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 4})
+            append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 4})
+            
+            plane.translation = {-4,0,0}
+            for &t in plane.triangles {
+                t.a.yz *= 4
+                t.b.yz *= 4
+                t.c.yz *= 4
+            }
+            
+            tree_build(&plane.tree, plane.triangles)
         }
-        
-        tree_build(&plane.tree, plane.triangles)
     }
     
     
@@ -192,7 +182,7 @@ teapot_scene :: proc (world: ^World) -> (^Model, time.Duration) {
     // 2 = 145620 triangles, 7.5x 1
     
     teapot := world_create_model(world)
-    load_teapot(&teapot.triangles, 1, 2)
+    load_teapot(&teapot.triangles, 0, 2)
     
     start := time.now()
     tree_build(&teapot.tree, teapot.triangles)

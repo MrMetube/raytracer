@@ -10,9 +10,7 @@ import win "core:sys/windows"
 
 ////////////////////////////////////////////////
 
-// @todo(viktor): 
-// readd renderdoc, and maybe simplify it
-// windows subsystem: "-subsystem:windows", "-subsystem:console"
+// @todo(viktor): readd renderdoc, and maybe simplify it
 
 // @todo(viktor): explain the args parsing syntax (run|debug):<target.exe in build dir>
 
@@ -115,7 +113,7 @@ build_optimizations :: proc (optimize: bool, optimized := "-o:speed", unoptimize
     append(cmd, optimize ? optimized : unoptimized)
 }
 
-build_native :: proc (native: bool, target := "-target:windows_amd64", microarch := "-microarch:native") {
+build_native :: proc (native: bool = true, target := "-target:windows_amd64", microarch := "-microarch:native") {
     if native {
         append(cmd, target, microarch)
     }

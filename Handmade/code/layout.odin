@@ -4,6 +4,8 @@ import "core:math"
 import rl "vendor:raylib"
 
 Layout :: struct {
+    dt: f32,
+    
     font: rl.Font,
     font_size: f32,
     text_color: rl.Color,

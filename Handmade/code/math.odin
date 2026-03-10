@@ -519,7 +519,7 @@ when LaneWidth == 1 {
 
     shift_left     :: simd.shl
     shift_right    :: simd.shr
-    horizontal_add :: simd.reduce_add_pairs
+    horizontal_add :: simd.reduce_add_bisect
     maximum :: proc (a: $T, b: T) -> T {
         when intrinsics.type_is_simd_vector(T) {
             return simd.max(a, b)
