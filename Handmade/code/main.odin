@@ -8,8 +8,6 @@ import "core:fmt"
 import img "vendor:stb/image"
 import rl "vendor:raylib"
 
-FontSize :: 20
-
 ////////////////////////////////////////////////
 
 Is_Optimized :: ODIN_OPTIMIZATION_MODE == .Speed
@@ -29,181 +27,13 @@ main :: proc () {
     core_count := cast(u32) logical_core_count - 1
     
     world: World
+    world_init(&world)
     
-    append(&world.materials, Material{ emit    = { .3  , .4  , .5  }, emit_factor = 2   })
-    append(&world.materials, Material{ reflect = { .5  , .5  , .5  }, scatter = .1      })
-    append(&world.materials, Material{ reflect = { .7  , .5  , .3  }, scatter = .8      })
-    append(&world.materials, Material{ emit    = { .35 , .2 ,  .01 }, emit_factor = 1000 })
-    append(&world.materials, Material{ reflect = { .2  , .8  , .2  }, scatter = .5      })
-    append(&world.materials, Material{ reflect = { .65 , .1  , .7  }, scatter = 1.      })
-    append(&world.materials, Material{ reflect = { .9  , .9  , .8  }, scatter = .6      })
-    
-    material_names := make_slice(context.allocator, [] string, len(world.materials))
-    
-    load_brdf_merl("",                                         &world.materials[0].brdf, &world.all_brdf_values); material_names[0] = ""
-    load_brdf_merl("./BRDFDatabase/brdfs/gray-plastic.binary", &world.materials[1].brdf, &world.all_brdf_values); material_names[1] = "gray-plastic"
-    load_brdf_merl("./BRDFDatabase/brdfs/brass.binary",        &world.materials[2].brdf, &world.all_brdf_values); material_names[2] = "brass"
-    load_brdf_merl("./BRDFDatabase/brdfs/gold-paint.binary",   &world.materials[3].brdf, &world.all_brdf_values); material_names[3] = "gold-paint"
-    load_brdf_merl("./BRDFDatabase/brdfs/green-latex.binary",  &world.materials[4].brdf, &world.all_brdf_values); material_names[4] = "green-latex"
-    load_brdf_merl("./BRDFDatabase/brdfs/purple-paint.binary", &world.materials[5].brdf, &world.all_brdf_values); material_names[5] = "purple-paint"
-    load_brdf_merl("./BRDFDatabase/brdfs/white-marble.binary", &world.materials[6].brdf, &world.all_brdf_values); material_names[6] = "white-marble"
-    
-    // @todo(viktor): fixed Buffer of models and return indices
-    reserve(&world.models, 128)
-    
-    // append(&world.planes, Plane { normal = { 0, 0,-1}, tangent = {}, binormal = {}, center = { 0, 0, area_size},     radius = area_size,   material = 6 })
-    // append(&world.planes, Plane { normal = { 1, 0, 0}, tangent = {}, binormal = {}, center = {-area_size, 0, 0},     radius = area_size,   material = 1 })
-    // append(&world.planes, Plane { normal = {-1, 0, 0}, tangent = {}, binormal = {}, center = {+area_size, 0, 0},     radius = area_size,   material = 5 })
-    // append(&world.planes, Plane { normal = { 0,-1, 0}, tangent = {}, binormal = {}, center = {0, +area_size, 0},     radius = area_size,   material = 4 })
-    
-    // @cleanup 
-    { // light
-        plane := world_create_model(&world)
-        
-        v0 := v3 {-1, -1, 0}
-        v1 := v3 {-1,  1, 0}
-        v2 := v3 { 1,  1, 0}
-        v3 := v3 { 1, -1, 0}
-        
-        append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 3})
-        append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 3})
-        
-        for &t in plane.triangles {
-            t.a.z += 4
-            t.b.z += 4
-            t.c.z += 4
-        }
-        
-        tree_build(&plane.tree, plane.triangles)
-    }
-    { // ground
-        plane := world_create_model(&world)
-        
-        v0 := v3 {-1, -1, 0}
-        v1 := v3 {-1,  1, 0}
-        v2 := v3 { 1,  1, 0}
-        v3 := v3 { 1, -1, 0}
-        
-        append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 1})
-        append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 1})
-        
-        for &t in plane.triangles {
-            t.a.xy *= 500
-            t.b.xy *= 500
-            t.c.xy *= 500
-        }
-        
-        tree_build(&plane.tree, plane.triangles)
-    }
-    { // top
-        plane := world_create_model(&world)
-        
-        v0 := v3 {-1, -1, 0}
-        v1 := v3 {-1,  1, 0}
-        v2 := v3 { 1,  1, 0}
-        v3 := v3 { 1, -1, 0}
-        
-        append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 6})
-        append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 6})
-        
-        for &t in plane.triangles {
-            t.a.xy *= 4
-            t.b.xy *= 4
-            t.c.xy *= 4
-            t.a.z += 4
-            t.b.z += 4
-            t.c.z += 4
-        }
-        
-        tree_build(&plane.tree, plane.triangles)
-    }
-    { // back
-        plane := world_create_model(&world)
-        
-        v0 := v3 {-1, 0, -1}
-        v1 := v3 {-1, 0,  1}
-        v2 := v3 { 1, 0,  1}
-        v3 := v3 { 1, 0, -1}
-        
-        append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 6})
-        append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 6})
-        
-        for &t in plane.triangles {
-            t.a.xz *= 4
-            t.b.xz *= 4
-            t.c.xz *= 4
-            t.a.y += 4
-            t.b.y += 4
-            t.c.y += 4
-        }
-        
-        tree_build(&plane.tree, plane.triangles)
-    }
-    { // right
-        plane := world_create_model(&world)
-        
-        v0 := v3 {0, -1, -1}
-        v1 := v3 {0, -1,  1}
-        v2 := v3 {0,  1,  1}
-        v3 := v3 {0,  1, -1}
-        
-        append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 5})
-        append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 5})
-        
-        for &t in plane.triangles {
-            t.a.yz *= 4
-            t.b.yz *= 4
-            t.c.yz *= 4
-            t.a.x += 4
-            t.b.x += 4
-            t.c.x += 4
-        }
-        
-        tree_build(&plane.tree, plane.triangles)
-    }
-    { // left
-        plane := world_create_model(&world)
-        
-        v0 := v3 {0, -1, -1}
-        v1 := v3 {0, -1,  1}
-        v2 := v3 {0,  1,  1}
-        v3 := v3 {0,  1, -1}
-        
-        append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 4})
-        append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 4})
-        
-        for &t in plane.triangles {
-            t.a.yz *= 4
-            t.b.yz *= 4
-            t.c.yz *= 4
-            t.a.x -= 4
-            t.b.x -= 4
-            t.c.x -= 4
-        }
-        
-        tree_build(&plane.tree, plane.triangles)
-    }
-    
-    
-    
-    // 0 =   3488 triangles
-    // 1 =  19480 triangles, 5.5x 0
-    // 2 = 145620 triangles, 7.5x 1
-    
-    teapot := world_create_model(&world)
-    clear(&teapot.triangles)
-    load_teapot(&teapot.triangles, 1, 2)
-    
-    start := time.now()
-    tree_build(&teapot.tree, teapot.triangles)
-    build_time := time.since(start)
-    print("build time %\n", fmt.tprint(build_time))
-    
+    teapot, build_time := teapot_scene(&world)
     inspection := inspect(teapot.tree)
     {
         print_inspection(teapot.triangles, inspection)
     }
-    
     ////////////////////////////////////////////////
     
     camera: Camera
@@ -219,30 +49,12 @@ main :: proc () {
     rl.InitWindow(window_size.x, window_size.y, window_title)
     rl.SetTargetFPS(144)
     
-    font := rl.LoadFontEx("./fonts/VictorMono-Bold.otf", FontSize, nil, 0)
-    
-    rl.GuiEnable()
-    rl.GuiSetFont(font)
-    rl.GuiSetStyle(.DEFAULT, auto_cast rl.GuiDefaultProperty.TEXT_SIZE, FontSize)
-    
+    the_layout: Layout
+    layout := &the_layout
     {
-        Background := color_to_u8(DarkGreen)
-        Foreground := color_to_u8(Jasmine)
-        Highlight  := color_to_u8(Green)
-        Focus      := color_to_u8(Isabelline)
-        None       := color_to_u8(v4{})
-        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_NORMAL, Foreground)
-        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BASE_COLOR_NORMAL, Background)
-        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_NORMAL, None)
-        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_FOCUSED, Focus)
-        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BASE_COLOR_FOCUSED, Highlight)
-        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_FOCUSED, Background)
-        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_PRESSED, Highlight)
-        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BASE_COLOR_PRESSED, Focus)
-        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_PRESSED, Highlight)
-        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_DISABLED, Highlight)
-        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BASE_COLOR_DISABLED, Background)
-        rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_DISABLED, None)
+        font_size :: 20
+        font := rl.LoadFontEx("./fonts/VictorMono-Bold.otf", font_size, nil, 0)
+        layout_init(layout, font, Jasmine, font_size)
     }
     
     show_tree_info: bool = true
@@ -268,7 +80,7 @@ main :: proc () {
     fast_render.requested = true
     fast_image_is_focussed: bool = true
     
-    move_camera: bool
+    is_controlling_camera: bool
     ddp: v3
     dp: v3
     for !rl.WindowShouldClose() {
@@ -284,14 +96,14 @@ main :: proc () {
         dlook: v2
         
         if !rl.IsWindowFocused() {
-            move_camera = false
+            is_controlling_camera = false
             rl.ShowCursor()
         } else {
             if rl.IsMouseButtonPressed(.MIDDLE) {
-                move_camera = !move_camera
+                is_controlling_camera = !is_controlling_camera
             }
             
-            if move_camera {
+            if is_controlling_camera {
                 if rl.IsKeyDown(.A) do dddp += {-1, 0,  0}
                 if rl.IsKeyDown(.D) do dddp += { 1, 0,  0}
                 if rl.IsKeyDown(.W) do dddp += { 0, 0, -1}
@@ -395,10 +207,7 @@ main :: proc () {
         
         ////////////////////////////////////////////////
         
-        _layout: Layout
-        layout := &_layout
-        layout_init(layout, font, Jasmine, 10)
-        
+        layout_begin(layout, 10)
         {
             small_factor :: 6
             small_size := window_size / small_factor
@@ -468,7 +277,7 @@ main :: proc () {
             layout_advance(layout, 10)
             
             if display_button(layout, "Rebuild") {
-                start = time.now()
+                start := time.now()
                 tree_build(&teapot.tree, teapot.triangles)
                 build_time = time.since(start)
                 print("building tree took %\n", fmt.tprint(build_time))
@@ -480,13 +289,13 @@ main :: proc () {
             layout_unindent(layout)
         }
         
-        layout_advance(layout, FontSize)
+        layout_advance(layout, layout.font_size)
         if display_list(layout, &show_materials, "Materials") {
             layout_indent(layout)
             defer layout_unindent(layout)
             
             for &material, index in world.materials {
-                display_line(layout, "Material %: material %", index, material_names[index])
+                display_line(layout, "Material %: material %", index, world.material_names[index])
                 
                 layout_indent(layout)
                 defer layout_unindent(layout)
@@ -496,7 +305,7 @@ main :: proc () {
                 
                 layout_advance(layout, 10)
                 layout_begin_horizontal(layout)
-                color_size :: 50
+                color_size :: 40
                 {
                     display_line(layout, "Emit")
                     layout_advance(layout, 10)
@@ -509,7 +318,7 @@ main :: proc () {
                     material.emit = rl.ColorNormalize(color).rgb
                     
                     layout_advance(layout, color_size)
-                    layout_advance(layout, 50)
+                    layout_advance(layout, color_size)
                     layout_advance(layout, 10)
                 }
                 
@@ -526,7 +335,7 @@ main :: proc () {
                     layout_advance(layout, color_size)
                 }
                 layout_end_horizontal(layout)
-                layout_advance(layout, 50)
+                layout_advance(layout, color_size)
             }
         }
         
@@ -601,7 +410,7 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
                 layout_advance(layout, 10)
                 bar_p := layout.at
                 bar_width  :: 200
-                bar_height := cast(f32) FontSize * 0.8
+                bar_height := layout.font_size * 0.8
                 
                 rect     := rectangle_min_dimension(bar_p, v2{bar_width,                                             bar_height})
                 progress := rectangle_min_dimension(bar_p, v2{linear_blend(cast(f32) 0, bar_width, done_percentage), bar_height})
@@ -646,10 +455,6 @@ axis_angle_rotation :: proc(axis: v3, angle: f32) -> m4 {
 }
 
 ////////////////////////////////////////////////
-
-rlGuiSetColor :: proc (control: rl.GuiControl, property: i32, value: Color) {
-    rl.GuiSetStyle(control, property, transmute(i32) value.abgr)
-}
 
 to_rl_rect :: proc (rect: Rectangle2) -> rl.Rectangle {
     result: rl.Rectangle

@@ -3,19 +3,6 @@ package main
 import "core:time"
 import rl "vendor:raylib"
 
-Model :: struct {
-    triangles: [dynamic] Triangle,
-    tree:      [] Tree_Node,
-}
-
-// @volatile also update the render's world copying
-World :: struct {
-    models: [dynamic] Model,
-    
-    materials: [dynamic] Material,
-    all_brdf_values: [dynamic] v3,
-}
-
 Render_Stats :: struct {
     bounces_computed: u64,
     loops_computed:   u64,
@@ -65,15 +52,6 @@ Camera :: struct {
     y: v3,
     z: v3,
     p: v3,
-}
-
-////////////////////////////////////////////////
-
-world_create_model :: proc (world: ^World) -> ^Model {
-    model_index := len(world.models)
-    append_nothing(&world.models)
-    result := &world.models[model_index]
-    return result
 }
 
 ////////////////////////////////////////////////

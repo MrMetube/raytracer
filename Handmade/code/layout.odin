@@ -5,6 +5,7 @@ import rl "vendor:raylib"
 
 Layout :: struct {
     font: rl.Font,
+    font_size: f32,
     text_color: rl.Color,
     at:  v2,
     
@@ -13,11 +14,44 @@ Layout :: struct {
     base_x: f32,
 }
 
-layout_init :: proc (layout: ^Layout, font: rl.Font, text_color: v4, begin: v2) {
+layout_init :: proc (layout: ^Layout, font: rl.Font, text_color: v4, font_size: f32) {
     layout^ = {}
     layout.font = font
+    layout.font_size = font_size
     layout.text_color = cast(rl.Color) color_to_u8(text_color)
+    
+    rl.GuiEnable()
+    rl.GuiSetFont(layout.font)
+    rl.GuiSetStyle(.DEFAULT, auto_cast rl.GuiDefaultProperty.TEXT_SIZE, cast(i32) layout.font_size)
+    
+    Background := color_to_u8(DarkGreen)
+    Foreground := color_to_u8(Jasmine)
+    Highlight  := color_to_u8(Green)
+    Focus      := color_to_u8(Isabelline)
+    None       := color_to_u8(v4{})
+    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_NORMAL, Foreground)
+    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BASE_COLOR_NORMAL, Background)
+    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_NORMAL, None)
+    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_FOCUSED, Focus)
+    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BASE_COLOR_FOCUSED, Highlight)
+    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_FOCUSED, Background)
+    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_PRESSED, Highlight)
+    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BASE_COLOR_PRESSED, Focus)
+    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_PRESSED, Highlight)
+    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_DISABLED, Highlight)
+    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BASE_COLOR_DISABLED, Background)
+    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_DISABLED, None)
+    
+    rlGuiSetColor :: proc (control: rl.GuiControl, property: i32, value: Color) {
+        rl.GuiSetStyle(control, property, transmute(i32) value.abgr)
+    }
+}
+
+layout_begin :: proc (layout: ^Layout, begin: v2) {
     layout.at = begin
+    layout.base_x = {}
+    layout.horizontal = {}
+    layout.largest_y_advance = {}
 }
 
 layout_advance :: proc (layout: ^Layout, size: f32) {
@@ -107,7 +141,7 @@ display_slider_raw :: proc (layout: ^Layout, width: f32, value: ^f32, min: f32, 
         max = value^ + (1.0 / max)
     }
     
-    size := v2{width, FontSize}
+    size := v2{width, layout.font_size}
     bounds := rectangle_min_dimension(layout.at, size)
     layout_advance_2(layout, size)
     
@@ -134,9 +168,9 @@ display_slider_raw :: proc (layout: ^Layout, width: f32, value: ^f32, min: f32, 
 
 display_line :: proc (layout: ^Layout, format: string, args: ..any) {
     text := ctprint(format, ..args)
-    size := rl.MeasureTextEx(layout.font, text, FontSize, 1)
-    rl.DrawTextEx(layout.font, text, layout.at+2, FontSize, 1, rl.BLACK)
-    rl.DrawTextEx(layout.font, text, layout.at, FontSize, 1, layout.text_color)
+    size := rl.MeasureTextEx(layout.font, text, layout.font_size, 1)
+    rl.DrawTextEx(layout.font, text, layout.at+2, layout.font_size, 1, rl.BLACK)
+    rl.DrawTextEx(layout.font, text, layout.at,   layout.font_size, 1, layout.text_color)
     layout_advance_2(layout, size)
 }
 
@@ -149,7 +183,7 @@ display_button :: proc (layout: ^Layout, text: string, size := v2{}) -> bool {
     text := ctprint("%", text)
     size := size
     if size == 0 {
-        size = rl.MeasureTextEx(layout.font, text, FontSize, 1)
+        size = rl.MeasureTextEx(layout.font, text, layout.font_size, 1)
         size.x += 20
     }
     bounds := to_rl_rect(rectangle_min_dimension(layout.at, size))
@@ -169,7 +203,7 @@ display_toggle :: proc (layout: ^Layout, text: string, condition: ^bool, size :=
     text := ctprint("%", text)
     size := size
     if size == 0 {
-        size = rl.MeasureTextEx(layout.font, text, FontSize, 1)
+        size = rl.MeasureTextEx(layout.font, text, layout.font_size, 1)
         size.x += 20
     }
     bounds := to_rl_rect(rectangle_min_dimension(layout.at, size))
