@@ -22,10 +22,10 @@ Model :: struct {
 
 world_init :: proc (world: ^World) {
     append(&world.materials, Material{ emit    = { .3  , .4  , .5  }, emit_factor = 2   })
-    append(&world.materials, Material{ reflect = { .5  , .5  , .5  }, scatter = .1      })
+    append(&world.materials, Material{ reflect = { .5  , .5  , .5  }, scatter = .99     })
     append(&world.materials, Material{ reflect = { .7  , .5  , .3  }, scatter = .8      })
     append(&world.materials, Material{ emit    = { .35 , .2 ,  .01 }, emit_factor = 1000 })
-    append(&world.materials, Material{ reflect = { .2  , .8  , .2  }, scatter = .5      })
+    append(&world.materials, Material{ reflect = { .2  , .8  , .2  }, scatter = .75     })
     append(&world.materials, Material{ reflect = { .65 , .1  , .7  }, scatter = 1.      })
     append(&world.materials, Material{ reflect = { .9  , .9  , .8  }, scatter = .6      })
     
@@ -92,7 +92,7 @@ teapot_scene :: proc (world: ^World) -> (^Model, time.Duration) {
         
         tree_build(&plane.tree, plane.triangles)
     }
-    if !false {
+    if false {
         { // top
             plane := world_create_model(world)
             
