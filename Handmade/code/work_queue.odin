@@ -141,9 +141,8 @@ worker_thread :: proc (parameter: pmm) {
     
     info := cast(^CreateThreadInfo) parameter
     queue := info.queue
-    context.user_index = cast(int) info.index
     
-    init_spall_thread(auto_cast context.user_index, begin_deffered = false)
+    init_spall_thread(info.index, begin_deffered = false)
     atomic_add(&queue.opened_thread_count, 1)
     
     win.SetThreadDescription(win.GetCurrentThread(), win.utf8_to_wstring(sprint("%: %", queue.name, info.name_index)))

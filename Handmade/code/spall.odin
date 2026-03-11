@@ -41,7 +41,7 @@ init_spall :: proc (thread_index: u32 = 0, output_name := "trace", location := #
     spall_buffer = spall.buffer_create(backing_buffer, thread_index)
 }
 @(deferred_out = delete_spall_thread)
-init_spall_thread :: proc (thread_index := cast(u32) context.user_index, begin_deffered := true, location := #caller_location) -> bool {
+init_spall_thread :: proc (thread_index: u32, begin_deffered := true, location := #caller_location) -> bool {
     when !SpallDisabled {
         assert(thread_index != 0)
         err := make_by_pointer(&backing_buffer, SpallBufferSize)

@@ -247,9 +247,9 @@ cast_rays :: proc (stats: ^Render_Stats, models: [] Model, materials: [] Materia
                 translation := vec_cast(lane_f32, model.translation)
                 
                 model_ray_o := ray_o - translation
-                hit_before := hit.did_hit
+                t_before := hit.closest_t
                 traverse_tree_and_collect_values(to_lane(triangles), nodes[:], model_ray_o, ray_d, min_t, &hit, &local_nil_value_lanes_tested, &triangles_tested_lanes, &rectangles_tested_lanes)
-                conditional_assign(~hit_before & hit.did_hit, &hit.next_o, hit.next_o + translation)
+                conditional_assign(less_than(hit.closest_t, t_before), &hit.next_o, hit.next_o + translation)
                 
                 for i in 0..<len(stats.nil_value_lanes_tested) {
                     atomic_add(&stats.nil_value_lanes_tested[i], local_nil_value_lanes_tested[i])
