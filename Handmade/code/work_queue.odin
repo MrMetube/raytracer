@@ -145,7 +145,7 @@ worker_thread :: proc (parameter: pmm) {
     init_spall_thread(info.index, begin_deffered = false)
     atomic_add(&queue.opened_thread_count, 1)
     
-    win.SetThreadDescription(win.GetCurrentThread(), win.utf8_to_wstring(sprint("%: %", queue.name, info.name_index)))
+    win.SetThreadDescription(win.GetCurrentThread(), win.utf8_to_wstring(sprint("%v: %v", queue.name, info.name_index)))
     
     for {
         should_sleep := do_next_work_queue_entry(queue)

@@ -1,8 +1,5 @@
 package main
 
-import "core:fmt"
-import "core:time"
-
 // @volatile also update the render's world copying
 World :: struct {
     models: [dynamic] Model,
@@ -41,7 +38,7 @@ world_init :: proc (world: ^World) {
 }
 
 world_load_brdf :: proc (world: ^World, material_index: u32, name: string) {
-    load_brdf_merl(tprint("./BRDFDatabase/brdfs/%.binary", name), &world.materials[material_index].brdf, &world.all_brdf_values)
+    load_brdf_merl(tprint("./BRDFDatabase/brdfs/%v.binary", name), &world.materials[material_index].brdf, &world.all_brdf_values)
     world.material_names[material_index] = name
 }
 
@@ -54,7 +51,7 @@ world_create_model :: proc (world: ^World) -> ^Model {
 
 ////////////////////////////////////////////////
 
-teapot_scene :: proc (world: ^World) -> (^Model, time.Duration) {
+teapot_scene :: proc (world: ^World) {
     // @todo(viktor): fixed Buffer of models and return indices
     reserve(&world.models, 128)
     
@@ -184,10 +181,5 @@ teapot_scene :: proc (world: ^World) -> (^Model, time.Duration) {
     teapot := world_create_model(world)
     load_teapot(&teapot.triangles, 0, 2)
     
-    start := time.now()
     tree_build(&teapot.tree, teapot.triangles)
-    build_time := time.since(start)
-    print("build time %\n", fmt.tprint(build_time))
-    
-    return teapot, build_time
 }

@@ -193,7 +193,7 @@ display_list :: proc (layout: ^Layout, is_open: ^bool, format: string) -> bool {
 }
 
 display_button :: proc (layout: ^Layout, text: string, size := v2{}) -> bool {
-    text := ctprint("%", text)
+    text := ctprint("%v", text)
     size := size
     if size == 0 {
         size = rl.MeasureTextEx(layout.font, text, layout.font_size, 1)
@@ -219,7 +219,7 @@ display_toggle_condition :: proc (layout: ^Layout, text: string, condition: bool
     return clicked, toggle
 }
 display_toggle_bool :: proc (layout: ^Layout, text: string, condition: ^bool, size := v2{}) -> bool {
-    text := ctprint("%", text)
+    text := ctprint("%v", text)
     size := size
     if size == 0 {
         size = rl.MeasureTextEx(layout.font, text, layout.font_size, 1)

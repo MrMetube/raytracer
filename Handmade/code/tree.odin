@@ -27,6 +27,9 @@ Root_Index :: 1
 
 Subnodes_Per_Node :: 8
 
+// @todo(viktor): this can be a lot lower if we do 3 depth of splits per node now, if it matters
+Tree_Max_Depth :: 32
+
 // @note(viktor): this is not idempotic, as the values are reordered.
 // A second build may encounter values in a different order compared to the first build.
 tree_build :: proc (tree: ^[] Tree_Node, triangles: [dynamic] Triangle) {
@@ -78,10 +81,10 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [dynamic] Triangle) {
     final_indices: map[Node_Index] [] Value_Index
     final_indices.allocator = allocator
         
-    _stack  := make_dynamic_array(allocator, [dynamic] Node_Info, 0, Tree_Max_Depth)
+    _stack := make_dynamic_array(allocator, [dynamic] Node_Info, 0, Tree_Max_Depth)
     stack  := &_stack
     
-    append(stack, Node_Info { Root_Index, root_cost, 0, root_values })
+    append(stack, Node_Info { Root_Index, 0, root_cost, root_values })
     
     temp_indices := make_slice(allocator, [] Value_Index, len(triangles))
     
@@ -92,25 +95,25 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [dynamic] Triangle) {
         
         all_better := false
         subs: [8] Split_Node
-        split: {
-            two := split_node(tree^, it.cost, it.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
+        split: if len(it.indices) > LaneWidth {
+            s0, s1 := split_node(tree^, it.cost, it.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
             
-            two0 := split_node(tree^, two[0].cost, two[0].indices, triangle_centers, triangle_bounds, temp_indices) or_break split
-            two1 := split_node(tree^, two[1].cost, two[1].indices, triangle_centers, triangle_bounds, temp_indices) or_break split
+            s00, s10 := split_node(tree^, s0.cost, s0.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
+            s01, s11 := split_node(tree^, s1.cost, s1.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
             
-            two00 := split_node(tree^, two0[0].cost, two0[0].indices, triangle_centers, triangle_bounds, temp_indices) or_break split
-            two01 := split_node(tree^, two0[1].cost, two0[1].indices, triangle_centers, triangle_bounds, temp_indices) or_break split
-            two10 := split_node(tree^, two1[0].cost, two1[0].indices, triangle_centers, triangle_bounds, temp_indices) or_break split
-            two11 := split_node(tree^, two1[1].cost, two1[1].indices, triangle_centers, triangle_bounds, temp_indices) or_break split
+            s0, s1  = split_node(tree^, s00.cost, s00.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
+            s2, s3 := split_node(tree^, s01.cost, s01.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
+            s4, s5 := split_node(tree^, s10.cost, s10.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
+            s6, s7 := split_node(tree^, s11.cost, s11.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
             
-            subs[0b000] = two00[0]
-            subs[0b001] = two00[1] 
-            subs[0b010] = two01[0]
-            subs[0b011] = two01[1]
-            subs[0b100] = two10[0]
-            subs[0b101] = two10[1]
-            subs[0b110] = two11[0]
-            subs[0b111] = two11[1]
+            subs[0] = s0
+            subs[1] = s1 
+            subs[2] = s2
+            subs[3] = s3
+            subs[4] = s4
+            subs[5] = s5
+            subs[6] = s6
+            subs[7] = s7
             all_better = true
         }
         
@@ -125,7 +128,7 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [dynamic] Triangle) {
             if it.depth+1 < Tree_Max_Depth {
                 for sub, index in subs {
                     sub_index := node.first.subnode + auto_cast index
-                    sub_info := Node_Info { sub_index, sub.cost, it.depth+1, sub.indices }
+                    sub_info := Node_Info { sub_index, it.depth+1, sub.cost, sub.indices }
                     append(stack, sub_info)
                 }
             } else {
@@ -145,9 +148,6 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [dynamic] Triangle) {
     zero(triangles[:])
     
     next_free_value_index: Value_Index
-    
-    // @todo(viktor): should tree be compacted/resized at the end?
-    print("tree: allocated %, used %\n", len(tree), next_free_tree_index)
     
     for node_index := cast(Node_Index) Root_Index; node_index < next_free_tree_index; node_index += 1 {
         node := &tree[node_index]
@@ -185,18 +185,20 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [dynamic] Triangle) {
 
 Node_Info :: struct {
     index: Node_Index,
-    cost:  f32,
     depth: u32,
+    
+    cost:  f32,
     indices: [] Value_Index,
 }
 
 Split_Node :: struct {
+    bounds: Rectangle3,
+    
     cost: f32,
     indices: [] Value_Index,
-    bounds: Rectangle3,
 }
 
-split_node :: proc (tree: [] Tree_Node, it_cost: f32, it_indices: [] Value_Index, triangle_centers: [] v3, triangle_bounds: [] Rectangle3, temp_indices: [] Value_Index) -> ([2] Split_Node, bool) {
+split_node :: proc (tree: [] Tree_Node, it_cost: f32, it_indices: [] Value_Index, triangle_centers: [] v3, triangle_bounds: [] Rectangle3, temp_indices: [] Value_Index) -> (Split_Node, Split_Node, bool) {
     min_cost := +Infinity
     best_a_count: u32
     best_split_axis: int
@@ -286,7 +288,7 @@ split_node :: proc (tree: [] Tree_Node, it_cost: f32, it_indices: [] Value_Index
         best_b.indices = it_indices[best_a_count:]
     }
     
-    return best_subs, better
+    return best_subs[0], best_subs[1], better
 }
 
 ////////////////////////////////////////////////
@@ -295,22 +297,24 @@ tree_print :: proc (nodes: [] $T, level: int = 0, it_index: Node_Index = Root_In
     it := nodes[it_index]
     
     for _ in 0..<level * 4 do print(" ")
-    print("node %\n", it_index)
+    print("node %v\n", it_index)
     for _ in 0..<level * 4 do print(" ")
-    print("bounds %\n", it.bounds)
-    for _ in 0..<level * 4 do print(" ")
-    print("first_value %\n", it.first_value)
-    for _ in 0..<level * 4 do print(" ")
-    print("value_count %\n", it.value_count)
-    
-    if it.first_subnode != 0 {
-        for _ in 0..<level * 4 do print(" ")
-        print("subnodes:\n")
-        for subnode in it.first_subnode ..< it.first_subnode + Subnodes_Per_Node {
-            tree_print(nodes, level + 1, subnode)
+    print("bounds %v\n", it.bounds)
+    if it.value_count == 0 {
+        if it.first.subnode != Nil_Index {
+            for _ in 0..<level * 4 do print(" ")
+            print("subnodes:\n")
+            for subnode in it.first.subnode ..< it.first.subnode + Subnodes_Per_Node {
+                tree_print(nodes, level + 1, subnode)
+            }
+            for _ in 0..<level * 4 do print(" ")
+            print(";\n")
         }
+    } else {
         for _ in 0..<level * 4 do print(" ")
-        print(";\n")
+        print("first_value %v\n", it.first.value)
+        for _ in 0..<level * 4 do print(" ")
+        print("value_count %v\n", it.value_count)
     }
 }
 
@@ -353,9 +357,9 @@ inspect :: proc (nodes: [] Tree_Node, it_index: Node_Index = Root_Index, depth :
 print_inspection :: proc (values: [dynamic] Triangle, inspection: Tree_Info) {
     if len(values) > 0 {
         print("tree info:\n")
-        print("            nodes: %\n", inspection.node_count)
-        print("            depth: max = %, avg = %\n", inspection.depth.max, view_float(inspection.depth.avg, precision = 2))
-        print("  values per node: max = %, avg = %\n", inspection.values_per_node.max, view_float(inspection.values_per_node.avg, precision = 2))
+        print("            nodes: %v\n", inspection.node_count)
+        print("            depth: max = %v, avg = %.2f\n", inspection.depth.max, inspection.depth.avg)
+        print("  values per node: max = %v, avg = %.2f\n", inspection.values_per_node.max, inspection.values_per_node.avg)
         print("\n")
     }
 }

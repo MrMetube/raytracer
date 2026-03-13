@@ -151,12 +151,12 @@ print_render_results :: proc (stats: ^Render_Stats, start, end: time.Time) {
     loops_computed   := volatile_load(&stats.loops_computed)
     wasted_bounces   := loops_computed - bounces_computed
     nanoseconds := safe_ratio_or_zero(time.duration_nanoseconds(total_time), cast(i64) bounces_computed)
-    print("Raycasting time: %s\n  bounces %\n  total bounces %\n  wasted bounces % (% %%)\n  time per ray %\n", 
+    print("Raycasting time: %vs\n  bounces %v\n  total bounces %v\n  wasted bounces %v (%v)\n  time per ray %v\n", 
         time.duration_seconds(total_time), 
         view_magnitude(bounces_computed), 
         view_magnitude(loops_computed), 
         view_magnitude(wasted_bounces), 
-        view_percentage_ratio(cast(f32) wasted_bounces / cast(f32) loops_computed), 
+        view_percentage(cast(f32) wasted_bounces / cast(f32) loops_computed), 
         cast(time.Duration) nanoseconds,
     )
     
@@ -171,11 +171,11 @@ print_render_results :: proc (stats: ^Render_Stats, start, end: time.Time) {
     print("  Empty lanes: [")
     for e, i in stats.nil_value_lanes_tested {
         if i > 0 do print(", ")
-        print("% = % %%", i, view_percentage_ratio(safe_ratio_or_zero(cast(f64) e, cast(f64) total_lanes)))
+        print("%v = %v", i, view_percentage(safe_ratio_or_zero(cast(f64) e, cast(f64) total_lanes)))
     }
     print("]\n")
     
-    print("  Wasted lanes: % % %%\n", view_magnitude(wasted_lanes), view_percentage_ratio(safe_ratio_or_zero(cast(f64) wasted_lanes, cast(f64) (total_lanes * LaneWidth))))
+    print("  Wasted lanes: %v %v\n", view_magnitude(wasted_lanes), view_percentage(safe_ratio_or_zero(cast(f64) wasted_lanes, cast(f64) (total_lanes * LaneWidth))))
     
     {
         tests := &stats.triangle_tests
@@ -185,9 +185,9 @@ print_render_results :: proc (stats: ^Render_Stats, start, end: time.Time) {
         wasted := total.sum - tests.sum
         
         print("Triangle tests:\n")
-        print("     tests = % (avg ~%)\n", view_magnitude(tests.sum), view_float(tests.avg, precision = 2))
-        print(" all lanes = % (avg ~%)\n", view_magnitude(total.sum), view_float(total.avg, precision = 2))
-        print("    wasted = % % %%\n", view_magnitude(wasted), view_percentage(wasted, total.sum))
+        print("     tests = %v (avg ~%.2f)\n", view_magnitude(tests.sum), tests.avg)
+        print(" all lanes = %v (avg ~%.2f)\n", view_magnitude(total.sum), total.avg)
+        print("    wasted = %v %v\n", view_magnitude(wasted), view_percentage(wasted, total.sum))
     }
     
     print("\n\n")

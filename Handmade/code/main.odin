@@ -3,7 +3,6 @@ package main
 import "core:os"
 import si "core:sys/info"
 import "core:time"
-import "core:fmt"
 
 import img "vendor:stb/image"
 import rl "vendor:raylib"
@@ -12,28 +11,20 @@ import rl "vendor:raylib"
 
 Is_Optimized :: ODIN_OPTIMIZATION_MODE == .Speed
 
-// @todo(viktor): this can be a lot lower if we do 3 depth of splits per node now, if it matters
-Tree_Max_Depth :: 32
-
 main :: proc () {
     rl.SetTraceLogLevel(.WARNING)
     
-    window_title := cprint("Handmade Ray %", (Is_Optimized ? "Optimized" :  "Debug"))
+    window_title := cprint("Handmade Ray %v", (Is_Optimized ? "Optimized" :  "Debug"))
     
-    init_spall(output_name = tprint("trace_%", Is_Optimized ? "optimized" : "debug"))
+    init_spall(output_name = tprint("trace_%v", Is_Optimized ? "optimized" : "debug"))
     
-    _, logical_core_count, ok := si.cpu_core_count()
-    assert(ok)
+    _, logical_core_count, ok := si.cpu_core_count(); assert(ok)
     core_count := cast(u32) logical_core_count - 1
     
     world: World
     world_init(&world)
     
-    teapot, build_time := teapot_scene(&world)
-    inspection := inspect(teapot.tree)
-    {
-        print_inspection(teapot.triangles, inspection)
-    }
+    teapot_scene(&world)
     ////////////////////////////////////////////////
     
     camera: Camera
@@ -58,8 +49,11 @@ main :: proc () {
     }
     
     selected_model_index: int
-    show_tree_info: bool
     show_models: bool
+    show_tree_info: bool
+    selected_model_info: Tree_Info
+    selected_model_build_time: time.Duration
+    
     selected_material_index: int
     show_materials: bool
     quality_render_is_open: bool
@@ -203,14 +197,15 @@ main :: proc () {
         
         if rl.IsKeyPressed(.F5) && !quality_render.active {
             output_path := "./render.bmp"
-            img.write_bmp(ctprint("%", output_path), quality_render.image.width, quality_render.image.height, 4, &quality_render.image.data[0])
+            img.write_bmp(ctprint("%v", output_path), quality_render.image.width, quality_render.image.height, 4, &quality_render.image.data[0])
             cwd, _ := os.get_working_directory(context.temp_allocator)
-            print("Wrote ouput to %/%\n", cwd, output_path)
+            print("Wrote ouput to %v/%v\n", cwd, output_path)
         }
         
         ////////////////////////////////////////////////
         
         layout_begin(layout, 10)
+        
         {
             small_factor :: 6
             small_size := window_size / small_factor
@@ -225,7 +220,7 @@ main :: proc () {
             }
         }
         
-        display_line(layout, "Camera: % : % ", camera.p, camera.z)
+        display_line(layout, "Camera: %v : %v ", camera.p, camera.z)
         layout_advance(layout, 10)
         
         layout_begin_horizontal(layout)
@@ -245,7 +240,7 @@ main :: proc () {
                     fast_render.requested = true
                 }
                 layout_advance(layout, 10)
-                display_line(layout, "%", view_magnitude(cast(u32) Triangle_Threshold, precision = 1))
+                display_line(layout, "%v", view_magnitude(cast(u32) Triangle_Threshold, precision = 1))
             layout_end_horizontal(layout)
             layout_advance(layout, 10)
             layout_begin_horizontal(layout)
@@ -253,7 +248,7 @@ main :: proc () {
                     fast_render.requested = true
                 }
                 layout_advance(layout, 10)
-                display_line(layout, "%", view_magnitude(cast(u32) Rectangle_Threshold, precision = 1))
+                display_line(layout, "%v", view_magnitude(cast(u32) Rectangle_Threshold, precision = 1))
             layout_end_horizontal(layout)
             layout_advance(layout, 10)
         }
@@ -278,7 +273,7 @@ main :: proc () {
             defer layout_unindent(layout)
             
             for &model, model_index in world.models {
-                selected, open := display_toggle(layout, tprint("Model %", model_index), selected_model_index == model_index)
+                selected, open := display_toggle(layout, tprint("Model %v", model_index), selected_model_index == model_index)
                 if selected { selected_model_index = model_index; open = true }
                 if open {
                     layout_indent(layout)
@@ -287,18 +282,18 @@ main :: proc () {
                     if display_list(layout, &show_tree_info, "Tree") {
                         layout_indent(layout)
                         
-                        display_line(layout, "build took %", fmt.tprint(build_time))
-                        display_line(layout, "node count %", inspection.node_count)
-                        display_line(layout, "depth: max = %, avg = %", inspection.depth.max, view_float(inspection.depth.avg, precision = 2))
-                        display_line(layout, "values per node: max = %, avg = %", inspection.values_per_node.max, view_float(inspection.values_per_node.avg, precision = 2))
+                        display_line(layout, "build took %v", selected_model_build_time)
+                        display_line(layout, "node count %v", selected_model_info.node_count)
+                        display_line(layout, "depth: max = %v, avg = %.2f", selected_model_info.depth.max, selected_model_info.depth.avg)
+                        display_line(layout, "values per node: max = %v, avg = %.2f", selected_model_info.values_per_node.max, selected_model_info.values_per_node.avg)
                         layout_advance(layout, 10)
                         
                         if display_button(layout, "Rebuild") {
                             start := time.now()
                             tree_build(&model.tree, model.triangles)
-                            build_time = time.since(start)
-                            print("building tree took %\n", fmt.tprint(build_time))
-                            inspection = inspect(model.tree)
+                            selected_model_build_time = time.since(start)
+                            print("building tree took %v\n", selected_model_build_time)
+                            selected_model_info = inspect(model.tree)
                             
                             fast_render.requested = true
                         }
@@ -310,7 +305,7 @@ main :: proc () {
                     if display_slider(layout, 100, &model.translation.y, -100, 100, "translate y", flags={.relative}) do fast_render.requested = true
                     if display_slider(layout, 100, &model.translation.z, -100, 100, "translate z", flags={.relative}) do fast_render.requested = true
                     
-                    if display_slider(layout, 100, &model.triangles[0].material, 1, cast(u32) len(world.materials)-1, "material %", model.triangles[0].material) {
+                    if display_slider(layout, 100, &model.triangles[0].material, 1, cast(u32) len(world.materials)-1, "material %v", model.triangles[0].material) {
                         fast_render.requested = true
                         for &triangle in model.triangles do triangle.material = model.triangles[0].material
                     }
@@ -324,7 +319,7 @@ main :: proc () {
             defer layout_unindent(layout)
             
             for &material, index in world.materials {
-                selected, open := display_toggle_condition(layout, tprint("Material %: material %", index, world.material_names[index]), index == selected_material_index)
+                selected, open := display_toggle_condition(layout, tprint("Material %v: material %v", index, world.material_names[index]), index == selected_material_index)
                 if selected { selected_material_index = index; open = true }
                 if open {
                     layout_indent(layout)
@@ -400,7 +395,7 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
             layout_advance(layout, 5)
             if display_button(layout, "+") do render.rays_per_pixel *= 2
             layout_advance(layout, 5)
-            display_line(layout, "rays per_pixel %", render.rays_per_pixel)
+            display_line(layout, "rays per_pixel %v", render.rays_per_pixel)
             render.rays_per_pixel = clamp(render.rays_per_pixel, LaneWidth, 8192)
         layout_end_horizontal(layout)
         
@@ -410,7 +405,7 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
             if display_button(layout, "+") do render.max_bounce_count += render.max_bounce_count  < 8 ? 1 : 2
             render.max_bounce_count = clamp(render.max_bounce_count, 1, 16)
             layout_advance(layout, 5)
-            display_line(layout, "bounces %", render.max_bounce_count)
+            display_line(layout, "bounces %v", render.max_bounce_count)
         layout_end_horizontal(layout)
         
         layout_begin_horizontal(layout)
@@ -427,12 +422,12 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
             }
             
             layout_advance(layout, 5)
-            display_line(layout, "resolution %x%", render.image.width, render.image.height)
+            display_line(layout, "resolution %vx%v", render.image.width, render.image.height)
         layout_end_horizontal(layout)
         
         layout_begin_horizontal(layout)
             end := render.active ? time.now() : render.end
-            display_line(layout, "Render took: %", view_time_duration(time.diff(render.start, end), precision = 2))
+            display_line(layout, "Render took: %.2v", time.diff(render.start, end))
             
             if render.active && !work_is_completed(&render.queue){
                 total_pixels := render.image.width * render.image.height

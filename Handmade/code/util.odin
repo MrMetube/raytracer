@@ -179,9 +179,9 @@ absolute_difference :: proc (a, b: $T) -> (result: T) {
 @(disabled=ODIN_DISABLE_ASSERT)
 assert :: proc (condition: $B, message := #caller_expression(condition), loc := #caller_location, prefix:= "Assertion failed") where intrinsics.type_is_boolean(B) {
     if !condition {
-        print("% %", loc, prefix)
+        print("%v %v", loc, prefix)
         if len(message) > 0 {
-            print(": %\n", message)
+            print(": %v\n", message)
         }
         
         when ODIN_DEBUG {
@@ -203,8 +203,8 @@ slice_from_parts_type_of_data_pointer :: proc (data: ^$T, #any_int count: i64) -
 dynamic_array_from_parts :: proc ($T: typeid, data: pmm, #any_int length, capacity: int, allocator: Maybe(Allocator) = nil) -> [dynamic] T {
     result := Raw_Dynamic_Array {
         data = data,
-        len = auto_cast length,
-        cap = auto_cast capacity,
+        len  = length,
+        cap  = capacity,
         allocator = allocator.? or_else runtime.nil_allocator(),
     } 
     return transmute([dynamic] T) result
@@ -213,7 +213,7 @@ dynamic_array_from_parts :: proc ($T: typeid, data: pmm, #any_int length, capaci
                 
 slice_to_bytes :: proc (value: [] $T) -> (result: [] u8) {
     data := raw_data(value)
-    len := size_of(T) * len(value)
+    len  := size_of(T) * len(value)
     result = slice_from_parts(u8, data, len)
     return result
 }
