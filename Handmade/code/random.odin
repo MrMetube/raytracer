@@ -41,7 +41,6 @@ random_unilateral_scalar :: proc(series: ^RandomSeries, $T: typeid) -> T where !
 }
 random_unilateral_array :: proc (series: ^RandomSeries, $T: typeid/ [$N] $E) -> T {
     result: T
-    // @todo(viktor): why not get one wide random value and extract N lanes?
     #no_bounds_check #unroll for i in 0..<len(T) {
         result[i] = random_unilateral(series, E)
     }

@@ -122,7 +122,18 @@ display_slider_v :: proc (layout: ^Layout, width: f32, value: ^$V/[$N] $E, min: 
     return result
 }
 
-display_slider :: proc (layout: ^Layout, width: f32, value: ^f32, min: f32, max: f32, format: string = "", args: ..any, flags : SliderFlags = {}) -> bool {
+display_slider :: proc { display_slider_f, display_slider_i }
+display_slider_i :: proc (layout: ^Layout, width: f32, value: ^$T, min: T, max: T, format: string = "", args: ..any, flags : SliderFlags = {}) -> bool where T != f32 {
+    before := value^
+    
+    slider := cast(f32) value^
+    result := display_slider(layout, width, &slider, cast(f32) min, cast(f32) max, format, args = args, flags = flags)
+    value^ = round(T, slider)
+    
+    result &&= value^ != before
+    return result
+}
+display_slider_f :: proc (layout: ^Layout, width: f32, value: ^f32, min: f32, max: f32, format: string = "", args: ..any, flags : SliderFlags = {}) -> bool {
     wrap_horizontal := !layout.horizontal
     if wrap_horizontal do layout_begin_horizontal(layout)
     if format != "" {
@@ -201,15 +212,27 @@ display_button_highlighted :: proc (layout: ^Layout, text: string, highlighted: 
     return result
 }
 
-display_toggle :: proc (layout: ^Layout, text: string, condition: ^bool, size := v2{}) -> bool {
+display_toggle :: proc { display_toggle_bool, display_toggle_condition }
+display_toggle_condition :: proc (layout: ^Layout, text: string, condition: bool, size := v2{}) -> (clicked, result: bool) {
+    toggle := condition
+    clicked = display_toggle(layout, text, &toggle, size)
+    return clicked, toggle
+}
+display_toggle_bool :: proc (layout: ^Layout, text: string, condition: ^bool, size := v2{}) -> bool {
     text := ctprint("%", text)
     size := size
     if size == 0 {
         size = rl.MeasureTextEx(layout.font, text, layout.font_size, 1)
         size.x += 20
     }
+    
     bounds := to_rl_rect(rectangle_min_dimension(layout.at, size))
-    result := rl.GuiToggle(bounds, text, condition)
+    
+    before := condition^
+    rl.GuiToggle(bounds, text, condition)
+    result := condition^ != before
+    
     layout_advance_2(layout, size)
+    
     return result
 }

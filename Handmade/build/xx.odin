@@ -91,11 +91,9 @@ begin_build :: proc (cmd: ^Cmd, package_directory: string, output_name: string, 
     result: bool
     
     if handle_running_exe_gracefully(output_name, handling) {
-        os.change_directory("./build")
-        
         append(cmd, "odin", "build")
-        append(cmd, fmt.tprintf("../%v", package_directory))
-        append(cmd, fmt.tprintf("-out:%v", output_name))
+        append(cmd, fmt.tprintf("./%v", package_directory))
+        append(cmd, fmt.tprintf("-out:./build/%v", output_name))
         result = true
         
         the_state.outputs[output_name] = true
@@ -133,7 +131,6 @@ end_build :: proc (cmd: ^Cmd) {
         the_state.outputs[the_state.current_output] = false
     }
     
-    os.change_directory("..")
     the_state.current_output = ""
 }
 
@@ -218,11 +215,15 @@ run_or_debug_according_to_args :: proc () {
             append(cmd, "restart")
             run_command(cmd)
         } else {
+            path: string
             if the_state.run_from_data {
                 os.change_directory("./data")
+                path = fmt.tprintf("../build/%v", name)
+            } else {
+                path = fmt.tprintf("./build/%v", name)
             }
             
-            append(cmd, fmt.tprintf("../build/%v", name))
+            append(cmd, path)
             if the_state.wait_on_procs {
                 run_command(cmd, async = procs, stdout = os.stdout, stderr = os.stderr)
             } else {
@@ -275,23 +276,16 @@ handle_running_exe_gracefully :: proc (exe_name: string, handling: Handle_Runnin
             if running, _ := is_running(raddbg); !running {
                 fmt.printf("  Killing running instance.\n")
                 
-                // @cleanup
                 process, err := os.process_open(auto_cast pid)
                 if err != nil {
                     fmt.printf("  Failed to open '%v': %v\n", exe_name, err)
-                    os.exit(1)
+                    return false
                 }
                 
                 err = os.process_kill(process)
                 if err != nil {
                     fmt.printf("  Failed to kill '%v': %v\n", exe_name, err)
-                    os.exit(1)
-                }
-                
-                err = os.process_terminate(process)
-                if err != nil {
-                    fmt.printf("  Failed to close '%v': %v\n", exe_name, err)
-                    os.exit(1)
+                    return false
                 }
             }
         }

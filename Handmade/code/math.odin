@@ -391,8 +391,7 @@ normalize :: proc(vec: $V) -> (result: V) {
 normalize_or_zero :: proc(vec: $V/[$N]$T) -> (result: V) {
     len_sq := length_squared(vec)
     when intrinsics.type_is_simd_vector(T) {
-        len_mask := greater_than(len_sq, 0.0000001)
-        conditional_assign(len_mask, &result, vec / square_root(len_sq))
+        conditional_assign(greater_than(len_sq, 0.0000001), &result, vec / square_root(len_sq))
     } else {
         if len_sq > 0.0000001 {
             result = vec / square_root(len_sq)
@@ -480,7 +479,6 @@ when LaneWidth == 1 {
         return result
     }
     
-    // @todo(viktor): which calls to this want to be a ternary?
     conditional_assign :: proc (mask: $M, dest: ^$D, value: D) {
         when intrinsics.type_is_array(D) {
             #no_bounds_check #unroll for i in 0..<len(D) {

@@ -257,7 +257,19 @@ cast_rays :: proc (stats: ^Render_Stats, models: [] Model, materials: [] Materia
             }
             
             ////////////////////////////////////////////////
-            
+            // @todo(viktor): Importance Sampling
+            // sort models my material emitance strength / store all materials with emitance separately
+            //   model should store a material and before render assign it to every triangle
+            // besides the normal ray, also cast a "shadow ray"
+            // select a random emitting model and a random triangle in that model (weighting?)
+            // select a random point on that triangle and traverse this ray aswell
+            //   always keep a shadow ray besides ray_o, ray_d (make a lane_ray struct)
+            //   always trace both ray and shadow ray for each model
+            // combine contribution of ray and shadow ray(only if next_o == ~triangle pointif it reaches the light?)
+            //   scale shadow ray by G = dot(normalize(-ray_d), t_normal) / length_squared(ray_d)
+            //   scale by probablity-distribution-function: 1 / (P(model) * P(triangle) * P(area))
+            // balance heuristic: 
+            //   
             materials := to_lane(materials)
             brdf_data := to_lane(brdf_data)
             
@@ -321,8 +333,7 @@ traverse_tree_and_collect_values :: proc (triangles: Lane_Slice(Triangle), tree:
     inv_d := 1 / ray_d
     neg_inv_o := -(ray_o * inv_d)
     
-    // @volatile max tree depth
-    backing: [64] Node_Index
+    backing: [Tree_Max_Depth] Node_Index
     backing[0] = Root_Index
     
     stack_count := cast(u32) 1
@@ -449,7 +460,6 @@ hit_rectangle :: proc (node: Lane(Tree_Node), neg_inv_o, inv_d: lane_v3, t_min_i
     t2y := fused_mul_add(max.y, inv_d.y, neg_inv_o.y)
     t2z := fused_mul_add(max.z, inv_d.z, neg_inv_o.z)
     
-    // @speed check the latency and throughput of min&max and if select would be better due to the duplicated comparison? 
     tin := lane_v3 { minimum(t1x, t2x), minimum(t1y, t2y), minimum(t1z, t2z) }
     tax := lane_v3 { maximum(t1x, t2x), maximum(t1y, t2y), maximum(t1z, t2z) }
     
@@ -462,7 +472,9 @@ hit_rectangle :: proc (node: Lane(Tree_Node), neg_inv_o, inv_d: lane_v3, t_min_i
     return result, result_min
 }
 
-
+// @speed precompute normals at construction, or just load them from the model data
+// @speed make triangles SOA on { vertices, material, (normals) }
+// @speed measure branch mispredictions: do i also have an unpredictable branch in these u/v test, because each part is unpredictable but the whole expression should be predicted as false?
 hit_triangle :: proc (not_nil_mask: lane_u32, triangle: Lane(Triangle), ray_o, ray_d: lane_v3, min_t: lane_f32, hit: ^Hit_Info_Lane) {
     spall_proc()
     
@@ -512,15 +524,26 @@ hit_triangle :: proc (not_nil_mask: lane_u32, triangle: Lane(Triangle), ray_o, r
     
     next_o := ray_o + t*ray_d
     
-    // @speed can this be done easier?
     closest_lane:= -1
     closest_t : f32 = +Infinity
-    for lane in 0..<LaneWidth {
-        xx := extract(t, lane)
-        if closest_t > xx && extract(hit_mask, lane) != 0 {
-            closest_t = xx
-            closest_lane = lane
+    // @speed can this be done easier?
+    if !false {
+        for lane in 0..<LaneWidth {
+            lane_t := extract(t, lane)
+            if closest_t > lane_t && extract(hit_mask, lane) != 0 {
+                closest_t    = lane_t
+                closest_lane = lane
+            }
         }
+    } else {
+        // @note(viktor): this seems to actually be slower
+        valid_t   := ternary(hit_mask, t, +Infinity)
+        closest_t := simd.reduce_min(valid_t)
+        
+        mask      := equal(valid_t, cast(lane_f32) closest_t)
+        offsets   := ternary(mask, lane_offset, max(u32))
+        
+        closest_lane = cast(int) simd.reduce_min(offsets)
     }
     assert(closest_lane != -1)
     

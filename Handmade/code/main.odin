@@ -12,8 +12,8 @@ import rl "vendor:raylib"
 
 Is_Optimized :: ODIN_OPTIMIZATION_MODE == .Speed
 
-// @cleanup after this is tested with a huge model for build time
-Tree_Max_Depth: u32 = 32
+// @todo(viktor): this can be a lot lower if we do 3 depth of splits per node now, if it matters
+Tree_Max_Depth :: 32
 
 main :: proc () {
     rl.SetTraceLogLevel(.WARNING)
@@ -57,8 +57,10 @@ main :: proc () {
         layout_init(layout, font, Jasmine, font_size)
     }
     
+    selected_model_index: int
     show_tree_info: bool
     show_models: bool
+    selected_material_index: int
     show_materials: bool
     quality_render_is_open: bool
     fast_render_is_open: bool = true
@@ -130,8 +132,8 @@ main :: proc () {
         }
         
         if dlook != 0 {
-            dlook *= 100/vec_cast(f32, window_size) * delta_time
-            up :: v3{0,0,1}
+            dlook *= 100 / vec_cast(f32, window_size) * delta_time
+            up :: v3{0, 0, 1}
             
             yaw   := axis_angle_rotation(camera.y,                           dlook.x)
             pitch := axis_angle_rotation(normalize(multiply(yaw, camera.x)), dlook.y)
@@ -237,22 +239,24 @@ main :: proc () {
         layout_end_horizontal(layout)
         layout_advance(layout, 10)
         
-        layout_begin_horizontal(layout)
-            if display_slider(layout, 100, &Triangle_Threshold, 10, 10000, "Triangle Threshold", flags = { .logarithmic }) {
-                fast_render.requested = true
-            }
+        if Debug_View != 0 {
+            layout_begin_horizontal(layout)
+                if display_slider(layout, 100, &Triangle_Threshold, 10, 10000, "Triangle Threshold", flags = { .logarithmic }) {
+                    fast_render.requested = true
+                }
+                layout_advance(layout, 10)
+                display_line(layout, "%", view_magnitude(cast(u32) Triangle_Threshold, precision = 1))
+            layout_end_horizontal(layout)
             layout_advance(layout, 10)
-            display_line(layout, "%", view_magnitude(cast(u32) Triangle_Threshold, precision = 1))
-        layout_end_horizontal(layout)
-        layout_advance(layout, 10)
-        layout_begin_horizontal(layout)
-            if display_slider(layout, 100, &Rectangle_Threshold, 10, 10000, "Rectangle Threshold", flags = { .logarithmic }) {
-                fast_render.requested = true
-            }
+            layout_begin_horizontal(layout)
+                if display_slider(layout, 100, &Rectangle_Threshold, 10, 10000, "Rectangle Threshold", flags = { .logarithmic }) {
+                    fast_render.requested = true
+                }
+                layout_advance(layout, 10)
+                display_line(layout, "%", view_magnitude(cast(u32) Rectangle_Threshold, precision = 1))
+            layout_end_horizontal(layout)
             layout_advance(layout, 10)
-            display_line(layout, "%", view_magnitude(cast(u32) Rectangle_Threshold, precision = 1))
-        layout_end_horizontal(layout)
-        layout_advance(layout, 10)
+        }
         
         layout_begin_horizontal(layout)
             display_toggle(layout, "Display Progress", &render_display_progress)
@@ -268,41 +272,49 @@ main :: proc () {
         }
         layout_advance(layout, 10)
         
-        if display_list(layout, &show_tree_info, "Tree") {
-            layout_indent(layout)
-            
-            display_line(layout, "build took %", fmt.tprint(build_time))
-            display_line(layout, "node count %", inspection.node_count)
-            display_line(layout, "depth: max = %, avg = %", inspection.depth.max, view_float(inspection.depth.avg, precision = 2))
-            display_line(layout, "values per node: max = %, avg = %", inspection.values_per_node.max, view_float(inspection.values_per_node.avg, precision = 2))
-            layout_advance(layout, 10)
-            
-            if display_button(layout, "Rebuild") {
-                start := time.now()
-                tree_build(&teapot.tree, teapot.triangles)
-                build_time = time.since(start)
-                print("building tree took %\n", fmt.tprint(build_time))
-                inspection = inspect(teapot.tree)
-                
-                fast_render.requested = true
-            }
-            
-            layout_unindent(layout)
-        }
-        
         layout_advance(layout, layout.font_size)
         if display_list(layout, &show_models, "Models") {
             layout_indent(layout)
             defer layout_unindent(layout)
+            
             for &model, model_index in world.models {
-                display_line(layout, "Model %", model_index)
-                
-                layout_indent(layout)
-                defer layout_unindent(layout)
-                
-                if display_slider(layout, 100, &model.translation.x, -100, 100, "translate x", flags={.relative}) do fast_render.requested = true
-                if display_slider(layout, 100, &model.translation.y, -100, 100, "translate y", flags={.relative}) do fast_render.requested = true
-                if display_slider(layout, 100, &model.translation.z, -100, 100, "translate z", flags={.relative}) do fast_render.requested = true
+                selected, open := display_toggle(layout, tprint("Model %", model_index), selected_model_index == model_index)
+                if selected { selected_model_index = model_index; open = true }
+                if open {
+                    layout_indent(layout)
+                    defer layout_unindent(layout)
+                    
+                    if display_list(layout, &show_tree_info, "Tree") {
+                        layout_indent(layout)
+                        
+                        display_line(layout, "build took %", fmt.tprint(build_time))
+                        display_line(layout, "node count %", inspection.node_count)
+                        display_line(layout, "depth: max = %, avg = %", inspection.depth.max, view_float(inspection.depth.avg, precision = 2))
+                        display_line(layout, "values per node: max = %, avg = %", inspection.values_per_node.max, view_float(inspection.values_per_node.avg, precision = 2))
+                        layout_advance(layout, 10)
+                        
+                        if display_button(layout, "Rebuild") {
+                            start := time.now()
+                            tree_build(&model.tree, model.triangles)
+                            build_time = time.since(start)
+                            print("building tree took %\n", fmt.tprint(build_time))
+                            inspection = inspect(model.tree)
+                            
+                            fast_render.requested = true
+                        }
+                        
+                        layout_unindent(layout)
+                    }
+                                    
+                    if display_slider(layout, 100, &model.translation.x, -100, 100, "translate x", flags={.relative}) do fast_render.requested = true
+                    if display_slider(layout, 100, &model.translation.y, -100, 100, "translate y", flags={.relative}) do fast_render.requested = true
+                    if display_slider(layout, 100, &model.translation.z, -100, 100, "translate z", flags={.relative}) do fast_render.requested = true
+                    
+                    if display_slider(layout, 100, &model.triangles[0].material, 1, cast(u32) len(world.materials)-1, "material %", model.triangles[0].material) {
+                        fast_render.requested = true
+                        for &triangle in model.triangles do triangle.material = model.triangles[0].material
+                    }
+                }
             }
         }
         
@@ -312,47 +324,49 @@ main :: proc () {
             defer layout_unindent(layout)
             
             for &material, index in world.materials {
-                display_line(layout, "Material %: material %", index, world.material_names[index])
-                
-                layout_indent(layout)
-                defer layout_unindent(layout)
-                
-                if display_slider(layout, 240, &material.scatter,  0,   1, "Scatter") do fast_render.requested = true
-                if display_slider(layout, 240, &material.emit_factor, 1, 1000, "Emittance", flags = {.logarithmic}) do fast_render.requested = true
-                
-                layout_advance(layout, 10)
-                layout_begin_horizontal(layout)
-                color_size :: 40
-                {
-                    display_line(layout, "Emit")
-                    layout_advance(layout, 10)
+                selected, open := display_toggle_condition(layout, tprint("Material %: material %", index, world.material_names[index]), index == selected_material_index)
+                if selected { selected_material_index = index; open = true }
+                if open {
+                    layout_indent(layout)
+                    defer layout_unindent(layout)
                     
-                    color  := rl.ColorFromNormalized(V4(material.emit, 1))
-                    before := color
-                    size := to_rl_rect(rectangle_min_dimension(layout.at, color_size))
-                    rl.GuiColorPicker(size, "", &color)
-                    if color != before do fast_render.requested = true
-                    material.emit = rl.ColorNormalize(color).rgb
+                    if display_slider(layout, 240, &material.scatter,  0,   1, "Scatter") do fast_render.requested = true
+                    if display_slider(layout, 240, &material.emit_factor, 0.00001, 1000, "Emittance", flags = {.logarithmic}) do fast_render.requested = true
                     
-                    layout_advance(layout, color_size)
-                    layout_advance(layout, color_size)
                     layout_advance(layout, 10)
+                    layout_begin_horizontal(layout)
+                    color_size :: 40
+                    {
+                        display_line(layout, "Emit")
+                        layout_advance(layout, 10)
+                        
+                        color  := rl.ColorFromNormalized(V4(material.emit, 1))
+                        before := color
+                        size := to_rl_rect(rectangle_min_dimension(layout.at, color_size))
+                        rl.GuiColorPicker(size, "", &color)
+                        if color != before do fast_render.requested = true
+                        material.emit = rl.ColorNormalize(color).rgb
+                        
+                        layout_advance(layout, color_size)
+                        layout_advance(layout, color_size)
+                        layout_advance(layout, 10)
+                    }
+                    
+                    {
+                        display_line(layout, "Reflect")
+                        layout_advance(layout, 10)
+                        
+                        color := rl.ColorFromNormalized(V4(material.reflect, 0))
+                        before := color
+                        size := to_rl_rect(rectangle_min_dimension(layout.at, color_size))
+                        rl.GuiColorPicker(size, "", &color)
+                        if color != before do fast_render.requested = true
+                        material.reflect = rl.ColorNormalize(color).rgb
+                        layout_advance(layout, color_size)
+                    }
+                    layout_end_horizontal(layout)
+                    layout_advance(layout, color_size)
                 }
-                
-                {
-                    display_line(layout, "Reflect")
-                    layout_advance(layout, 10)
-                    
-                    color := rl.ColorFromNormalized(V4(material.reflect, 0))
-                    before := color
-                    size := to_rl_rect(rectangle_min_dimension(layout.at, color_size))
-                    rl.GuiColorPicker(size, "", &color)
-                    if color != before do fast_render.requested = true
-                    material.reflect = rl.ColorNormalize(color).rgb
-                    layout_advance(layout, color_size)
-                }
-                layout_end_horizontal(layout)
-                layout_advance(layout, color_size)
             }
         }
         
@@ -387,7 +401,7 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
             if display_button(layout, "+") do render.rays_per_pixel *= 2
             layout_advance(layout, 5)
             display_line(layout, "rays per_pixel %", render.rays_per_pixel)
-            render.rays_per_pixel = clamp(render.rays_per_pixel, LaneWidth, 2048)
+            render.rays_per_pixel = clamp(render.rays_per_pixel, LaneWidth, 8192)
         layout_end_horizontal(layout)
         
         layout_begin_horizontal(layout)
