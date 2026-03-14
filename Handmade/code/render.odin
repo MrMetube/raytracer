@@ -17,7 +17,7 @@ Render_Stats :: struct {
 
 Render :: struct {
     requested: bool,
-    canceled: bool,
+    canceled:  bool,
     active:    bool,
     
     start, end: time.Time,

@@ -31,21 +31,21 @@ layout_init :: proc (layout: ^Layout, font: rl.Font, text_color: v4, font_size: 
     Highlight  := color_to_u8(Green)
     Focus      := color_to_u8(Isabelline)
     None       := color_to_u8(v4{})
-    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_NORMAL, Foreground)
-    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BASE_COLOR_NORMAL, Background)
-    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_NORMAL, None)
-    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_FOCUSED, Focus)
-    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BASE_COLOR_FOCUSED, Highlight)
-    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_FOCUSED, Background)
-    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_PRESSED, Highlight)
-    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BASE_COLOR_PRESSED, Focus)
-    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_PRESSED, Highlight)
-    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.TEXT_COLOR_DISABLED, Highlight)
-    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BASE_COLOR_DISABLED, Background)
-    rlGuiSetColor(.DEFAULT, auto_cast rl.GuiControlProperty.BORDER_COLOR_DISABLED, None)
+    rlGuiSetColor(.DEFAULT, .TEXT_COLOR_NORMAL,     Foreground)
+    rlGuiSetColor(.DEFAULT, .BASE_COLOR_NORMAL,     Background)
+    rlGuiSetColor(.DEFAULT, .BORDER_COLOR_NORMAL,   None)
+    rlGuiSetColor(.DEFAULT, .TEXT_COLOR_FOCUSED,    Focus)
+    rlGuiSetColor(.DEFAULT, .BASE_COLOR_FOCUSED,    Highlight)
+    rlGuiSetColor(.DEFAULT, .BORDER_COLOR_FOCUSED,  Background)
+    rlGuiSetColor(.DEFAULT, .TEXT_COLOR_PRESSED,    Highlight)
+    rlGuiSetColor(.DEFAULT, .BASE_COLOR_PRESSED,    Focus)
+    rlGuiSetColor(.DEFAULT, .BORDER_COLOR_PRESSED, Highlight)
+    rlGuiSetColor(.DEFAULT, .TEXT_COLOR_DISABLED,   Highlight)
+    rlGuiSetColor(.DEFAULT, .BASE_COLOR_DISABLED,   Background)
+    rlGuiSetColor(.DEFAULT, .BORDER_COLOR_DISABLED, None)
     
-    rlGuiSetColor :: proc (control: rl.GuiControl, property: i32, value: Color) {
-        rl.GuiSetStyle(control, property, transmute(i32) value.abgr)
+    rlGuiSetColor :: proc (control: rl.GuiControl, property: rl.GuiControlProperty, value: Color) {
+        rl.GuiSetStyle(control, auto_cast property, transmute(i32) value.abgr)
     }
 }
 

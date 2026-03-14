@@ -35,25 +35,24 @@ when false {
 @(disabled=SpallDisabled)
 init_spall :: proc (thread_index: u32 = 0, output_name := "trace", location := #caller_location) {
     file_name := fmt.tprintf("%v.spall", output_name)
-    spall_ctx = spall.context_create(file_name, 10 * time.Millisecond)
-    err := make_by_pointer(&backing_buffer, SpallBufferSize)
-    assert(err == nil)
+    spall_ctx  = spall.context_create(file_name, 10 * time.Millisecond)
+    
+    err := make_by_pointer(&backing_buffer, SpallBufferSize); assert(err == nil)
+    
     spall_buffer = spall.buffer_create(backing_buffer, thread_index)
 }
 @(deferred_out = delete_spall_thread)
 init_spall_thread :: proc (thread_index: u32, begin_deffered := true, location := #caller_location) -> bool {
-    when !SpallDisabled {
-        assert(thread_index != 0)
-        err := make_by_pointer(&backing_buffer, SpallBufferSize)
-        assert(err == nil)
-        spall_buffer = spall.buffer_create(backing_buffer, thread_index)
-        if begin_deffered {
-            spall_begin(location.procedure)
-        }
-        return begin_deffered
-    } else {
-        return false
+    when SpallDisabled do return false
+    
+    assert(thread_index != 0)
+    err := make_by_pointer(&backing_buffer, SpallBufferSize); assert(err == nil)
+    
+    spall_buffer = spall.buffer_create(backing_buffer, thread_index)
+    if begin_deffered {
+        spall_begin(location.procedure)
     }
+    return begin_deffered
 }
 
 @(disabled=SpallDisabled)
