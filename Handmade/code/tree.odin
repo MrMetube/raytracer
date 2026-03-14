@@ -6,8 +6,8 @@ Node_Index  :: distinct u32
 Value_Index :: distinct u32
 
 // @important 
-// Currently the 2 subnodes are always append on even-odd indices.
-// That means they are on the same cacheline.
+// Currently the subnodes always start on even indices.
+// That means that they are pairwise on the same cacheline.
 // This is because Nil and Root are appended as a pair and then
 // all subnodes are always appended as pairs.
 

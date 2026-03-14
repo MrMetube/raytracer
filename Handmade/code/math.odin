@@ -395,14 +395,14 @@ linear_to_srgb :: proc(l: v3) -> (s: v3) {
     return s
 }
 
-color_to_u8 :: proc { color3_to_u8, color4_to_u8 }
-color3_to_u8 :: proc (color: v3) -> Color {
+color_to_u8 :: proc { color_to_u8_3, color_to_u8_4 }
+color_to_u8_3 :: proc (color: v3) -> Color {
     v: v4 = 255
     v.rgb *= color
     result := round(u8, v)
     return result
 }
-color4_to_u8 :: proc (color: v4) -> Color {
+color_to_u8_4 :: proc (color: v4) -> Color {
     v: v4 = 255
     v.rgba *= color
     result := round(u8, v)
@@ -695,7 +695,7 @@ rectangle_add_radius :: proc(rect: $R/Rectangle($T), radius: T) -> (result: R) {
     return result
 }
 
-scale_radius :: proc(rect: $R/Rectangle($T), factor: T) -> (result: R) {
+rectangle_scale_radius :: proc(rect: $R/Rectangle($T), factor: T) -> (result: R) {
     result = rect
     center := get_center(rect)
     result.min = linear_blend(center, result.min, factor)

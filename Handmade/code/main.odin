@@ -63,8 +63,12 @@ main :: proc () {
     fast_render:    Render
     init_render(&quality_render, 64, 16, window_size, 2, core_count, "quality render")
     init_render(&fast_render,     8,  4, window_size, 6, core_count, "fast render")
-    defer close_work_queue_and_wait_for_threads(&quality_render.queue)
-    defer close_work_queue_and_wait_for_threads(&fast_render.queue)
+    defer {
+        quality_render.canceled = true
+        fast_render.canceled    = true
+        close_work_queue_and_wait_for_threads(&quality_render.queue)
+        close_work_queue_and_wait_for_threads(&fast_render.queue)
+    }
     
     renders := make([dynamic] ^Render, 0, 2, context.allocator)
     append(&renders, &quality_render)
@@ -337,7 +341,7 @@ main :: proc () {
                         
                         color  := rl.ColorFromNormalized(V4(material.emit, 1))
                         before := color
-                        size := to_rl_rect(rectangle_min_dimension(layout.at, color_size))
+                        size := rect_to_rl(rectangle_min_dimension(layout.at, color_size))
                         rl.GuiColorPicker(size, "", &color)
                         if color != before do fast_render.requested = true
                         material.emit = rl.ColorNormalize(color).rgb
@@ -353,7 +357,7 @@ main :: proc () {
                         
                         color := rl.ColorFromNormalized(V4(material.reflect, 0))
                         before := color
-                        size := to_rl_rect(rectangle_min_dimension(layout.at, color_size))
+                        size := rect_to_rl(rectangle_min_dimension(layout.at, color_size))
                         rl.GuiColorPicker(size, "", &color)
                         if color != before do fast_render.requested = true
                         material.reflect = rl.ColorNormalize(color).rgb
@@ -377,19 +381,46 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
         layout_indent(layout)
         defer layout_unindent(layout)
         
+        layout_advance(layout, 5)
         layout_begin_horizontal(layout)
-            display_toggle(layout, "Render", &render.requested)
+            result, _ = display_toggle_condition(layout, "Focus", is_focused)
+            
             layout_advance(layout, 5)
-            // @cleanup
-            condition := is_focused
-            display_toggle(layout, "Focus", &condition)
-            result = !is_focused && condition == true
-            if render.active {
+            display_toggle(layout, "Render", &render.requested)
+            
+            layout_advance(layout, 5)
+            end := render.active ? time.now() : render.end
+            display_line(layout, "%.2v", time.diff(render.start, end))
+        layout_end_horizontal(layout)
+        
+        layout_advance(layout, 5)
+        layout_begin_horizontal(layout)
+            if render.active && !work_is_completed(&render.queue){
+                total_pixels := render.image.width * render.image.height
+                done_percentage := cast(f32) render.stats.pixels_done / cast(f32) total_pixels
+                
+                bar_width  :: 120
+                bar_height_scale :: 0.75
+                bar_height := layout.font_size * bar_height_scale
+                border_size :: 2
+                bar_p := layout.at + {0, bar_height * (1 - bar_height_scale)}
+                
+                rect     := rectangle_min_dimension(bar_p, v2{bar_width,                                             bar_height})
+                progress := rectangle_min_dimension(bar_p, v2{linear_blend(cast(f32) 0, bar_width, done_percentage), bar_height})
+                progress  = rectangle_add_radius(progress, -border_size)
+                
+                // @todo(viktor): use the layout/rl gui style colors
+                rl.DrawRectangleRec(    rect_to_rl(rect),              color_to_rl(Green))
+                rl.DrawRectangleLinesEx(rect_to_rl(rect), border_size, color_to_rl(DarkGreen))
+                rl.DrawRectangleRec(    rect_to_rl(progress),          color_to_rl(Isabelline))
+                layout_advance(layout, bar_width)
+                
                 layout_advance(layout, 5)
                 display_toggle(layout, "Cancel Render", &render.canceled)
             }
         layout_end_horizontal(layout)
         
+        layout_advance(layout, 5)
         layout_begin_horizontal(layout)
             if display_button(layout, "-") do render.rays_per_pixel /= 2 
             layout_advance(layout, 5)
@@ -423,28 +454,6 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
             
             layout_advance(layout, 5)
             display_line(layout, "resolution %vx%v", render.image.width, render.image.height)
-        layout_end_horizontal(layout)
-        
-        layout_begin_horizontal(layout)
-            end := render.active ? time.now() : render.end
-            display_line(layout, "Render took: %.2v", time.diff(render.start, end))
-            
-            if render.active && !work_is_completed(&render.queue){
-                total_pixels := render.image.width * render.image.height
-                done_percentage := cast(f32) render.stats.pixels_done / cast(f32) total_pixels
-                
-                layout_advance(layout, 10)
-                bar_p := layout.at
-                bar_width  :: 200
-                bar_height := layout.font_size * 0.8
-                
-                rect     := rectangle_min_dimension(bar_p, v2{bar_width,                                             bar_height})
-                progress := rectangle_min_dimension(bar_p, v2{linear_blend(cast(f32) 0, bar_width, done_percentage), bar_height})
-                rl.DrawRectangleRec(to_rl_rect(rectangle_add_radius(rect, 1)), rl.BLACK)
-                rl.DrawRectangleLinesEx(to_rl_rect(rect), 2, rl.WHITE)
-                rl.DrawRectangleRec(to_rl_rect(progress), rl.WHITE)
-                layout_advance(layout, bar_width)
-            }
         layout_end_horizontal(layout)
     }
     
@@ -482,7 +491,7 @@ axis_angle_rotation :: proc(axis: v3, angle: f32) -> m4 {
 
 ////////////////////////////////////////////////
 
-to_rl_rect :: proc (rect: Rectangle2) -> rl.Rectangle {
+rect_to_rl :: proc (rect: Rectangle2) -> rl.Rectangle {
     result: rl.Rectangle
     
     result.x = rect.min.x
@@ -490,5 +499,11 @@ to_rl_rect :: proc (rect: Rectangle2) -> rl.Rectangle {
     result.width  = rectangle_get_dimension(rect).x
     result.height = rectangle_get_dimension(rect).y
     
+    return result
+}
+
+color_to_rl :: proc (color: $V) -> rl.Color {
+    bytes := color_to_u8(color)
+    result := transmute(rl.Color) bytes
     return result
 }

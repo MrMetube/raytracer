@@ -31,17 +31,20 @@ layout_init :: proc (layout: ^Layout, font: rl.Font, text_color: v4, font_size: 
     Highlight  := color_to_u8(Green)
     Focus      := color_to_u8(Isabelline)
     None       := color_to_u8(v4{})
+    
     rlGuiSetColor(.DEFAULT, .TEXT_COLOR_NORMAL,     Foreground)
-    rlGuiSetColor(.DEFAULT, .BASE_COLOR_NORMAL,     Background)
-    rlGuiSetColor(.DEFAULT, .BORDER_COLOR_NORMAL,   None)
-    rlGuiSetColor(.DEFAULT, .TEXT_COLOR_FOCUSED,    Focus)
-    rlGuiSetColor(.DEFAULT, .BASE_COLOR_FOCUSED,    Highlight)
-    rlGuiSetColor(.DEFAULT, .BORDER_COLOR_FOCUSED,  Background)
-    rlGuiSetColor(.DEFAULT, .TEXT_COLOR_PRESSED,    Highlight)
-    rlGuiSetColor(.DEFAULT, .BASE_COLOR_PRESSED,    Focus)
-    rlGuiSetColor(.DEFAULT, .BORDER_COLOR_PRESSED, Highlight)
+    rlGuiSetColor(.DEFAULT, .TEXT_COLOR_PRESSED,    Focus)
+    rlGuiSetColor(.DEFAULT, .TEXT_COLOR_FOCUSED,    Highlight)
     rlGuiSetColor(.DEFAULT, .TEXT_COLOR_DISABLED,   Highlight)
+    
+    rlGuiSetColor(.DEFAULT, .BASE_COLOR_NORMAL,     Background)
+    rlGuiSetColor(.DEFAULT, .BASE_COLOR_FOCUSED,    Focus)
+    rlGuiSetColor(.DEFAULT, .BASE_COLOR_PRESSED,    Highlight)
     rlGuiSetColor(.DEFAULT, .BASE_COLOR_DISABLED,   Background)
+    
+    rlGuiSetColor(.DEFAULT, .BORDER_COLOR_NORMAL,   None)
+    rlGuiSetColor(.DEFAULT, .BORDER_COLOR_FOCUSED,  Highlight)
+    rlGuiSetColor(.DEFAULT, .BORDER_COLOR_PRESSED,  Background)
     rlGuiSetColor(.DEFAULT, .BORDER_COLOR_DISABLED, None)
     
     rlGuiSetColor :: proc (control: rl.GuiControl, property: rl.GuiControlProperty, value: Color) {
@@ -163,14 +166,14 @@ display_slider_raw :: proc (layout: ^Layout, width: f32, value: ^f32, min: f32, 
         editing_value := math.ln(value^)
         min = math.ln(min)
         max = math.ln(max)
-        rl.GuiSlider(to_rl_rect(bounds), "", "", &editing_value, min, max)
+        rl.GuiSlider(rect_to_rl(bounds), "", "", &editing_value, min, max)
         
         new_value := math.exp(editing_value)
         result = new_value != value^
         value^ = new_value
     } else {
         editing_value := value^
-        rl.GuiSlider(to_rl_rect(bounds), "", "", &editing_value, min, max)
+        rl.GuiSlider(rect_to_rl(bounds), "", "", &editing_value, min, max)
         
         result = editing_value != value^
         value^ = editing_value
@@ -199,7 +202,7 @@ display_button :: proc (layout: ^Layout, text: string, size := v2{}) -> bool {
         size = rl.MeasureTextEx(layout.font, text, layout.font_size, 1)
         size.x += 20
     }
-    bounds := to_rl_rect(rectangle_min_dimension(layout.at, size))
+    bounds := rect_to_rl(rectangle_min_dimension(layout.at, size))
     result := rl.GuiButton(bounds, text)
     layout_advance_2(layout, size)
     return result
@@ -213,12 +216,7 @@ display_button_highlighted :: proc (layout: ^Layout, text: string, highlighted: 
 }
 
 display_toggle :: proc { display_toggle_bool, display_toggle_condition }
-display_toggle_condition :: proc (layout: ^Layout, text: string, condition: bool, size := v2{}) -> (clicked, result: bool) {
-    toggle := condition
-    clicked = display_toggle(layout, text, &toggle, size)
-    return clicked, toggle
-}
-display_toggle_bool :: proc (layout: ^Layout, text: string, condition: ^bool, size := v2{}) -> bool {
+display_toggle_condition :: proc (layout: ^Layout, text: string, condition: bool, size := v2{}) -> (clicked, active: bool) {
     text := ctprint("%v", text)
     size := size
     if size == 0 {
@@ -226,13 +224,18 @@ display_toggle_bool :: proc (layout: ^Layout, text: string, condition: ^bool, si
         size.x += 20
     }
     
-    bounds := to_rl_rect(rectangle_min_dimension(layout.at, size))
-    
-    before := condition^
-    rl.GuiToggle(bounds, text, condition)
-    result := condition^ != before
-    
+    bounds := rect_to_rl(rectangle_min_dimension(layout.at, size))
     layout_advance_2(layout, size)
     
-    return result
+    cc := condition
+    rl.GuiToggle(bounds, text, &cc)
+    clicked = cc != condition
+    active = cc
+    
+    return clicked, active
+}
+display_toggle_bool :: proc (layout: ^Layout, text: string, condition: ^bool, size := v2{}) -> bool {
+    clicked, active := display_toggle(layout, text, condition^, size)
+    condition^ = active
+    return clicked
 }
