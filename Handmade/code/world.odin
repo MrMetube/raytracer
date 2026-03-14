@@ -89,7 +89,7 @@ teapot_scene :: proc (world: ^World) {
         
         tree_build(&plane.tree, plane.triangles)
     }
-    if !false {
+    if false {
         { // top
             plane := world_create_model(world)
             

@@ -9,10 +9,8 @@ Render_Stats :: struct {
     loops_computed:   u64,
     tiles_retired:    u32,
     pixels_done:      u32,
-    nil_value_lanes_tested: [LaneWidth] u32,
     
-    // @note(viktor): only sum and count -> avg are valid
-    all_triangle_tests, triangle_tests: Stat(u32),
+    using tests: Test_Info,
 }
 
 Render :: struct {
@@ -91,7 +89,6 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     
     render.stats = {}
     
-    spall_begin("render copy")
     // @todo(viktor): make a copy per thread of anything that is written to, so that they cannot "falsely share" anything
     // @volatile
     render.models = make([] Model, len(world.models), render.allocator)
@@ -107,7 +104,6 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     render.materials = make_shallow_copy(world.materials, render.allocator)[:]
     
     zero_slice(render.image.data)
-    spall_end()
     
     tile_size := cast(v2i) max(render.image.width, render.image.height) / cast(i32) core_count
     tile_cols  := (render.image.width  + tile_size.x - 1) / tile_size.x
@@ -166,14 +162,14 @@ print_render_results :: proc (stats: ^Render_Stats, start, end: time.Time) {
     
     total_lanes: u32
     wasted_lanes: u32
-    for e, i in stats.nil_value_lanes_tested {
+    for e, i in stats.empty_lanes {
         total_lanes += e
         wasted_lanes += e * cast(u32) i
     }
     
     print("Lane utilization for hit tests:\n")
     print("  Empty lanes: [")
-    for e, i in stats.nil_value_lanes_tested {
+    for e, i in stats.empty_lanes {
         if i > 0 do print(", ")
         print("%v = %v", i, view_percentage(e, total_lanes))
     }
@@ -182,16 +178,11 @@ print_render_results :: proc (stats: ^Render_Stats, start, end: time.Time) {
     print("  Wasted lanes: %v %v\n", view_magnitude(wasted_lanes), view_percentage(wasted_lanes, (total_lanes * LaneWidth)))
     
     {
-        tests := &stats.triangle_tests
-        total := &stats.all_triangle_tests
-        stat_finalize(tests)
-        stat_finalize(total)
-        wasted := total.sum - tests.sum
+        total := stats.triangles + stats.rectangles
         
-        print("Triangle tests:\n")
-        print("     tests = %v (avg ~%.2f)\n", view_magnitude(tests.sum), tests.avg)
-        print(" all lanes = %v (avg ~%.2f)\n", view_magnitude(total.sum), total.avg)
-        print("    wasted = %v %v\n", view_magnitude(wasted), view_percentage(wasted, total.sum))
+        print("Hit tests:\n")
+        print("   triangles = %v (%v)\n", view_magnitude(stats.triangles), view_percentage(stats.triangles, total))
+        print("  rectangles = %v (%v)\n", view_magnitude(stats.rectangles), view_percentage(stats.rectangles, total))
     }
     
     print("\n\n")
