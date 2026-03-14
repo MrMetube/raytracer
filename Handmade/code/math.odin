@@ -444,7 +444,10 @@ less_than     :: simd.lanes_lt
 equal         :: simd.lanes_eq
 not_equal     :: simd.lanes_ne
 
-fused_mul_add :: simd.fma
+fused_mul_add :: proc(a: $T, b, c: T) -> T  {
+    result := simd.fma(a, b, c)
+    return result
+}
 
 is_nan :: proc { is_nan_s, is_nan_v }
 

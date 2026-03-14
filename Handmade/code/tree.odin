@@ -30,6 +30,23 @@ Subnodes_Per_Node :: 8
 // @todo(viktor): this can be a lot lower if we do 3 depth of splits per node now, if it matters
 Tree_Max_Depth :: 32
 
+Node_Info :: struct {
+    index: Node_Index,
+    depth: u32,
+    
+    cost:  f32,
+    indices: [] Value_Index,
+}
+
+Split_Node :: struct {
+    bounds: Rectangle3,
+    
+    cost: f32,
+    indices: [] Value_Index,
+}
+
+////////////////////////////////////////////////
+
 // @note(viktor): this is not idempotic, as the values are reordered.
 // A second build may encounter values in a different order compared to the first build.
 tree_build :: proc (tree: ^[] Tree_Node, triangles: [dynamic] Triangle) {
@@ -181,21 +198,6 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [dynamic] Triangle) {
             node.bounds = bounds
         }
     }
-}
-
-Node_Info :: struct {
-    index: Node_Index,
-    depth: u32,
-    
-    cost:  f32,
-    indices: [] Value_Index,
-}
-
-Split_Node :: struct {
-    bounds: Rectangle3,
-    
-    cost: f32,
-    indices: [] Value_Index,
 }
 
 split_node :: proc (tree: [] Tree_Node, it_cost: f32, it_indices: [] Value_Index, triangle_centers: [] v3, triangle_bounds: [] Rectangle3, temp_indices: [] Value_Index) -> (Split_Node, Split_Node, bool) {

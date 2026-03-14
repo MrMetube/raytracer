@@ -92,6 +92,7 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     render.stats = {}
     
     spall_begin("render copy")
+    // @todo(viktor): make a copy per thread of anything that is written to, so that they cannot "falsely share" anything
     // @volatile
     render.models = make([] Model, len(world.models), render.allocator)
     for model, index in world.models {

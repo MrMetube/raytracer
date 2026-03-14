@@ -164,6 +164,7 @@ lane_scatter :: proc {
     lane_scatter_index,
     lane_scatter_index_array,
 }
+
 lane_scatter_mask :: proc (lane: Lane($T), value: #simd [LaneWidth] T, mask: lane_u32 = lane_true) {
     simd.scatter(cast(lane_pmm) lane.p, value, mask)
 }
@@ -174,4 +175,11 @@ lane_scatter_index :: proc (lane: Lane_Slice($T), index: lane_u32, value: #simd 
 lane_scatter_index_array :: proc (lane: Lane($A/[$N] $T), index: lane_u32, value: #simd [LaneWidth] T, mask: lane_u32) {
     element := lane_index(lane, index)
     lane_scatter(element, value, mask)
+}
+
+lane_scatter_v :: proc (lane: Lane($T / [$N] $E), value: [N] #simd [LaneWidth] E, mask: lane_u32) {
+    #no_bounds_check #unroll for channel_index in cast(u32) 0..<N {
+        index := lane_index(lane, cast(lane_u32) channel_index)
+        lane_scatter(index, value[channel_index], mask)
+    }
 }
