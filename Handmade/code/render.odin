@@ -151,12 +151,12 @@ print_render_results :: proc (stats: ^Render_Stats, start, end: time.Time) {
     loops_computed   := volatile_load(&stats.loops_computed)
     wasted_bounces   := loops_computed - bounces_computed
     nanoseconds := safe_ratio_or_zero(time.duration_nanoseconds(total_time), cast(i64) bounces_computed)
-    print("Raycasting time: %vs\n  bounces %v\n  total bounces %v\n  wasted bounces %v (%v)\n  time per ray %v\n", 
-        time.duration_seconds(total_time), 
-        view_magnitude(bounces_computed), 
-        view_magnitude(loops_computed), 
-        view_magnitude(wasted_bounces), 
-        view_percentage(cast(f32) wasted_bounces / cast(f32) loops_computed), 
+    print("Raycasting time: %v\n  bounces %v\n  total bounces %v\n  wasted bounces %v (%v)\n  time per ray %v\n", 
+        total_time, 
+        view_magnitude(bounces_computed, 2), 
+        view_magnitude(loops_computed, 2), 
+        view_magnitude(wasted_bounces, 2), 
+        view_percentage(wasted_bounces, loops_computed), 
         cast(time.Duration) nanoseconds,
     )
     
@@ -171,11 +171,11 @@ print_render_results :: proc (stats: ^Render_Stats, start, end: time.Time) {
     print("  Empty lanes: [")
     for e, i in stats.nil_value_lanes_tested {
         if i > 0 do print(", ")
-        print("%v = %v", i, view_percentage(safe_ratio_or_zero(cast(f64) e, cast(f64) total_lanes)))
+        print("%v = %v", i, view_percentage(e, total_lanes))
     }
     print("]\n")
     
-    print("  Wasted lanes: %v %v\n", view_magnitude(wasted_lanes), view_percentage(safe_ratio_or_zero(cast(f64) wasted_lanes, cast(f64) (total_lanes * LaneWidth))))
+    print("  Wasted lanes: %v %v\n", view_magnitude(wasted_lanes), view_percentage(wasted_lanes, (total_lanes * LaneWidth)))
     
     {
         tests := &stats.triangle_tests

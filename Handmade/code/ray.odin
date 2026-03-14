@@ -408,7 +408,7 @@ traverse_tree_and_test_triangles :: proc (triangles: Lane_Slice(Triangle), tree:
                                 }
                                 
                                 sorted_tmin  = simd_insert_at(sorted_tmin, t, greater_count)
-                                sorted_index = transmute([8] u32) simd_insert_at(transmute(lane_u32) sorted_index,  cast(u32) ti, greater_count)
+                                sorted_index = transmute([LaneWidth] u32) simd_insert_at(transmute(lane_u32) sorted_index,  cast(u32) ti, greater_count)
                             }
                         }
                         
@@ -547,7 +547,7 @@ traverse_tree_and_test_triangles :: proc (triangles: Lane_Slice(Triangle), tree:
                 local_nil_value_lanes_tested[0] += (node.value_count / LaneWidth) * LaneWidth
                 remainder := node.value_count % LaneWidth
                 if remainder != 0 {
-                    local_nil_value_lanes_tested[8 - remainder] += 1
+                    local_nil_value_lanes_tested[LaneWidth - remainder] += 1
                 }
             }
         }

@@ -24,37 +24,20 @@ uv4 :: [4] u32
 
 LaneWidth :: 8
 
-when LaneWidth == 1 {
-    lane_f32 :: f32
-    lane_u32 :: u32
-    lane_i32 :: i32
-    
-    lane_v2 :: [2] lane_f32
-    lane_v3 :: [3] lane_f32
-    lane_v4 :: [4] lane_f32
-    
-    lane_uv3 :: [3] lane_u32
-    
-    lane_pmm :: pmm
-    lane_umm :: umm
-    lane_f64 :: f64
-    lane_u64 :: u64
-} else {
-    lane_f32 :: #simd [LaneWidth] f32
-    lane_u32 :: #simd [LaneWidth] u32
-    lane_i32 :: #simd [LaneWidth] i32
-    
-    lane_v2 :: [2] lane_f32
-    lane_v3 :: [3] lane_f32
-    lane_v4 :: [4] lane_f32
-    
-    lane_uv3 :: [3] lane_u32
-    
-    lane_pmm :: #simd [LaneWidth] pmm
-    lane_umm :: #simd [LaneWidth] umm
-    lane_f64 :: #simd [LaneWidth] f64
-    lane_u64 :: #simd [LaneWidth] u64
-}
+lane_f32 :: #simd [LaneWidth] f32
+lane_u32 :: #simd [LaneWidth] u32
+lane_i32 :: #simd [LaneWidth] i32
+
+lane_v2 :: [2] lane_f32
+lane_v3 :: [3] lane_f32
+lane_v4 :: [4] lane_f32
+
+lane_uv3 :: [3] lane_u32
+
+lane_pmm :: #simd [LaneWidth] pmm
+lane_umm :: #simd [LaneWidth] umm
+lane_f64 :: #simd [LaneWidth] f64
+lane_u64 :: #simd [LaneWidth] u64
 
 lane_false :: cast(lane_u32) 0
 lane_true  :: cast(lane_u32) 0xffff_ffff
@@ -430,157 +413,121 @@ color4_to_u8 :: proc (color: v4) -> Color {
 ////////////////////////////////////////////////
 // Simd operations
 
-when LaneWidth == 1 {
-    conditional_assign :: proc (mask: $M, dest: ^$D, value: D) {
-        mask := mask
-        mask  = mask == 0 ? lane_false : lane_true
-        when intrinsics.type_is_array(D) {
-            #no_bounds_check #unroll for i in 0..<len(D) {
-                conditional_assign(mask, &dest[i], value[i])
-            }
-        } else {
-            dest ^= cast(D) (((cast(^M)dest)^ &~ mask) | (transmute(M) value & mask))
-        }
-    }
-    greater_equal  :: proc (a: $T, b: T) -> u32 { return a >= b ? lane_true : lane_false}
-    greater_than   :: proc (a: $T, b: T) -> u32 { return a >  b ? lane_true : lane_false}
-    less_than      :: proc (a: $T, b: T) -> u32 { return a <  b ? lane_true : lane_false}
-    less_equal     :: proc (a: $T, b: T) -> u32 { return a <= b ? lane_true : lane_false}
-    horizontal_add :: proc (a: $T) -> T { return a}
+ternary :: proc (mask: $M, then_value: $T, else_value: T) -> T {
+    result: T
     
-    shift_left    :: proc (a: $T, n: u32) -> T { return a << n }
-    shift_right   :: proc (a: $T, n: u32) -> T { return a >> n }
-    
-    maximum :: max
-    minimum :: min
-    
-    extract :: proc (a: $T, n: u32) -> (result: T) { 
-        when intrinsics.type_is_array(T) {
-            #no_bounds_check #unroll for i in 0..<len(D) {
-                result[i] = a[i]
-            }
-        } else {
-            result = a
+    when intrinsics.type_is_array(T) {
+        #no_bounds_check #unroll for i in 0..<len(T) {
+            result[i] = ternary(mask, then_value[i], else_value[i])
         }
-        return result
-    }
-} else {
-    ternary :: proc (mask: $M, then_value: $T, else_value: T) -> T {
-        result: T
-        
-        when intrinsics.type_is_array(T) {
-            #no_bounds_check #unroll for i in 0..<len(T) {
-                result[i] = ternary(mask, then_value[i], else_value[i])
-            }
-        } else {
-            result = simd.select(mask, then_value, else_value)
-        }
-        
-        return result
+    } else {
+        result = simd.select(mask, then_value, else_value)
     }
     
-    conditional_assign :: proc (mask: $M, dest: ^$D, value: D) {
-        when intrinsics.type_is_array(D) {
-            #no_bounds_check #unroll for i in 0..<len(D) {
-                conditional_assign(mask, &dest[i], value[i])
-            }
-        } else {
-            simd.masked_store(dest, value, mask)
-        }
-    }
+    return result
+}
 
-    absolute      :: simd.abs
-    greater_equal :: simd.lanes_ge
-    less_equal    :: simd.lanes_le
-    greater_than  :: simd.lanes_gt
-    less_than     :: simd.lanes_lt
-    equal         :: simd.lanes_eq
-    not_equal     :: simd.lanes_ne
-    
-    fused_mul_add :: simd.fma
-    
-    is_nan :: proc { is_nan_s, is_nan_v }
-    
-    is_nan_v :: proc (x: $V/ #simd[$N] $F) -> #simd[N] (u32 when F == f32 else u64) {
-        result := not_equal(x, x)
-        return result
+conditional_assign :: proc (mask: $M, dest: ^$D, value: D) {
+    when intrinsics.type_is_array(D) {
+        #no_bounds_check #unroll for i in 0..<len(D) {
+            conditional_assign(mask, &dest[i], value[i])
+        }
+    } else {
+        simd.masked_store(dest, value, mask)
     }
-    is_nan_s :: proc (x: $F) -> bool where !intrinsics.type_is_simd_vector(F) {
-        result := !(x == x)
-        return result
-    }
-    
-    approximate_equal :: proc (a, b: lane_f32, epsilon : lane_f32 = 0.000001) -> lane_u32 {
-        result := less_than(absolute(a - b), epsilon)
-        return result
-    }
+}
 
-    shift_left     :: simd.shl
-    shift_right    :: simd.shr
-    horizontal_add :: simd.reduce_add_bisect
-    maximum :: proc (a: $T, b: T) -> T {
-        when intrinsics.type_is_simd_vector(T) {
-            return simd.max(a, b)
-        } else {
-            return max(a, b)
+absolute      :: simd.abs
+greater_equal :: simd.lanes_ge
+less_equal    :: simd.lanes_le
+greater_than  :: simd.lanes_gt
+less_than     :: simd.lanes_lt
+equal         :: simd.lanes_eq
+not_equal     :: simd.lanes_ne
+
+fused_mul_add :: simd.fma
+
+is_nan :: proc { is_nan_s, is_nan_v }
+
+is_nan_v :: proc (x: $V/ #simd[$N] $F) -> #simd[N] (u32 when F == f32 else u64) {
+    result := not_equal(x, x)
+    return result
+}
+is_nan_s :: proc (x: $F) -> bool where !intrinsics.type_is_simd_vector(F) {
+    result := !(x == x)
+    return result
+}
+
+approximate_equal :: proc (a, b: lane_f32, epsilon : lane_f32 = 0.000001) -> lane_u32 {
+    result := less_than(absolute(a - b), epsilon)
+    return result
+}
+
+shift_left     :: simd.shl
+shift_right    :: simd.shr
+horizontal_add :: simd.reduce_add_bisect
+maximum :: proc (a: $T, b: T) -> T {
+    when intrinsics.type_is_simd_vector(T) {
+        return simd.max(a, b)
+    } else {
+        return max(a, b)
+    }
+}
+minimum :: proc (a: $T, b: T) -> T {
+    when intrinsics.type_is_simd_vector(T) {
+        return simd.min(a, b)
+    } else {
+        return min(a, b)
+    }
+}
+
+min_max :: proc (a: $T, b: T) -> (min, max: T) {
+    when intrinsics.type_is_simd_vector(T) {
+        min, max = b, a
+        mask := less_than(a, b)
+        conditional_assign(mask, &min, a)
+        conditional_assign(mask, &max, b)
+        return min, max
+    } else {
+        min, max = b, a
+        if a < b do min, max = a, b
+        return min, max
+    }
+}
+
+extract_v3 :: proc (a: lane_v3, #any_int n: u32) -> (result: v3) {
+    result.x = extract(a.x, n)
+    result.y = extract(a.y, n)
+    result.z = extract(a.z, n)
+    return result
+}
+
+extract :: proc (a: $T/#simd[$N] $Element, #any_int n: u32) -> (result: Element) {
+    when intrinsics.type_is_array(T) {
+        #no_bounds_check #unroll for i in 0..<len(T) {
+            result[i] = simd.extract(a[i], n)
         }
+    } else {
+        result = simd.extract(a, n)
     }
-    minimum :: proc (a: $T, b: T) -> T {
-        when intrinsics.type_is_simd_vector(T) {
-            return simd.min(a, b)
-        } else {
-            return min(a, b)
+    return result
+}
+
+// @naming
+replace_v3 :: proc (a: ^lane_v3, #any_int n: u32, value: v3) {
+    replace(&a.x, n, value.x)
+    replace(&a.y, n, value.y)
+    replace(&a.z, n, value.z)
+}
+
+// @naming
+replace :: proc (a: ^$T/ #simd[$N] $Element, #any_int n: u32, value: Element) {
+    when intrinsics.type_is_array(T) {
+        #no_bounds_check #unroll for i in 0..<len(T) {
+            a[i] = simd.replace(a[i], n, value[i])
         }
-    }
-    
-    min_max :: proc (a: $T, b: T) -> (min, max: T) {
-        when intrinsics.type_is_simd_vector(T) {
-            min, max = b, a
-            mask := less_than(a, b)
-            conditional_assign(mask, &min, a)
-            conditional_assign(mask, &max, b)
-            return min, max
-        } else {
-            min, max = b, a
-            if a < b do min, max = a, b
-            return min, max
-        }
-    }
-    
-    extract_v3 :: proc (a: lane_v3, #any_int n: u32) -> (result: v3) {
-        result.x = extract(a.x, n)
-        result.y = extract(a.y, n)
-        result.z = extract(a.z, n)
-        return result
-    }
-    
-    extract :: proc (a: $T/#simd[$N] $Element, #any_int n: u32) -> (result: Element) {
-        when intrinsics.type_is_array(T) {
-            #no_bounds_check #unroll for i in 0..<len(T) {
-                result[i] = simd.extract(a[i], n)
-            }
-        } else {
-            result = simd.extract(a, n)
-        }
-        return result
-    }
-    
-    // @naming
-    replace_v3 :: proc (a: ^lane_v3, #any_int n: u32, value: v3) {
-        replace(&a.x, n, value.x)
-        replace(&a.y, n, value.y)
-        replace(&a.z, n, value.z)
-    }
-    
-    // @naming
-    replace :: proc (a: ^$T/ #simd[$N] $Element, #any_int n: u32, value: Element) {
-        when intrinsics.type_is_array(T) {
-            #no_bounds_check #unroll for i in 0..<len(T) {
-                a[i] = simd.replace(a[i], n, value[i])
-            }
-        } else {
-            a^ = simd.replace(a^, n, value)
-        }
+    } else {
+        a^ = simd.replace(a^, n, value)
     }
 }
 

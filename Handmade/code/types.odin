@@ -1,48 +1,6 @@
 #+vet !unused-procedures
 package main
 
-import "base:builtin"
-
-String_Builder :: [dynamic] u8
-
-append :: proc { 
-    append_string, builtin.append_elem, builtin.append_elems, builtin.append_soa_elems, builtin.append_soa_elem,
-}
-append_string :: proc (a: ^String_Builder, value: string) -> (result: string) {
-    append(a, ..(transmute([] u8) value))
-    return cast(string) a[:]
-}
-
-make_string_builder :: proc { make_string_builder_buffer }
-make_string_builder_buffer :: proc (buffer: [] u8) -> (result: String_Builder) {
-    raw: Raw_Dynamic_Array
-    raw.data = raw_data(buffer)
-    raw.cap  = len(buffer)
-    
-    result = transmute(String_Builder) raw
-    return result
-}
-
-peek :: proc (a: [dynamic] $T) -> (result: ^T) { 
-    assert(len(a) != 0)
-    #no_bounds_check result = &a[len(a)-1]
-    return result
-}
-
-to_string :: proc (sb: String_Builder) -> string {
-    return cast(string) sb[:]
-}
-
-rest :: proc{ rest_dynamic_array }
-rest_dynamic_array :: proc (array: [dynamic] $T) -> [] T {
-    return slice_from_parts(raw_data(array), cap(array))
-}
-
-set_len :: proc (array: ^[dynamic] $T, len: int) {
-    raw := cast(^Raw_Dynamic_Array) array
-    raw.len = len
-}
-
 ////////////////////////////////////////////////
 // [First] <- [..] ... <- [..] <- [Last] 
 Deque :: struct($L: typeid) {
