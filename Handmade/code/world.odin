@@ -26,7 +26,7 @@ world_init :: proc (world: ^World) {
     append(&world.materials, Material{ reflect = { .65 , .1  , .7  }, scatter = 1.      })
     append(&world.materials, Material{ reflect = { .9  , .9  , .8  }, scatter = .6      })
     
-    world.material_names = make_slice(context.allocator, [] string, len(world.materials))
+    world.material_names = make([] string, len(world.materials), context.allocator)
     
     world_load_brdf(world, 0, "nil")
     world_load_brdf(world, 1, "gray-plastic")

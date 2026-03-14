@@ -31,6 +31,9 @@
             - how to sample a texture's colors as wavelengths?
 - Energy conservation
 
+- check for "false sharing" between threads in render tiles
+    - maybe adjust sizes
+
 - load multiple models
     - Load obj files
     - Normals, UVs
@@ -44,7 +47,6 @@
         - cache invalidation
 
 - Code minimization
-    - replace arena with mem:arena if it is even needed
     - replace random generator with math xorshiro, which seems to be a continuation of the original xor-shift
 
 ### Editor

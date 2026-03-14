@@ -1,6 +1,7 @@
 package main
 
 import "core:time"
+import "core:mem"
 import rl "vendor:raylib"
 
 Render_Stats :: struct {
@@ -25,7 +26,7 @@ Render :: struct {
     texture: rl.Texture,
     queue:   WorkQueue,
     
-    arena:     Arena,
+    arena:     mem.Arena,
     allocator: Allocator,
     
     rays_per_pixel:   u32,
@@ -61,7 +62,9 @@ init_render :: proc (render: ^Render, rays_per_pixel: u32, max_bounce_count: u32
     render.max_bounce_count  = max_bounce_count
     render.image_size_factor = image_size_factor
     
-    render.allocator = arena_allocator(&render.arena)
+    backing, err := make([] u8, 1 * Gigabyte, context.allocator); assert(err == nil)
+    mem.arena_init(&render.arena, backing)
+    render.allocator = mem.arena_allocator(&render.arena)
     
     init_render_image(render, window_size)
     
@@ -76,7 +79,7 @@ init_render_image :: proc (render: ^Render, window_size: v2i) {
     image_size := window_size / render.image_size_factor
     render.image.width  = image_size.x
     render.image.height = image_size.y
-    render.image.data   = make_slice(context.allocator, [] Color, render.image.width * render.image.height)
+    render.image.data   = make([] Color, render.image.width * render.image.height, context.allocator)
 }
 
 begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: Camera) {
@@ -90,7 +93,7 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     
     spall_begin("render copy")
     // @volatile
-    render.models = make_slice(render.allocator, [] Model, len(world.models))
+    render.models = make([] Model, len(world.models), render.allocator)
     for model, index in world.models {
         render_model: Model
         render_model.triangles = make_shallow_copy(model.triangles, render.allocator)
@@ -117,7 +120,7 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
         entropy: RandomSeries,
     }
     
-    works := make_slice(render.allocator, [] Work, tile_count)
+    works := make([] Work, tile_count, render.allocator)
     work_index: u32
     
     render.start = time.now()

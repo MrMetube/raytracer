@@ -66,7 +66,7 @@ main :: proc () {
     defer close_work_queue_and_wait_for_threads(&quality_render.queue)
     defer close_work_queue_and_wait_for_threads(&fast_render.queue)
     
-    renders := make_dynamic_array(context.allocator, [dynamic] ^Render, 0, 2)
+    renders := make([dynamic] ^Render, 0, 2, context.allocator)
     append(&renders, &quality_render)
     append(&renders, &fast_render)
     

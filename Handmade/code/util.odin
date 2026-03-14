@@ -260,6 +260,11 @@ make_shallow_copy_slice :: proc (source: [] $T, allocator: Allocator) -> [] T {
     return result
 }
 
+zero_slice :: proc (data: $T/ [] $E) -> T {
+	intrinsics.mem_zero(raw_data(data), size_of(E) * len(data))
+	return data
+}
+
 ////////////////////////////////////////////////
 
 Allocator          :: runtime.Allocator

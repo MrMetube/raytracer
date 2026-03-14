@@ -47,13 +47,13 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [dynamic] Triangle) {
     
     ////////////////////////////////////////////////
     
-    triangle_centers := make_slice(allocator, [] v3, len(triangles))
-    triangle_bounds  := make_slice(allocator, [] Rectangle3, len(triangles))
+    triangle_centers := make([] v3, len(triangles), allocator)
+    triangle_bounds  := make([] Rectangle3, len(triangles), allocator)
     
     root := &tree[Root_Index]
     root.bounds = rectangle_inverted_infinity(Rectangle3)
     
-    root_values := make_slice(allocator, [] Value_Index, len(triangles))
+    root_values := make([] Value_Index, len(triangles), allocator)
     for value_index in cast(Value_Index) 0 ..< cast(Value_Index) len(triangles) {
         root_values[value_index] = value_index
         
@@ -81,12 +81,12 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [dynamic] Triangle) {
     final_indices: map[Node_Index] [] Value_Index
     final_indices.allocator = allocator
         
-    _stack := make_dynamic_array(allocator, [dynamic] Node_Info, 0, Tree_Max_Depth)
+    _stack := make([dynamic] Node_Info, 0, Tree_Max_Depth, allocator)
     stack  := &_stack
     
     append(stack, Node_Info { Root_Index, 0, root_cost, root_values })
     
-    temp_indices := make_slice(allocator, [] Value_Index, len(triangles))
+    temp_indices := make_slice([] Value_Index, len(triangles), allocator)
     
     for len(stack) > 0 {
         it := pop(stack)
@@ -145,7 +145,7 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [dynamic] Triangle) {
     ////////////////////////////////////////////////
     
     buffer := make_shallow_copy(triangles, allocator)
-    zero(triangles[:])
+    zero_slice(triangles[:])
     
     next_free_value_index: Value_Index
     
