@@ -116,9 +116,7 @@ render_tile :: proc(render: ^Render, camera: Camera, rect: Rectangle2i, entropy:
             pixel := color_to_u8(color)
             
             pixel_index := (image.height - 1 - py) * image.width + px
-            #no_bounds_check {
-                image.data[pixel_index] = pixel
-            }
+            image.data[pixel_index] = pixel
         }
         atomic_add(&render_stats.pixels_done, auto_cast rectangle_get_dimension(rect).x)
     }
@@ -150,6 +148,7 @@ cast_rays :: proc (stats: ^Render_Stats, models: [] Model, materials: [] Materia
     camera_y := vec_cast(lane_f32, camera.y)
     
     for _ in 0..<lane_ray_count {
+        spall_scope("ray sample")
         jitter := random_unilateral(entropy, lane_v2)
         offset := init_film_p + jitter * pixel_size
         film_p := film_center + (offset.x*camera_x*half_film_size.x + offset.y*camera_y * half_film_size.y) 
@@ -183,15 +182,11 @@ cast_rays :: proc (stats: ^Render_Stats, models: [] Model, materials: [] Materia
                 triangles := model.triangles
                 tree      := model.tree[:]
                 
-                if len(tree) == 0 || len(triangles) == 0 do continue
-                
-                spall_begin("model translate")
                 translation := vec_cast(lane_f32, model.translation)
                 model_ray_o := ray_o - translation
                 model_ray_d := ray_d
                 // @waste
                 t_before := lane_gather(lane_member(lane_hits, "closest_t", f32))
-                spall_end()
                 
                 tests := traverse_tree_and_test_triangles(to_lane(triangles), tree, model_ray_o, model_ray_d, min_t, &hits)
                 when Collect_Stats {
@@ -201,7 +196,6 @@ cast_rays :: proc (stats: ^Render_Stats, models: [] Model, materials: [] Materia
                 }
                 
                 
-                spall_begin("model translate")
                 t_after := lane_gather(lane_member(lane_hits, "closest_t", f32))
                 
                 update_mask := less_than(t_after, t_before)
@@ -209,7 +203,6 @@ cast_rays :: proc (stats: ^Render_Stats, models: [] Model, materials: [] Materia
                 lane_next_o := lane_member(lane_hits, "next_o", v3)
                 next_o := lane_gather_v(lane_next_o)
                 lane_scatter_v(lane_next_o, next_o + translation, update_mask)
-                spall_end()
             }
             
             ////////////////////////////////////////////////
@@ -292,11 +285,12 @@ traverse_tree_and_test_triangles_yy :: proc (triangles: Lane_Slice(Triangle), tr
     spall_proc()
     
     result: Test_Info
-    for &hit, lane in hits {
+    /* #unroll  */for lane in 0..<LaneWidth {
+        hit := &hits[lane]
         ray_d := extract_v3(ray_d, lane)
         ray_o := extract_v3(ray_o, lane)
         
-        now := traverse_tree_and_test_triangles_xx(triangles, tree, ray_o, ray_d, min_t, &hit)
+        now := traverse_tree_and_test_triangles_xx(triangles, tree, ray_o, ray_d, min_t, hit)
         when Collect_Stats {
             result.triangles   += now.triangles
             result.rectangles  += now.rectangles
@@ -309,6 +303,8 @@ traverse_tree_and_test_triangles_yy :: proc (triangles: Lane_Slice(Triangle), tr
 
 traverse_tree_and_test_triangles_xx :: proc (triangles: Lane_Slice(Triangle), tree: [] Tree_Node, ray_o, ray_d: v3, min_t: lane_f32, hit: ^Hit_Info_Lane) -> Test_Info {
     spall_proc()
+
+    tree_lane := to_lane(tree)
     
     inv_d := 1 / ray_d
     neg_inv_o := -(ray_o * inv_d)
@@ -326,10 +322,20 @@ traverse_tree_and_test_triangles_xx :: proc (triangles: Lane_Slice(Triangle), tr
         node := &tree[it_index]
         
         if node.value_count == 0 {
-            indices  := cast(lane_u32) node.first.subnode + lane_offset
-            subnodes := lane_index(to_lane(tree), indices)
+            spall_scope("subnodes")
             
-            hit_mask := hit_rectangle(subnodes, neg_inv_o, inv_d, min_t, hit.closest_t)
+            indices  := cast(lane_u32) node.first.subnode + lane_offset
+            subnodes := lane_index(tree_lane, indices)
+            
+            bounds   := lane_member(subnodes, "bounds", Rectangle3)
+            node_min := lane_member(bounds, "min", v3)
+            node_max := lane_member(bounds, "max", v3)
+            
+            min := lane_gather_v(node_min)
+            max := lane_gather_v(node_max)
+            
+            hit_mask := hit_rectangle(min, max, neg_inv_o, inv_d, min_t, hit.closest_t)
+            
             when Collect_Stats {
                 result.rectangles += Subnodes_Per_Node
             }
@@ -342,13 +348,13 @@ traverse_tree_and_test_triangles_xx :: proc (triangles: Lane_Slice(Triangle), tr
                         stack[stack_count] = subindex
                         stack_count += 1
                     }
-                }   
+                }
             }
         } else {
-            start := cast(u32) node.first.value
-            end   := cast(u32) node.first.value + node.value_count
+            spall_scope("values")
             
-            for value_index := start; value_index < end; value_index += LaneWidth {
+            end := cast(u32) node.first.value + node.value_count
+            for value_index := cast(u32) node.first.value; value_index < end; value_index += LaneWidth {
                 index := value_index + lane_offset
                 
                 mask     := less_than(index, cast(lane_u32) end)
@@ -373,12 +379,8 @@ traverse_tree_and_test_triangles_xx :: proc (triangles: Lane_Slice(Triangle), tr
 
 ////////////////////////////////////////////////
 
-hit_rectangle :: proc (node: Lane(Tree_Node), neg_inv_o, inv_d: v3, t_min_init, t_max_init: lane_f32) -> lane_u32 {
+hit_rectangle :: proc (min, max: lane_v3, neg_inv_o, inv_d: v3, t_min_init, t_max_init: lane_f32) -> lane_u32 {
     spall_proc()
-    node_min := lane_member(node, "bounds", "min", v3)
-    node_max := lane_member(node, "bounds", "max", v3)
-    min  := lane_gather_v(node_min)
-    max  := lane_gather_v(node_max)
     
     // @waste
     inv_d_x := cast(lane_f32) inv_d.x
@@ -389,10 +391,12 @@ hit_rectangle :: proc (node: Lane(Tree_Node), neg_inv_o, inv_d: v3, t_min_init, 
     neg_inv_o_z := cast(lane_f32) neg_inv_o.z
     
     t1x := fused_mul_add(min.x, inv_d_x, neg_inv_o_x)
-    t1y := fused_mul_add(min.y, inv_d_y, neg_inv_o_y)
-    t1z := fused_mul_add(min.z, inv_d_z, neg_inv_o_z)
     t2x := fused_mul_add(max.x, inv_d_x, neg_inv_o_x)
+    
+    t1y := fused_mul_add(min.y, inv_d_y, neg_inv_o_y)
     t2y := fused_mul_add(max.y, inv_d_y, neg_inv_o_y)
+    
+    t1z := fused_mul_add(min.z, inv_d_z, neg_inv_o_z)
     t2z := fused_mul_add(max.z, inv_d_z, neg_inv_o_z)
     
     tin := lane_v3 { minimum(t1x, t2x), minimum(t1y, t2y), minimum(t1z, t2z) }

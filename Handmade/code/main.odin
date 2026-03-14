@@ -16,7 +16,7 @@ main :: proc () {
     
     window_title := cprint("Handmade Ray %v", (Is_Optimized ? "Optimized" :  "Debug"))
     
-    init_spall(output_name = tprint("trace_%v", Is_Optimized ? "optimized" : "debug"))
+    spall_init(output_name = tprint("trace_%v", Is_Optimized ? "optimized" : "debug"))
     
     _, logical_core_count, ok := si.cpu_core_count(); assert(ok)
     core_count := cast(u32) logical_core_count - 1
@@ -93,6 +93,7 @@ main :: proc () {
         delta_time := rl.GetFrameTime()
         layout.dt = delta_time
         speed: f32 = 60
+        look_speed: f32 = 100
         dddp: v3
         dlook: v2
         
@@ -115,6 +116,8 @@ main :: proc () {
                 
                 if !rl.IsMouseButtonDown(.RIGHT) {
                     ddp *= 0.1
+                } else {
+                    look_speed *= 5
                 }
             
                 dlook = -rl.GetMouseDelta()
@@ -130,7 +133,7 @@ main :: proc () {
         }
         
         if dlook != 0 {
-            dlook *= 100 / vec_cast(f32, window_size) * delta_time
+            dlook *= look_speed / vec_cast(f32, window_size) * delta_time
             up :: v3{0, 0, 1}
             
             yaw   := axis_angle_rotation(camera.y,                           dlook.x)
@@ -394,8 +397,8 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
         layout_end_horizontal(layout)
         
         layout_advance(layout, 5)
-        layout_begin_horizontal(layout)
-            if render.active && !work_is_completed(&render.queue){
+        if render.active && !work_is_completed(&render.queue){
+            layout_begin_horizontal(layout)
                 total_pixels := render.image.width * render.image.height
                 done_percentage := cast(f32) render.stats.pixels_done / cast(f32) total_pixels
                 
@@ -417,9 +420,11 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
                 
                 layout_advance(layout, 5)
                 display_toggle(layout, "Cancel Render", &render.canceled)
-            }
-        layout_end_horizontal(layout)
-        
+            layout_end_horizontal(layout)
+        } else {
+            layout_advance_2(layout, layout.font_size)
+        }
+            
         layout_advance(layout, 5)
         layout_begin_horizontal(layout)
             if display_button(layout, "-") do render.rays_per_pixel /= 2 

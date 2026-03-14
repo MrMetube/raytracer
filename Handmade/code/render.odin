@@ -147,18 +147,22 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
 print_render_results :: proc (stats: ^Render_Stats, start, end: time.Time) {
     total_time := time.diff(start, end)
     
+    print("\n")
+    
     bounces_computed := volatile_load(&stats.bounces_computed)
     loops_computed   := volatile_load(&stats.loops_computed)
     wasted_bounces   := loops_computed - bounces_computed
-    nanoseconds := safe_ratio_or_zero(time.duration_nanoseconds(total_time), cast(i64) bounces_computed)
-    print("Raycasting time: %v\n  bounces %v\n  total bounces %v\n  wasted bounces %v (%v)\n  time per ray %v\n", 
-        total_time, 
-        view_magnitude(bounces_computed, 2), 
-        view_magnitude(loops_computed, 2), 
-        view_magnitude(wasted_bounces, 2), 
-        view_percentage(wasted_bounces, loops_computed), 
-        cast(time.Duration) nanoseconds,
-    )
+    time_per_ray := safe_ratio_or_zero(cast(i64) total_time, cast(i64) bounces_computed)
+    time_per_triangle  := safe_ratio_or_zero(cast(i64) total_time, cast(i64) stats.triangles)
+    time_per_rectangle := safe_ratio_or_zero(cast(i64) total_time, cast(i64) stats.rectangles)
+    
+    print("Raycasting time: %v\n", total_time)
+    print("  bounces %v\n", view_magnitude(bounces_computed, 2))
+    print("  total bounces %v\n", view_magnitude(loops_computed, 2))
+    print("  wasted bounces %v (%v)\n", view_magnitude(wasted_bounces, 2), view_percentage(wasted_bounces, loops_computed))
+    print("  time per ray %v\n",       cast(time.Duration) time_per_ray)
+    print("  time per triangle %v\n",  cast(time.Duration) time_per_triangle)
+    print("  time per rectangle %v\n", cast(time.Duration) time_per_rectangle)
     
     total_lanes: u32
     wasted_lanes: u32
@@ -167,23 +171,19 @@ print_render_results :: proc (stats: ^Render_Stats, start, end: time.Time) {
         wasted_lanes += e * cast(u32) i
     }
     
-    print("Lane utilization for hit tests:\n")
-    print("  Empty lanes: [")
+    
+    total := stats.triangles + stats.rectangles
+    
+    print("Hit tests:\n")
+    print("  triangles  = %v (%v)\n", view_magnitude(stats.triangles),  view_percentage(stats.triangles, total))
+    print("  rectangles = %v (%v)\n", view_magnitude(stats.rectangles), view_percentage(stats.rectangles, total))
+    print("  empty lanes: [")
     for e, i in stats.empty_lanes {
         if i > 0 do print(", ")
         print("%v = %v", i, view_percentage(e, total_lanes))
     }
     print("]\n")
+    print("  wasted lanes = %v %v\n", view_magnitude(wasted_lanes), view_percentage(wasted_lanes, (total_lanes * LaneWidth)))
     
-    print("  Wasted lanes: %v %v\n", view_magnitude(wasted_lanes), view_percentage(wasted_lanes, (total_lanes * LaneWidth)))
-    
-    {
-        total := stats.triangles + stats.rectangles
-        
-        print("Hit tests:\n")
-        print("   triangles = %v (%v)\n", view_magnitude(stats.triangles), view_percentage(stats.triangles, total))
-        print("  rectangles = %v (%v)\n", view_magnitude(stats.rectangles), view_percentage(stats.rectangles, total))
-    }
-    
-    print("\n\n")
+    print("\n")
 }

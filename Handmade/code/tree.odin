@@ -12,13 +12,11 @@ Value_Index :: distinct u32
 // all subnodes are always appended as pairs.
 
 Tree_Node :: struct #align(32) {
-    bounds:        Rectangle3,
-    // @note(viktor): if value_count == 0 then its subnode, else its value
-    value_count: u32,
+    bounds:      Rectangle3,
+    value_count: u32, // @note(viktor): if value_count == 0 then its subnode, else its value
     first: struct #raw_union {
         value:   Value_Index,
-        // @note(viktor): the other 7 must follow directly after the first
-        subnode: Node_Index,
+        subnode: Node_Index, // @note(viktor): the other 7 must follow directly after the first
     },
 }
 
@@ -52,8 +50,12 @@ Split_Node :: struct {
 tree_build :: proc (tree: ^[] Tree_Node, triangles: [dynamic] Triangle) {
     allocator := context.temp_allocator
     
-    // @note(viktor): there can be atmost N leaves, with N/2 parents and N/4 grandparents and so on
-    // -> N leaves + N branches = 2N nodes
+    // @note(viktor): 
+    // S = Subnodes_Per_Node
+    // N = len(triangles)
+    // leaves = atmost N
+    // branches = N/S parents + N/S² grandparents + ...
+    // -> N leaves + branches <= 2N nodes
     delete(tree^)
     make_by_pointer(tree, len(triangles)*2)
     next_free_tree_index: Node_Index
