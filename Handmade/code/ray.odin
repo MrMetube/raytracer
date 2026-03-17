@@ -285,16 +285,36 @@ traverse_tree_and_test_triangles_yy :: proc (triangles: Lane_Slice(Triangle), tr
     spall_proc()
     
     result: Test_Info
-    /* #unroll  */for lane in 0..<LaneWidth {
-        hit := &hits[lane]
-        ray_d := extract_v3(ray_d, lane)
-        ray_o := extract_v3(ray_o, lane)
+    hit_mask: lane_u32
+    {
+        root := tree[Root_Index]
+        min := vec_cast(lane_f32, root.bounds.min)
+        max := vec_cast(lane_f32, root.bounds.max)
+        inv_d := 1 / ray_d
+        neg_inv_o := -(ray_o * inv_d)
         
-        now := traverse_tree_and_test_triangles_xx(triangles, tree, ray_o, ray_d, min_t, hit)
-        when Collect_Stats {
-            result.triangles   += now.triangles
-            result.rectangles  += now.rectangles
-            result.empty_lanes += now.empty_lanes
+        lane_hits := lane_index(to_lane(hits[:]), lane_offset)
+        closest_t := lane_gather(lane_member(lane_hits, "closest_t", f32))
+        
+        hit_mask = hit_rectangle(min, max, neg_inv_o, inv_d, min_t, closest_t)
+        result.rectangles += LaneWidth
+    }
+    
+    
+    if hit_mask != lane_false {
+        for lane in 0..<LaneWidth {
+            if extract(hit_mask, lane) == 0 do continue
+            
+            hit := &hits[lane]
+            ray_d := extract_v3(ray_d, lane)
+            ray_o := extract_v3(ray_o, lane)
+            
+            now := traverse_tree_and_test_triangles_xx(triangles, tree, ray_o, ray_d, min_t, hit)
+            when Collect_Stats {
+                result.triangles   += now.triangles
+                result.rectangles  += now.rectangles
+                result.empty_lanes += now.empty_lanes
+            }
         }
     }
     
@@ -379,25 +399,18 @@ traverse_tree_and_test_triangles_xx :: proc (triangles: Lane_Slice(Triangle), tr
 
 ////////////////////////////////////////////////
 
-hit_rectangle :: proc (min, max: lane_v3, neg_inv_o, inv_d: v3, t_min_init, t_max_init: lane_f32) -> lane_u32 {
+hit_rectangle :: proc { hit_rectangle_s, hit_rectangle_v }
+hit_rectangle_v :: proc (min, max: lane_v3, neg_inv_o, inv_d: lane_v3, t_min_init, t_max_init: lane_f32) -> lane_u32 {
     spall_proc()
     
-    // @waste
-    inv_d_x := cast(lane_f32) inv_d.x
-    inv_d_y := cast(lane_f32) inv_d.y
-    inv_d_z := cast(lane_f32) inv_d.z
-    neg_inv_o_x := cast(lane_f32) neg_inv_o.x
-    neg_inv_o_y := cast(lane_f32) neg_inv_o.y
-    neg_inv_o_z := cast(lane_f32) neg_inv_o.z
+    t1x := fused_mul_add(min.x, inv_d.x, neg_inv_o.x)
+    t2x := fused_mul_add(max.x, inv_d.x, neg_inv_o.x)
     
-    t1x := fused_mul_add(min.x, inv_d_x, neg_inv_o_x)
-    t2x := fused_mul_add(max.x, inv_d_x, neg_inv_o_x)
+    t1y := fused_mul_add(min.y, inv_d.y, neg_inv_o.y)
+    t2y := fused_mul_add(max.y, inv_d.y, neg_inv_o.y)
     
-    t1y := fused_mul_add(min.y, inv_d_y, neg_inv_o_y)
-    t2y := fused_mul_add(max.y, inv_d_y, neg_inv_o_y)
-    
-    t1z := fused_mul_add(min.z, inv_d_z, neg_inv_o_z)
-    t2z := fused_mul_add(max.z, inv_d_z, neg_inv_o_z)
+    t1z := fused_mul_add(min.z, inv_d.z, neg_inv_o.z)
+    t2z := fused_mul_add(max.z, inv_d.z, neg_inv_o.z)
     
     tin := lane_v3 { minimum(t1x, t2x), minimum(t1y, t2y), minimum(t1z, t2z) }
     tax := lane_v3 { maximum(t1x, t2x), maximum(t1y, t2y), maximum(t1z, t2z) }
@@ -406,6 +419,13 @@ hit_rectangle :: proc (min, max: lane_v3, neg_inv_o, inv_d: v3, t_min_init, t_ma
     tmax := minimum(minimum(t_max_init, tax.x), minimum(tax.y, tax.z))
     
     result := less_equal(tmin, tmax)
+    return result
+}
+
+hit_rectangle_s :: proc (min, max: lane_v3, neg_inv_o, inv_d: v3, t_min_init, t_max_init: lane_f32) -> lane_u32 {
+    spall_proc()
+    
+    result := hit_rectangle(min, max, vec_cast(lane_f32, neg_inv_o), vec_cast(lane_f32, inv_d), t_min_init, t_max_init)
     return result
 }
 
