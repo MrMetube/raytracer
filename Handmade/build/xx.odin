@@ -103,8 +103,8 @@ begin_build :: proc (cmd: ^Cmd, package_directory: string, output_name: string, 
     return result
 }
 
-build_meander :: proc (debug := "-debug", Cast := "-vet-cast", shadowing := "-vet-shadowing") {
-    append(cmd, debug, Cast, shadowing)
+build_meander :: proc (debug := "-debug", Cast := "-vet-cast", shadowing := "-vet-shadowing", linker := "-linker:radlink") {
+    append(cmd, debug, Cast, shadowing, linker)
 }
 
 build_optimizations :: proc (optimize: bool, optimized := "-o:speed", unoptimized := "-o:none") {

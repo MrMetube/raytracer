@@ -1,5 +1,7 @@
 # Handmade Ray Tracer
-3 cpu ray tracers. The first in java was part of a voluntary uni project. The other two were made in my free time.
+A CPU ray-tracer, which tries to be as fast as possible using SIMD (Single Instruction Multiple Data) and multi-threading.
+Renders 3D models and uses a BVH (bounding volume hierarchy) to accelarate this.
+BRDFs (Bidirectional Reflectance Distribution Function) are used for reflections, which are based on measurements of real materials.
 
 ## Screenshots
 (anti-chronological order)
