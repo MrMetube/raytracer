@@ -312,9 +312,9 @@ main :: proc () {
                     if display_slider(layout, 100, &model.translation.y, -100, 100, "translate y", flags={.relative}) do fast_render.requested = true
                     if display_slider(layout, 100, &model.translation.z, -100, 100, "translate z", flags={.relative}) do fast_render.requested = true
                     
-                    if display_slider(layout, 100, &model.triangles[0].material, 1, cast(u32) len(world.materials)-1, "material %v", model.triangles[0].material) {
+                    if display_slider(layout, 100, &model.material, 1, cast(u32) len(world.materials)-1, "material %v", model.material) {
                         fast_render.requested = true
-                        for &triangle in model.triangles do triangle.material = model.triangles[0].material
+                        for &triangle in model.triangles do triangle.material = model.material
                     }
                 }
             }

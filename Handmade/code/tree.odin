@@ -47,7 +47,7 @@ Split_Node :: struct {
 
 // @note(viktor): this is not idempotic, as the values are reordered.
 // A second build may encounter values in a different order compared to the first build.
-tree_build :: proc (tree: ^[] Tree_Node, triangles: [dynamic] Triangle) {
+tree_build :: proc (tree: ^[] Tree_Node, triangles: [] Triangle) {
     allocator := context.temp_allocator
     
     // @note(viktor): 

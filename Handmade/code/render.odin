@@ -94,9 +94,10 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     render.models = make([] Model, len(world.models), render.allocator)
     for model, index in world.models {
         render_model: Model
+        render_model = model
         render_model.triangles = make_shallow_copy(model.triangles, render.allocator)
         render_model.tree      = make_shallow_copy(model.tree,      render.allocator)
-        render_model.translation = model.translation
+        
         render.models[index] = render_model
     }
     

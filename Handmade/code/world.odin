@@ -10,9 +10,10 @@ World :: struct {
 }
 
 Model :: struct {
-    triangles: [dynamic] Triangle,
+    triangles: [] Triangle,
     tree:      [] Tree_Node,
     translation: v3,
+    material:    u32,
 }
 
 ////////////////////////////////////////////////
@@ -55,131 +56,160 @@ teapot_scene :: proc (world: ^World) {
     // @todo(viktor): fixed Buffer of models and return indices
     reserve(&world.models, 128)
     
+    triangles := make([dynamic] Triangle, context.temp_allocator)
+    
     // @cleanup 
     { // light
+        clear(&triangles)
         plane := world_create_model(world)
-        
-        v0 := v3 {-1, -1, 0}
-        v1 := v3 {-1,  1, 0}
-        v2 := v3 { 1,  1, 0}
-        v3 := v3 { 1, -1, 0}
-        
-        append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 3})
-        append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 3})
-        
+        plane.material = 3
         plane.translation = {0,0,4}
-        tree_build(&plane.tree, plane.triangles)
-    }
-    { // ground
-        plane := world_create_model(world)
         
         v0 := v3 {-1, -1, 0}
         v1 := v3 {-1,  1, 0}
         v2 := v3 { 1,  1, 0}
         v3 := v3 { 1, -1, 0}
         
-        append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 1})
-        append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 1})
+        append(&triangles, Triangle{ a = v0, b = v2, c = v3, material = plane.material})
+        append(&triangles, Triangle{ a = v0, b = v1, c = v2, material = plane.material})
         
-        for &t in plane.triangles {
+        tree_build(&plane.tree, triangles[:])
+        plane.triangles = make_shallow_copy(triangles[:], context.allocator) 
+    }
+    
+    { // ground
+        clear(&triangles)
+        plane := world_create_model(world)
+        plane.material = 1
+        
+        v0 := v3 {-1, -1, 0}
+        v1 := v3 {-1,  1, 0}
+        v2 := v3 { 1,  1, 0}
+        v3 := v3 { 1, -1, 0}
+        
+        append(&triangles, Triangle{ a = v0, b = v2, c = v3, material = plane.material})
+        append(&triangles, Triangle{ a = v0, b = v1, c = v2, material = plane.material})
+        
+        for &t in triangles {
             t.a.xy *= 500
             t.b.xy *= 500
             t.c.xy *= 500
         }
         
-        tree_build(&plane.tree, plane.triangles)
+        tree_build(&plane.tree, triangles[:])
+        plane.triangles = make_shallow_copy(triangles[:], context.allocator)
     }
+    
     if false {
         { // top
+            clear(&triangles)
             plane := world_create_model(world)
+            plane.material = 6
+            plane.translation = {0,0,4}
             
             v0 := v3 {-1, -1, 0}
             v1 := v3 {-1,  1, 0}
             v2 := v3 { 1,  1, 0}
             v3 := v3 { 1, -1, 0}
             
-            append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 6})
-            append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 6})
+            append(&triangles, Triangle{ a = v0, b = v2, c = v3, material = plane.material})
+            append(&triangles, Triangle{ a = v0, b = v1, c = v2, material = plane.material})
             
-            plane.translation = {0,0,4}
-            for &t in plane.triangles {
+            for &t in triangles {
                 t.a.xy *= 4
                 t.b.xy *= 4
                 t.c.xy *= 4
             }
             
-            tree_build(&plane.tree, plane.triangles)
+            tree_build(&plane.tree, triangles[:])
+            plane.triangles = make_shallow_copy(triangles[:], context.allocator)
         }
+        
         { // back
+            clear(&triangles)
             plane := world_create_model(world)
+            plane.material = 6
+            plane.translation = {0,4,0}
             
             v0 := v3 {-1, 0, -1}
             v1 := v3 {-1, 0,  1}
             v2 := v3 { 1, 0,  1}
             v3 := v3 { 1, 0, -1}
             
-            append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 6})
-            append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 6})
+            append(&triangles, Triangle{ a = v0, b = v2, c = v3, material = plane.material})
+            append(&triangles, Triangle{ a = v0, b = v1, c = v2, material = plane.material})
             
-            plane.translation = {0,4,0}
-            for &t in plane.triangles {
+            for &t in triangles {
                 t.a.xz *= 4
                 t.b.xz *= 4
                 t.c.xz *= 4
             }
             
-            tree_build(&plane.tree, plane.triangles)
+            tree_build(&plane.tree, triangles[:])
+            plane.triangles = make_shallow_copy(triangles[:], context.allocator)
         }
+        
         { // right
+            clear(&triangles)
             plane := world_create_model(world)
-            
-            v0 := v3 {0, -1, -1}
-            v1 := v3 {0, -1,  1}
-            v2 := v3 {0,  1,  1}
-            v3 := v3 {0,  1, -1}
-            
-            append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 5})
-            append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 5})
-            
+            plane.material = 5
             plane.translation = {4,0,0}
-            for &t in plane.triangles {
-                t.a.yz *= 4
-                t.b.yz *= 4
-                t.c.yz *= 4
-            }
-            
-            tree_build(&plane.tree, plane.triangles)
-        }
-        { // left
-            plane := world_create_model(world)
             
             v0 := v3 {0, -1, -1}
             v1 := v3 {0, -1,  1}
             v2 := v3 {0,  1,  1}
             v3 := v3 {0,  1, -1}
             
-            append(&plane.triangles, Triangle{ a = v0, b = v2, c = v3, material = 4})
-            append(&plane.triangles, Triangle{ a = v0, b = v1, c = v2, material = 4})
+            append(&triangles, Triangle{ a = v0, b = v2, c = v3, material = plane.material})
+            append(&triangles, Triangle{ a = v0, b = v1, c = v2, material = plane.material})
             
-            plane.translation = {-4,0,0}
-            for &t in plane.triangles {
+            for &t in triangles {
                 t.a.yz *= 4
                 t.b.yz *= 4
                 t.c.yz *= 4
             }
             
-            tree_build(&plane.tree, plane.triangles)
+            tree_build(&plane.tree, triangles[:])
+            plane.triangles = make_shallow_copy(triangles[:], context.allocator)
+        }
+        
+        { // left
+            clear(&triangles)
+            plane := world_create_model(world)
+            plane.material = 4
+            plane.translation = {-4,0,0}
+            
+            v0 := v3 {0, -1, -1}
+            v1 := v3 {0, -1,  1}
+            v2 := v3 {0,  1,  1}
+            v3 := v3 {0,  1, -1}
+            
+            append(&triangles, Triangle{ a = v0, b = v2, c = v3, material = plane.material})
+            append(&triangles, Triangle{ a = v0, b = v1, c = v2, material = plane.material})
+            
+            for &t in triangles {
+                t.a.yz *= 4
+                t.b.yz *= 4
+                t.c.yz *= 4
+            }
+            
+            tree_build(&plane.tree, triangles[:])
+            plane.triangles = make_shallow_copy(triangles[:], context.allocator)
         }
     }
     
-    
-    
-    // 0 =   3488 triangles
-    // 1 =  19480 triangles, 5.5x 0
-    // 2 = 145620 triangles, 7.5x 1
-    
-    teapot := world_create_model(world)
-    load_teapot(&teapot.triangles, 0, 2)
-    
-    tree_build(&teapot.tree, teapot.triangles)
+    {
+        clear(&triangles)
+        // 0 =   3488 triangles
+        // 1 =  19480 triangles, 5.5x 0
+        // 2 = 145620 triangles, 7.5x 1
+        
+        teapot := world_create_model(world)
+        teapot.material = 2
+        
+        load_teapot(&triangles, 0, teapot.material)
+        
+        tree_build(&teapot.tree, triangles[:])
+        teapot.triangles = make_shallow_copy(triangles[:], context.allocator)
+    }
 }
