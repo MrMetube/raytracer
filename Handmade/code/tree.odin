@@ -5,11 +5,15 @@ import "core:slice"
 Node_Index  :: distinct u32
 Value_Index :: distinct u32
 
+lane_Node_Index  :: #simd [LaneWidth] Node_Index
+
 // @important 
 // Currently the subnodes always start on even indices.
 // That means that they are pairwise on the same cacheline.
 // This is because Nil and Root are appended as a pair and then
 // all subnodes are always appended as pairs.
+
+Tree :: [] Tree_Node
 
 Tree_Node :: struct #align(32) {
     bounds:      Rectangle3,
@@ -20,8 +24,7 @@ Tree_Node :: struct #align(32) {
     },
 }
 
-Nil_Index  :: 0
-Root_Index :: 1
+Root_Index  :: 0
 
 Subnodes_Per_Node :: 8
 
@@ -58,13 +61,10 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [] Triangle) {
     // -> N leaves + branches <= 2N nodes
     delete(tree^)
     make_by_pointer(tree, len(triangles)*2)
-    next_free_tree_index: Node_Index
-    
-    next_free_tree_index += 1 // nil
-    next_free_tree_index += 1 // root
     if len(triangles) == 0 do return
     
     ////////////////////////////////////////////////
+    next_free_tree_index := cast(Node_Index) 1 // root
     
     triangle_centers := make([] v3, len(triangles), allocator)
     triangle_bounds  := make([] Rectangle3, len(triangles), allocator)
@@ -113,7 +113,7 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [] Triangle) {
         node := &tree[it.index]
         
         all_better := false
-        subs: [8] Split_Node
+        subs: [Subnodes_Per_Node] Split_Node
         split: if len(it.indices) > LaneWidth {
             s0, s1 := split_node(tree^, it.cost, it.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
             
@@ -305,7 +305,7 @@ tree_print :: proc (nodes: [] $T, level: int = 0, it_index: Node_Index = Root_In
     for _ in 0..<level * 4 do print(" ")
     print("bounds %v\n", it.bounds)
     if it.value_count == 0 {
-        if it.first.subnode != Nil_Index {
+        if it.first.subnode != Root_Index {
             for _ in 0..<level * 4 do print(" ")
             print("subnodes:\n")
             for subnode in it.first.subnode ..< it.first.subnode + Subnodes_Per_Node {
@@ -339,7 +339,7 @@ inspect :: proc (nodes: [] Tree_Node, it_index: Node_Index = Root_Index, depth :
     result.values_per_node = stat_init(value_count)
     result.node_count = 1
     
-    if it.value_count == 0 && it.first.subnode != Nil_Index {
+    if it.value_count == 0 && it.first.subnode != Root_Index {
         for sub_index in it.first.subnode..< it.first.subnode + Subnodes_Per_Node {
             sub_info := inspect(nodes, sub_index, depth + 1)
             

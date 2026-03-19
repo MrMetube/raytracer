@@ -32,8 +32,6 @@ Hit_Info :: struct {
     triangle:  u32,
 }
 
-lane_Node_Index :: #simd [LaneWidth] Node_Index
-
 ////////////////////////////////////////////////
 
 Debug_View := 0
@@ -282,7 +280,7 @@ cast_rays :: proc (stats: ^Render_Stats, models: [] Model, normals: [] [] Triang
 
 ////////////////////////////////////////////////
 
-traverse_tree_and_test_triangles :: proc (triangles: [] Ray_Triangle, tree: [] Tree_Node, init_ray_o, init_ray_d: lane_v3, min_t: lane_f32, hits: ^[LaneWidth] Hit_Info) -> (lane_u32, Test_Info) {
+traverse_tree_and_test_triangles :: proc (triangles: [] Ray_Triangle, tree: Tree, init_ray_o, init_ray_d: lane_v3, min_t: lane_f32, hits: ^[LaneWidth] Hit_Info) -> (lane_u32, Test_Info) {
     spall_proc()
     
     Check :: false
