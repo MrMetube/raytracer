@@ -62,7 +62,7 @@ main :: proc () {
     quality_render: Render
     fast_render:    Render
     init_render(&quality_render, 64, 16, window_size, 2, core_count, "quality render")
-    init_render(&fast_render,     8,  4, window_size, 6, core_count, "fast render")
+    init_render(&fast_render,    32,  4, window_size, 6, core_count, "fast render")
     defer {
         quality_render.canceled = true
         fast_render.canceled    = true

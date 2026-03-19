@@ -2,11 +2,14 @@
 #+no-instrumentation
 package main
 
+SpallDisabled :: true
+
+////////////////////////////////////////////////
+
 import "core:prof/spall"
 import "core:time"
 import "core:fmt"
 
-SpallDisabled :: true
 @(private="file") SpallBufferSize :: 2 * Gigabyte
 
 @(private="file") spall_ctx: spall.Context

@@ -48,6 +48,7 @@ Triangle_Normals :: struct {
 }
 
 Model :: struct {
+    // @note(viktor): triangles is used outside the render, ray_triangles is used inside
     triangles:     [] Triangle,
     ray_triangles: [] Ray_Triangle,
     tree:          [] Tree_Node,
