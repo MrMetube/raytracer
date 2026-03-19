@@ -3,25 +3,7 @@ package main
 import "core:os"
 import "core:math"
 
-Material :: struct {
-    emit:    v3,
-    reflect: v3,
-    emit_factor: f32,
-    scatter: f32, // 0 = mirror like, 1 = chalk like
-    
-    brdf: BrdfTable,
-}
-
-BrdfTable :: struct {
-    count: [3] u32,
-    // @note(viktor): a view into the World.all_brdf_values array
-    values_index: u32,
-    values_count: u32,
-}
-
-////////////////////////////////////////////////
-
-load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, all_brdf_values: ^[dynamic] v3) {
+load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, brdf_data: ^[dynamic] v3) {
     invalid := false
     data: [] u8
     if filename == "" {
@@ -35,7 +17,7 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, all_brdf_values: ^[d
         }
     }
     
-    dest.values_index = cast(u32) len(all_brdf_values)
+    dest.values_index = cast(u32) len(brdf_data)
     if !invalid {
         dest.count, data = (cast(^uv3) &data[0])^, data[size_of(uv3):]
         
@@ -49,7 +31,7 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, all_brdf_values: ^[d
         dest.values_count = total_count
         
         start := dest.values_index
-        reserve(all_brdf_values, start + total_count)
+        reserve(brdf_data, start + total_count)
         
         for i in 0..<total_count {
             result: v3
@@ -68,22 +50,24 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, all_brdf_values: ^[d
             }
             result *= BRDF_Scale
             
-            append(all_brdf_values, result)
+            append(brdf_data, result)
         }
         
-        assert(len(all_brdf_values) == auto_cast(start + total_count))
-        assert(len(all_brdf_values) == cap(all_brdf_values))
+        assert(len(brdf_data) == auto_cast(start + total_count))
+        assert(len(brdf_data) == cap(brdf_data))
     } else {
         dest.values_count = 1
         
         dest.count = 1
-        append(all_brdf_values, v3{1,1,1})
+        append(brdf_data, v3{1,1,1})
     }
 }
 
 ////////////////////////////////////////////////
 
-brdf_lookup :: proc (all_brdf_values: Lane_Slice(v3), materials: Lane_Slice(Material), index: lane_u32, view_direction, normal, tangent, binormal, light_direction: lane_v3) -> lane_v3 {
+brdf_lookup :: proc (brdf_data: [] v3, material: Lane(Material), view_direction, normal, tangent, binormal, light_direction: lane_v3) -> lane_v3 {
+    brdf_data := to_lane(brdf_data)
+    
     half_vector := normalize_or_zero(.5 * (view_direction + light_direction))
     
     lw := lane_v3 {
@@ -132,7 +116,7 @@ brdf_lookup :: proc (all_brdf_values: Lane_Slice(v3), materials: Lane_Slice(Mate
         return result
     }
     
-    brdf  := lane_member(lane_index(materials, index), "brdf", BrdfTable)
+    brdf  := lane_member(material, "brdf", BrdfTable)
     count := lane_gather_v(lane_member(brdf, "count", [3] u32))
     
     i0 := round_positive(lane_u32, f0 * cast(lane_f32) (count[0]-1))
@@ -140,13 +124,13 @@ brdf_lookup :: proc (all_brdf_values: Lane_Slice(v3), materials: Lane_Slice(Mate
     i2 := round_positive(lane_u32, f2 * cast(lane_f32) (count[2]-1))
     
     indices := (i2) + (i1 * count[2]) + (i0 * count[2] * count[1])
-    // @todo(viktor): is this still relevant with the Lane ensuring some amount of type safety?
-    // @todo(viktor): @important Before indices were interpreted as f32(stride=4), when correcting to v3(stride=12) the color of all surfaces is almost black. is this because i misused the brdfs or picked bad brdfs?
-    indices = floor(lane_u32, cast(lane_f32) indices / 3)
+    // @note(viktor): index of [] f32 -> index of [] v3
+    indices = floor(lane_u32, cast(lane_f32) indices / 3) 
     
+    // @cleanup
     values_index := lane_gather(lane_member(brdf, "values_index", u32))
     values_count := lane_gather(lane_member(brdf, "values_count", u32))
-    values := lane_slice(all_brdf_values, values_index, values_index+values_count)
+    values := lane_slice(brdf_data, values_index, values_index+values_count)
     
     value  := lane_index(values, indices)
     result := lane_gather_v(value)

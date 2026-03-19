@@ -1,19 +1,12 @@
 package main
 
-// @volatile also update the render's world copying
 World :: struct {
     models: [dynamic] Model,
     
     materials: [dynamic] Material,
+    brdf_data: [dynamic] v3,
+    
     material_names: [] string,
-    all_brdf_values: [dynamic] v3,
-}
-
-Model :: struct {
-    triangles: [] Triangle,
-    tree:      [] Tree_Node,
-    translation: v3,
-    material:    u32,
 }
 
 ////////////////////////////////////////////////
@@ -39,7 +32,7 @@ world_init :: proc (world: ^World) {
 }
 
 world_load_brdf :: proc (world: ^World, material_index: u32, name: string) {
-    load_brdf_merl(tprint("./BRDFDatabase/brdfs/%v.binary", name), &world.materials[material_index].brdf, &world.all_brdf_values)
+    load_brdf_merl(tprint("./BRDFDatabase/brdfs/%v.binary", name), &world.materials[material_index].brdf, &world.brdf_data)
     world.material_names[material_index] = name
 }
 
@@ -70,8 +63,8 @@ teapot_scene :: proc (world: ^World) {
         v2 := v3 { 1,  1, 0}
         v3 := v3 { 1, -1, 0}
         
-        append(&triangles, Triangle{ a = v0, b = v2, c = v3, material = plane.material})
-        append(&triangles, Triangle{ a = v0, b = v1, c = v2, material = plane.material})
+        append(&triangles, Triangle{ a = v0, b = v2, c = v3})
+        append(&triangles, Triangle{ a = v0, b = v1, c = v2})
         
         tree_build(&plane.tree, triangles[:])
         plane.triangles = make_shallow_copy(triangles[:], context.allocator) 
@@ -87,8 +80,8 @@ teapot_scene :: proc (world: ^World) {
         v2 := v3 { 1,  1, 0}
         v3 := v3 { 1, -1, 0}
         
-        append(&triangles, Triangle{ a = v0, b = v2, c = v3, material = plane.material})
-        append(&triangles, Triangle{ a = v0, b = v1, c = v2, material = plane.material})
+        append(&triangles, Triangle{ a = v0, b = v2, c = v3})
+        append(&triangles, Triangle{ a = v0, b = v1, c = v2})
         
         for &t in triangles {
             t.a.xy *= 500
@@ -112,8 +105,8 @@ teapot_scene :: proc (world: ^World) {
             v2 := v3 { 1,  1, 0}
             v3 := v3 { 1, -1, 0}
             
-            append(&triangles, Triangle{ a = v0, b = v2, c = v3, material = plane.material})
-            append(&triangles, Triangle{ a = v0, b = v1, c = v2, material = plane.material})
+            append(&triangles, Triangle{ a = v0, b = v2, c = v3})
+            append(&triangles, Triangle{ a = v0, b = v1, c = v2})
             
             for &t in triangles {
                 t.a.xy *= 4
@@ -136,8 +129,8 @@ teapot_scene :: proc (world: ^World) {
             v2 := v3 { 1, 0,  1}
             v3 := v3 { 1, 0, -1}
             
-            append(&triangles, Triangle{ a = v0, b = v2, c = v3, material = plane.material})
-            append(&triangles, Triangle{ a = v0, b = v1, c = v2, material = plane.material})
+            append(&triangles, Triangle{ a = v0, b = v2, c = v3})
+            append(&triangles, Triangle{ a = v0, b = v1, c = v2})
             
             for &t in triangles {
                 t.a.xz *= 4
@@ -160,8 +153,8 @@ teapot_scene :: proc (world: ^World) {
             v2 := v3 {0,  1,  1}
             v3 := v3 {0,  1, -1}
             
-            append(&triangles, Triangle{ a = v0, b = v2, c = v3, material = plane.material})
-            append(&triangles, Triangle{ a = v0, b = v1, c = v2, material = plane.material})
+            append(&triangles, Triangle{ a = v0, b = v2, c = v3})
+            append(&triangles, Triangle{ a = v0, b = v1, c = v2})
             
             for &t in triangles {
                 t.a.yz *= 4
@@ -184,8 +177,8 @@ teapot_scene :: proc (world: ^World) {
             v2 := v3 {0,  1,  1}
             v3 := v3 {0,  1, -1}
             
-            append(&triangles, Triangle{ a = v0, b = v2, c = v3, material = plane.material})
-            append(&triangles, Triangle{ a = v0, b = v1, c = v2, material = plane.material})
+            append(&triangles, Triangle{ a = v0, b = v2, c = v3})
+            append(&triangles, Triangle{ a = v0, b = v1, c = v2})
             
             for &t in triangles {
                 t.a.yz *= 4
@@ -207,7 +200,7 @@ teapot_scene :: proc (world: ^World) {
         teapot := world_create_model(world)
         teapot.material = 2
         
-        load_teapot(&triangles, 0, teapot.material)
+        load_teapot(&triangles, 0)
         
         tree_build(&teapot.tree, triangles[:])
         teapot.triangles = make_shallow_copy(triangles[:], context.allocator)

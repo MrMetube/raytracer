@@ -11,8 +11,6 @@
 - think more about the response to a accumulated ray
     - do more than store it, get inspired by biology
 
-- Investigate the BRDF table usage (is it still using the wrong indices with the Lane typing?)
-
 - Simulate more light behaviour
     - Refraction
     - Participating media(Fog)
@@ -38,13 +36,8 @@
     - Load obj files
     - Normals, UVs
     - How to handle textures?
-    - allow moving rotating scaling with a transform
-        - multiply input by inverse transform and output by transform
+    - allow rotating scaling with a transform
     - separate entity from model, use a model index
-    - if we do obj parsing, parse once and emit a flat buffer of data
-        - header + data, 
-        - versioning, migration
-        - cache invalidation
 
 - Code minimization
     - replace random generator with math xorshiro, which seems to be a continuation of the original xor-shift

@@ -21,12 +21,7 @@ Lane_Slice :: struct ($E: typeid) {
 
 ////////////////////////////////////////////////
 
-to_lane :: proc { to_lane_pointer, to_lane_slice, to_lane_array }
-to_lane_pointer :: proc (pointer: ^$T) -> Lane(T) {
-    result: Lane(T)
-    result.p = cast(lane_umm) pointer
-    return result
-}
+to_lane :: proc { to_lane_slice, to_lane_array, to_lane_wide }
 to_lane_slice :: proc (slice: $S/ [] $T) -> Lane_Slice(T) {
     result: Lane_Slice(T)
     result.p   = cast(lane_umm) raw_data(slice)
@@ -37,6 +32,13 @@ to_lane_array :: proc (array: $S/ [dynamic ]$T) -> Lane_Slice(T) {
     result := to_lane(array[:])
     return result
 }
+to_lane_wide :: proc (array: ^[LaneWidth] $T) -> Lane(T) {
+    slice  := to_lane(array[:])
+    result := lane_index_scalar(slice, lane_offset)
+    return result
+}
+
+////////////////////////////////////////////////
 
 lane_extract :: proc (lane: Lane($T), #any_int lane_index: u32) -> ^T {
     ts := transmute([LaneWidth] ^T) lane.p
@@ -165,7 +167,7 @@ lane_scatter :: proc {
     lane_scatter_index_array,
 }
 
-lane_scatter_mask :: proc (lane: Lane($T), value: #simd [LaneWidth] T, mask: lane_u32 = lane_true) {
+lane_scatter_mask :: proc (lane: Lane($T), value: #simd [LaneWidth] T, mask := lane_true) {
     simd.scatter(cast(lane_pmm) lane.p, value, mask)
 }
 lane_scatter_index :: proc (lane: Lane_Slice($T), index: lane_u32, value: #simd [LaneWidth] T, mask: lane_u32) {

@@ -31,7 +31,7 @@ View_Magnitude :: struct {
     precision: int,
 }
 
-view_magnitude :: proc (#any_int value: u64, #any_int precision: int = 0) -> View_Magnitude {
+view_magnitude :: proc (#any_int value: u64, #any_int precision: int = 1) -> View_Magnitude {
     result := View_Magnitude {
         value     = value,
         precision = precision,

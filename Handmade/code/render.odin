@@ -1,3 +1,4 @@
+#+vet explicit-allocators
 package main
 
 import "core:time"
@@ -14,6 +15,13 @@ Render_Stats :: struct {
 }
 
 Render :: struct {
+    normals:   [] [] Triangle_Normals,
+    models:    [] Model,
+    materials: [] Material,
+    brdf_data: [] v3,
+    
+    ////////////////////////////////////////////////
+    
     requested: bool,
     canceled:  bool,
     active:    bool,
@@ -32,10 +40,19 @@ Render :: struct {
     
     image_size_factor: i32,
     
-    models:    [] Model,
-    materials: [] Material,
-    brdf_data: [] v3,
     stats: Render_Stats,
+}
+
+Triangle_Normals :: struct {
+    normal, tangent, binormal: v3,
+}
+
+Model :: struct {
+    triangles:     [] Triangle,
+    ray_triangles: [] Ray_Triangle,
+    tree:          [] Tree_Node,
+    translation: v3,
+    material:    u32,
 }
 
 Color :: [4] u8
@@ -51,6 +68,22 @@ Camera :: struct {
     y: v3,
     z: v3,
     p: v3,
+}
+
+Material :: struct {
+    emit:    v3,
+    reflect: v3,
+    emit_factor: f32,
+    scatter: f32, // 0 = mirror like, 1 = chalk like
+    
+    brdf: BrdfTable,
+}
+
+BrdfTable :: struct {
+    count: [3] u32,
+    // @note(viktor): a view into the render.brdf_data array
+    values_index: u32,
+    values_count: u32,
 }
 
 ////////////////////////////////////////////////
@@ -89,21 +122,39 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     
     render.stats = {}
     
-    // @todo(viktor): make a copy per thread of anything that is written to, so that they cannot "falsely share" anything
-    // @volatile
     render.models = make([] Model, len(world.models), render.allocator)
-    for model, index in world.models {
-        render_model: Model
-        render_model = model
-        render_model.triangles = make_shallow_copy(model.triangles, render.allocator)
-        render_model.tree      = make_shallow_copy(model.tree,      render.allocator)
+    render.normals = make([] [] Triangle_Normals, len(world.models), render.allocator)
+    for model, model_index in world.models {
+        render_model := &render.models[model_index]
+        render_model^ = model
         
-        render.models[index] = render_model
+        render_model.ray_triangles = make([] Ray_Triangle, len(model.triangles), render.allocator)
+        for &it, it_index in render_model.ray_triangles {
+            triangle := model.triangles[it_index]
+            it.a  = triangle.a
+            it.ab = triangle.b - triangle.a
+            it.ac = triangle.c - triangle.a
+        }
+        render_model.tree      = make_shallow_copy(model.tree, render.allocator)
+        
+        render_normals := &render.normals[model_index]
+        render_normals^ = make([] Triangle_Normals, len(model.triangles), render.allocator)
+        for &it, it_index in render_normals {
+            triangle := model.triangles[it_index]
+            // @todo(viktor): interpolate the vertex normals
+            // @note(viktor): Assuming counter-clockwise winding order
+            ab := triangle.b - triangle.a
+            ac := triangle.c - triangle.a
+            it.normal   = normalize_or_zero(cross(ab, ac))
+            it.tangent  = normalize_or_zero(ab)
+            it.binormal = normalize_or_zero(cross(it.normal, it.tangent))
+        }
     }
     
-    render.brdf_data = world.all_brdf_values[:]
-    render.materials = make_shallow_copy(world.materials, render.allocator)[:]
+    render.brdf_data = world.brdf_data[:]
+    render.materials = make_shallow_copy(world.materials[:], render.allocator)
     
+    // @todo(viktor): make a copy per thread of the image data, so that it cannot be "false shared"
     zero_slice(render.image.data)
     
     tile_size := cast(v2i) max(render.image.width, render.image.height) / cast(i32) core_count
@@ -125,18 +176,13 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     for row in 0..<tile_rows {
         for col in 0..<tile_cols {
             rect := rectangle_min_dimension(tile_size * {col, row}, tile_size)
-            rect  = rectangle_intersection(rect, rectangle_min_dimension(i32(0), 0, render.image.width, render.image.height))
+            rect  = rectangle_intersection(rect, rectangle_zero_dimension(render.image.width, render.image.height))
             
             entropy := seed_random_series(1842098778 + row * 984612097 + col * 237711 + cast(i32) work_index)
             
             work := &works[work_index]
             work_index += 1
-            work ^= { 
-                render, 
-                camera, 
-                rect, 
-                entropy, 
-            }
+            work ^= { render, camera, rect, entropy }
             
             enqueue_work_or_do_immediatly(&render.queue, proc(work: ^Work) {
                 render_tile(work.render, work.camera, work.rect, &work.entropy)
@@ -167,24 +213,26 @@ print_render_results :: proc (stats: ^Render_Stats, start, end: time.Time) {
     
     total_lanes: u32
     wasted_lanes: u32
-    for e, i in stats.empty_lanes {
-        total_lanes += e
-        wasted_lanes += e * cast(u32) i
+    for count, lanes in stats.empty_lanes {
+        total_lanes  += count * LaneWidth
+        wasted_lanes += count * cast(u32) lanes
     }
     
     
-    total := stats.triangles + stats.rectangles
+    total_tests := stats.triangles + stats.rectangles
     
     print("Hit tests:\n")
-    print("  triangles  = %v (%v)\n", view_magnitude(stats.triangles),  view_percentage(stats.triangles, total))
-    print("  rectangles = %v (%v)\n", view_magnitude(stats.rectangles), view_percentage(stats.rectangles, total))
+    print("  total tests = %v\n",      view_magnitude(total_tests))
+    print("  triangles   = %v (%v)\n", view_magnitude(stats.triangles),  view_percentage(stats.triangles, total_tests))
+    print("  rectangles  = %v (%v)\n", view_magnitude(stats.rectangles), view_percentage(stats.rectangles, total_tests))
     print("  empty lanes: [")
     for e, i in stats.empty_lanes {
         if i > 0 do print(", ")
         print("%v = %v", i, view_percentage(e, total_lanes))
     }
     print("]\n")
-    print("  wasted lanes = %v %v\n", view_magnitude(wasted_lanes), view_percentage(wasted_lanes, (total_lanes * LaneWidth)))
+    print("  total  lanes = %v\n",    view_magnitude(total_lanes))
+    print("  wasted lanes = %v %v\n", view_magnitude(wasted_lanes), view_percentage(wasted_lanes, total_lanes))
     
     print("\n")
 }

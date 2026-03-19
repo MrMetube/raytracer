@@ -6,7 +6,7 @@ import "core:prof/spall"
 import "core:time"
 import "core:fmt"
 
-SpallDisabled   :: true
+SpallDisabled :: true
 @(private="file") SpallBufferSize :: 2 * Gigabyte
 
 @(private="file") spall_ctx: spall.Context

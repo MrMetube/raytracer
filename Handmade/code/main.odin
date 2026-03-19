@@ -314,7 +314,6 @@ main :: proc () {
                     
                     if display_slider(layout, 100, &model.material, 1, cast(u32) len(world.materials)-1, "material %v", model.material) {
                         fast_render.requested = true
-                        for &triangle in model.triangles do triangle.material = model.material
                     }
                 }
             }

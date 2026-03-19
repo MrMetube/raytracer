@@ -669,11 +669,14 @@ columns_3x3 :: proc (x, y, z: v3) -> (result: m4) {
 // Rectangle operations
 
 rectangle_min_dimension         :: proc { rectangle_min_dimension_2, rectangle_min_dimension_v }
-rectangle_min_dimension_2       :: proc(x: $Element, y, w, h: Element) -> Rectangle([2] Element) { return rectangle_min_dimension_v([2]Element{x, y}, [2]Element{w, h}) }
-rectangle_min_dimension_v       :: proc(min: $T, dimension: T)         -> Rectangle(T)           { return { min,                      min + dimension          } }
-rectangle_min_max               :: proc(min: $T, max: T)               -> Rectangle(T)           { return { min,                      max                      } }
-rectangle_center_dimension      :: proc(center: $T, dimension: T)      -> Rectangle(T)           { return { center - (dimension / 2), center + (dimension / 2) } }
-rectangle_center_half_dimension :: proc(center: $T, half_dimension: T) -> Rectangle(T)           { return { center - half_dimension,  center + half_dimension  } }
+rectangle_zero_dimension        :: proc { rectangle_zero_dimension_2, rectangle_zero_dimension_v }
+rectangle_min_dimension_2       :: proc (x: $Element, y, w, h: Element) -> Rectangle([2] Element) { return rectangle_min_dimension_v({x, y}, {w, h})              }
+rectangle_min_dimension_v       :: proc (min: $T, dimension: T)         -> Rectangle(T)           { return { min,                      min + dimension          } }
+rectangle_zero_dimension_2      :: proc (w: $Element, h: Element)       -> Rectangle([2] Element) { return rectangle_zero_dimension_v([2] Element{w, h})          }
+rectangle_zero_dimension_v      :: proc (dimension: $T)                 -> Rectangle(T)           { return { 0,                        dimension                } }
+rectangle_min_max               :: proc (min: $T, max: T)               -> Rectangle(T)           { return { min,                      max                      } }
+rectangle_center_dimension      :: proc (center: $T, dimension: T)      -> Rectangle(T)           { return { center - (dimension / 2), center + (dimension / 2) } }
+rectangle_center_half_dimension :: proc (center: $T, half_dimension: T) -> Rectangle(T)           { return { center - half_dimension,  center + half_dimension  } }
 
 rectangle_inverted_infinity :: proc($R: typeid) -> (result: R) {
     T :: intrinsics.type_field_type(R, "min")

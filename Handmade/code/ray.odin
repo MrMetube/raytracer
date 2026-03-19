@@ -1,10 +1,16 @@
 package main
 
+import "base:intrinsics"
+import "core:simd"
+
 Triangle :: struct {
     a: v3,
     b: v3,
     c: v3,
-    material: u32,
+}
+
+Ray_Triangle :: struct {
+    a, ab, ac: v3,
 }
 
 Cast_Result :: struct {
@@ -21,23 +27,9 @@ Test_Info :: struct {
 }
 
 Hit_Info :: struct {
-    closest_t: lane_f32,
-    did_hit:   lane_u32,
-    material:  lane_u32,
-    next_o:    lane_v3,
-    normal:    lane_v3,
-    tangent:   lane_v3,
-    binormal:  lane_v3,
-}
-
-Hit_Info_Lane :: struct {
     closest_t: f32,
     did_hit:   u32,
-    material:  u32,
-    next_o:    v3,
-    normal:    v3,
-    tangent:   v3,
-    binormal:  v3,
+    triangle:  u32,
 }
 
 lane_Node_Index :: #simd [LaneWidth] Node_Index
@@ -85,7 +77,7 @@ render_tile :: proc(render: ^Render, camera: Camera, rect: Rectangle2i, entropy:
             film_x := -1 + 2 * cast(f32) px / image_size.x
             film_p := vec_cast(lane_f32, film_x, film_y)
             
-            cast_result := cast_rays(render_stats, models, materials, brdf_data, film_p, entropy, pixel_size, half_film_size, film_center, camera, rays_per_pixel, max_bounce_count)
+            cast_result := cast_rays(render_stats, models, render.normals, materials, brdf_data, film_p, entropy, pixel_size, half_film_size, film_center, camera, rays_per_pixel, max_bounce_count)
             
             when Collect_Stats {
                 total.triangles   += cast_result.triangles
@@ -132,7 +124,7 @@ render_tile :: proc(render: ^Render, camera: Camera, rect: Rectangle2i, entropy:
     atomic_add(&render_stats.tiles_retired, 1)
 }
 
-cast_rays :: proc (stats: ^Render_Stats, models: [] Model, materials: [] Material, brdf_data: [] v3, init_film_p: lane_v2, entropy: ^RandomSeries,  pixel_size: lane_v2, half_film_size: lane_v2, film_center: lane_v3, camera: Camera, rays_per_pixel, max_bounce_count: u32) -> Cast_Result {
+cast_rays :: proc (stats: ^Render_Stats, models: [] Model, normals: [] [] Triangle_Normals, materials: [] Material, brdf_data: [] v3, init_film_p: lane_v2, entropy: ^RandomSeries,  pixel_size: lane_v2, half_film_size: lane_v2, film_center: lane_v3, camera: Camera, rays_per_pixel, max_bounce_count: u32) -> Cast_Result {
     spall_proc()
     final_color_lanes: lane_v3
     
@@ -147,6 +139,8 @@ cast_rays :: proc (stats: ^Render_Stats, models: [] Model, materials: [] Materia
     camera_x := vec_cast(lane_f32, camera.x)
     camera_y := vec_cast(lane_f32, camera.y)
     
+    min_t :: cast(lane_f32) 0.0001
+    
     for _ in 0..<lane_ray_count {
         spall_scope("ray sample")
         jitter := random_unilateral(entropy, lane_v2)
@@ -157,7 +151,6 @@ cast_rays :: proc (stats: ^Render_Stats, models: [] Model, materials: [] Materia
         ray_o := camera_p
         ray_d := normalize_or_zero(film_p - camera_p)
         
-        min_t       := cast(lane_f32) 0.0001
         attenuation := cast(lane_v3) 1
         lane_mask   := lane_true
         sample: lane_v3
@@ -170,98 +163,105 @@ cast_rays :: proc (stats: ^Render_Stats, models: [] Model, materials: [] Materia
             
             ////////////////////////////////////////////////
 
-            hits: [LaneWidth] Hit_Info_Lane
+            hits: [LaneWidth] Hit_Info
+            model_index: lane_u32
             
-            // @cleanup is this what to_lane([LaneWidth] T) should always just be?
-            lane_hits := lane_index(to_lane(hits[:]), lane_offset)
+            lane_hits := to_lane_wide(&hits)
             lane_scatter(lane_member(lane_hits, "closest_t", f32), cast(lane_f32) +Infinity)
             
-            for model in models {
+            for model, index in models {
                 spall_scope("hit model")
-                
-                triangles := model.triangles
-                tree      := model.tree[:]
                 
                 translation := vec_cast(lane_f32, model.translation)
                 model_ray_o := ray_o - translation
                 model_ray_d := ray_d
-                // @waste
-                t_before := lane_gather(lane_member(lane_hits, "closest_t", f32))
                 
-                tests := traverse_tree_and_test_triangles(to_lane(triangles), tree, model_ray_o, model_ray_d, min_t, &hits)
+                hit_mask, tests := traverse_tree_and_test_triangles(model.ray_triangles, model.tree, model_ray_o, model_ray_d, min_t, &hits)
+                
+                conditional_assign(hit_mask, &model_index, cast(lane_u32) index)
+                
                 when Collect_Stats {
                     result.triangles   += tests.triangles
                     result.rectangles  += tests.rectangles
                     result.empty_lanes += tests.empty_lanes
                 }
-                
-                
-                t_after := lane_gather(lane_member(lane_hits, "closest_t", f32))
-                
-                update_mask := less_than(t_after, t_before)
-                // @cleanup lane_plus_equal?
-                lane_next_o := lane_member(lane_hits, "next_o", v3)
-                next_o := lane_gather_v(lane_next_o)
-                lane_scatter_v(lane_next_o, next_o + translation, update_mask)
             }
             
             ////////////////////////////////////////////////
             // @todo(viktor): Importance Sampling
             // sort models my material emitance strength / store all materials with emitance separately
-            //   model should store a material and before render assign it to every triangle
             // besides the normal ray, also cast a "shadow ray"
             // select a random emitting model and a random triangle in that model (weighting?)
             // select a random point on that triangle and traverse this ray aswell
-            //   always keep a shadow ray besides ray_o, ray_d (make a lane_ray struct)
+            //   always keep a shadow ray besides ray_o, ray_d
             //   always trace both ray and shadow ray for each model
-            // combine contribution of ray and shadow ray(only if next_o == ~triangle pointif it reaches the light?)
+            // combine contribution of ray and shadow ray(only if next_o == ~triangle point if it reaches the light?)
             //   scale shadow ray by G = dot(normalize(-ray_d), t_normal) / length_squared(ray_d)
             //   scale by probablity-distribution-function: 1 / (P(model) * P(triangle) * P(area))
             // balance heuristic: 
             //   
+            spall_begin("ray color accumulation")
+            hit_did_hit := lane_gather(lane_member(lane_hits, "did_hit", u32))
             
-            // @waste is Hit_Info as a struct really needed anymore?
-            hit: Hit_Info
-            hit.closest_t = lane_gather(lane_member(lane_hits, "closest_t",  f32))
-            hit.did_hit   = lane_gather(lane_member(lane_hits, "did_hit",    u32))
-            hit.material  = lane_gather(lane_member(lane_hits, "material",   u32))
-            hit.next_o    = lane_gather_v(lane_member(lane_hits, "next_o",   v3))
-            hit.normal    = lane_gather_v(lane_member(lane_hits, "normal",   v3))
-            hit.tangent   = lane_gather_v(lane_member(lane_hits, "tangent",  v3))
-            hit.binormal  = lane_gather_v(lane_member(lane_hits, "binormal", v3))
+            model           := lane_index(to_lane(models), model_index)
+            material_index  := lane_gather(lane_member(model, "material", u32), hit_did_hit, cast(lane_u32) 0)
             
-            spall_scope("ray color")
-            materials := to_lane(materials)
-            brdf_data := to_lane(brdf_data)
+            materials       := to_lane(materials)
+            material        := lane_index(materials, material_index)
+            hit_emit        := lane_gather_v(lane_member(material, "emit",        v3))
+            hit_emit_factor := lane_gather(  lane_member(material, "emit_factor", f32))
+            hit_emit        *= hit_emit_factor
             
-            material        := lane_index(materials, hit.material)
-            hit_emit        := lane_gather_v(lane_member(material, "emit",        type_of(Material{}.emit)))
-            hit_reflect     := lane_gather_v(lane_member(material, "reflect",     type_of(Material{}.reflect)))
-            hit_scatter     := lane_gather(  lane_member(material, "scatter",     type_of(Material{}.scatter)))
-            hit_emit_factor := lane_gather(  lane_member(material, "emit_factor", type_of(Material{}.emit_factor)))
-            
+            ////////////////////////////////////////////////
             // only allow world.no_hit on the first time we didn't hit anything
-            hit_emit.r *= cast(lane_f32) (1 & lane_mask)
-            hit_emit.g *= cast(lane_f32) (1 & lane_mask)
-            hit_emit.b *= cast(lane_f32) (1 & lane_mask)
+            hit_emit *= cast(lane_f32) (1 & lane_mask)
             
-            // Color Accumulation
-            sample += attenuation * (hit_emit * hit_emit_factor)
+            sample += attenuation * hit_emit
             
-            lane_mask &= hit.did_hit
+            lane_mask &= hit_did_hit
+            spall_end()
             if lane_mask == lane_false do break
             
-            // Bounce
-            pure_bounce   := reflect(ray_d, hit.normal)
-            random_bounce := normalize_or_zero(hit.normal + random_bilateral(entropy, lane_v3))
+            ////////////////////////////////////////////////
+            spall_scope("ray reflection")
+            
+            // @cleanup
+            hit_normal:   lane_v3
+            hit_tangent:  lane_v3
+            hit_binormal: lane_v3
+            for lane in 0..<LaneWidth {
+                triangle_index := hits[lane].triangle
+                model_index    := extract(model_index, lane)
+                
+                it := normals[model_index][triangle_index]
+                replace_v3(&hit_normal,   lane, it.normal)
+                replace_v3(&hit_tangent,  lane, it.tangent)
+                replace_v3(&hit_binormal, lane, it.binormal)
+            }
+            
+            hit_scatter := lane_gather(lane_member(material, "scatter", f32))
+            
+            pure_bounce   := reflect(ray_d, hit_normal)
+            random_bounce := normalize_or_zero(hit_normal + random_bilateral(entropy, lane_v3))
             
             next_d := linear_blend(pure_bounce, random_bounce, hit_scatter)
             
-            reflectance := brdf_lookup(brdf_data, materials, hit.material, -ray_d, hit.normal, hit.tangent, hit.binormal, next_d)
-            reflectance *= hit_reflect
-            conditional_assign(hit.did_hit, &attenuation, attenuation * reflectance)
+            ////////////////////////////////////////////////
+            reflectance := brdf_lookup(brdf_data, material, -ray_d, hit_normal, hit_tangent, hit_binormal, next_d)
             
-            ray_o = hit.next_o
+            ////////////////////////////////////////////////
+            hit_reflect := lane_gather_v(lane_member(material, "reflect", v3))
+            hit_reflect *= reflectance
+            conditional_assign(hit_did_hit, &attenuation, attenuation * hit_reflect)
+            
+            ////////////////////////////////////////////////
+            // @note(viktor): no need to translate the ray back as we only need hit_t, 
+            // which is a vector and does not care about translations. Once we have a 
+            // full transform with scale and rotation, we only need to apply scaling 
+            // to hit_t, as rotation is handle on the forward_transform in the hit tests.
+            
+            hit_t := lane_gather(lane_member(lane_hits, "closest_t", f32))
+            ray_o = ray_o + hit_t * ray_d
             ray_d = next_d
         }
         
@@ -281,25 +281,27 @@ cast_rays :: proc (stats: ^Render_Stats, models: [] Model, materials: [] Materia
 ////////////////////////////////////////////////
 
 traverse_tree_and_test_triangles :: proc { traverse_tree_and_test_triangles_xx, traverse_tree_and_test_triangles_yy }
-traverse_tree_and_test_triangles_yy :: proc (triangles: Lane_Slice(Triangle), tree: [] Tree_Node, ray_o, ray_d: lane_v3, min_t: lane_f32, hits: ^[LaneWidth] Hit_Info_Lane) -> Test_Info {
+traverse_tree_and_test_triangles_yy :: proc (triangles: [] Ray_Triangle, tree: [] Tree_Node, ray_o, ray_d: lane_v3, min_t: lane_f32, hits: ^[LaneWidth] Hit_Info) -> (lane_u32, Test_Info) {
     spall_proc()
     
-    result: Test_Info
+    lane_hits := lane_index(to_lane(hits[:]), lane_offset)
+    closest_t := lane_gather(lane_member(lane_hits, "closest_t", f32))
+    
     hit_mask: lane_u32
+    info:     Test_Info
     {
         root := tree[Root_Index]
         min := vec_cast(lane_f32, root.bounds.min)
         max := vec_cast(lane_f32, root.bounds.max)
-        inv_d := 1 / ray_d
+        
+        inv_d     := 1 / ray_d
         neg_inv_o := -(ray_o * inv_d)
         
-        lane_hits := lane_index(to_lane(hits[:]), lane_offset)
-        closest_t := lane_gather(lane_member(lane_hits, "closest_t", f32))
-        
         hit_mask = hit_rectangle(min, max, neg_inv_o, inv_d, min_t, closest_t)
-        result.rectangles += LaneWidth
+        when Collect_Stats {
+            info.rectangles += LaneWidth
+        }
     }
-    
     
     if hit_mask != lane_false {
         for lane in 0..<LaneWidth {
@@ -311,22 +313,32 @@ traverse_tree_and_test_triangles_yy :: proc (triangles: Lane_Slice(Triangle), tr
             
             now := traverse_tree_and_test_triangles_xx(triangles, tree, ray_o, ray_d, min_t, hit)
             when Collect_Stats {
-                result.triangles   += now.triangles
-                result.rectangles  += now.rectangles
-                result.empty_lanes += now.empty_lanes
+                info.triangles   += now.triangles
+                info.rectangles  += now.rectangles
+                info.empty_lanes += now.empty_lanes
             }
         }
+        
+        t_after  := lane_gather(lane_member(lane_hits, "closest_t", f32))
+        hit_mask &= less_than(t_after, closest_t)
     }
     
-    return result
+    return hit_mask, info
 }
 
-traverse_tree_and_test_triangles_xx :: proc (triangles: Lane_Slice(Triangle), tree: [] Tree_Node, ray_o, ray_d: v3, min_t: lane_f32, hit: ^Hit_Info_Lane) -> Test_Info {
+traverse_tree_and_test_triangles_xx :: proc (triangles: [] Ray_Triangle, tree: [] Tree_Node, ray_o, ray_d: v3, min_t: lane_f32, hit: ^Hit_Info) -> Test_Info {
     spall_proc()
-
+    
+    triangles := to_lane(triangles)
     tree_lane := to_lane(tree)
     
-    inv_d := 1 / ray_d
+    // @cleanup make this offset a lane_op
+    tree_lane.p += cast(lane_umm) lane_offset * size_of(tree[0])
+    
+    ray_o := vec_cast(lane_f32, ray_o)
+    ray_d := vec_cast(lane_f32, ray_d)
+    
+    inv_d     := 1 / ray_d
     neg_inv_o := -(ray_o * inv_d)
     
     backing: [Tree_Max_Depth] Node_Index
@@ -342,9 +354,7 @@ traverse_tree_and_test_triangles_xx :: proc (triangles: Lane_Slice(Triangle), tr
         node := &tree[it_index]
         
         if node.value_count == 0 {
-            spall_scope("subnodes")
-            
-            indices  := cast(lane_u32) node.first.subnode + lane_offset
+            indices  := cast(lane_u32) node.first.subnode
             subnodes := lane_index(tree_lane, indices)
             
             bounds   := lane_member(subnodes, "bounds", Rectangle3)
@@ -362,24 +372,19 @@ traverse_tree_and_test_triangles_xx :: proc (triangles: Lane_Slice(Triangle), tr
             
             if hit_mask != lane_false {
                 // @note(viktor): the last tests showed that the sorting overhead was not worth the gains it should have provided
-                for lane_index in 0..<LaneWidth {
-                    if extract(hit_mask, lane_index) != 0 {
-                        subindex := node.first.subnode + cast(Node_Index) lane_index
-                        stack[stack_count] = subindex
-                        stack_count += 1
-                    }
-                }
+                subnodes := cast(lane_u32) node.first.subnode + lane_offset
+                // @note(viktor): this will be a loop unless AVX-512 is available, where it is one instruction with a few cycles of latency
+                simd.masked_compress_store(&stack[stack_count], subnodes, hit_mask)
+                stack_count += horizontal_add(1 & hit_mask)
             }
         } else {
-            spall_scope("values")
-            
             end := cast(u32) node.first.value + node.value_count
             for value_index := cast(u32) node.first.value; value_index < end; value_index += LaneWidth {
                 index := value_index + lane_offset
                 
                 mask     := less_than(index, cast(lane_u32) end)
                 triangle := lane_index(triangles, index)
-                hit_triangle(mask, triangle, ray_o, ray_d, min_t, hit)
+                hit_triangle(mask, triangle, ray_o, ray_d, min_t, hit, index)
             }
             
             when Collect_Stats {
@@ -399,8 +404,7 @@ traverse_tree_and_test_triangles_xx :: proc (triangles: Lane_Slice(Triangle), tr
 
 ////////////////////////////////////////////////
 
-hit_rectangle :: proc { hit_rectangle_s, hit_rectangle_v }
-hit_rectangle_v :: proc (min, max: lane_v3, neg_inv_o, inv_d: lane_v3, t_min_init, t_max_init: lane_f32) -> lane_u32 {
+hit_rectangle :: proc (min, max: lane_v3, neg_inv_o, inv_d: lane_v3, t_min_init, t_max_init: lane_f32) -> lane_u32 {
     spall_proc()
     
     t1x := fused_mul_add(min.x, inv_d.x, neg_inv_o.x)
@@ -422,33 +426,19 @@ hit_rectangle_v :: proc (min, max: lane_v3, neg_inv_o, inv_d: lane_v3, t_min_ini
     return result
 }
 
-hit_rectangle_s :: proc (min, max: lane_v3, neg_inv_o, inv_d: v3, t_min_init, t_max_init: lane_f32) -> lane_u32 {
-    spall_proc()
-    
-    result := hit_rectangle(min, max, vec_cast(lane_f32, neg_inv_o), vec_cast(lane_f32, inv_d), t_min_init, t_max_init)
-    return result
-}
-
 // @speed precompute normals at construction, or just load them from the model data
-// @speed make triangles SOA on { vertices, material, (normals) }
+// @speed make triangles SOA on { vertices, (normals) }
 // @speed measure branch mispredictions: do i also have an unpredictable branch in these u/v test, because each part is unpredictable but the whole expression should be predicted as false?
-hit_triangle :: proc (not_nil_mask: lane_u32, triangle: Lane(Triangle), ray_o, ray_d: v3, min_t: lane_f32, hit: ^Hit_Info_Lane) {
+hit_triangle :: proc (not_nil_mask: lane_u32, triangle: Lane(Ray_Triangle), ray_o, ray_d: lane_v3, min_t: lane_f32, hit: ^Hit_Info, triangle_index: lane_u32) {
     spall_proc()
-    
-    // @waste
-    ray_o := vec_cast(lane_f32, ray_o)
-    ray_d := vec_cast(lane_f32, ray_d)
     
     Check :: false
     when Check do assert(not_nil_mask != lane_false)
     
-    a := lane_gather_v(lane_member(triangle, "a", v3), not_nil_mask, lane_v3{})
-    b := lane_gather_v(lane_member(triangle, "b", v3), not_nil_mask, lane_v3{})
-    c := lane_gather_v(lane_member(triangle, "c", v3), not_nil_mask, lane_v3{})
+    a  := lane_gather_v(lane_member(triangle, "a",  v3), not_nil_mask, lane_v3{})
+    ab := lane_gather_v(lane_member(triangle, "ab", v3), not_nil_mask, lane_v3{})
+    ac := lane_gather_v(lane_member(triangle, "ac", v3), not_nil_mask, lane_v3{})
     
-    // @speed pre-compute ab and ac? but only if compute becomes the bottleneck
-    ab := b - a
-    ac := c - a
     ray_cross_ac := cross(ray_d, ac)
     determinant  := dot(ab, ray_cross_ac)
     
@@ -476,14 +466,6 @@ hit_triangle :: proc (not_nil_mask: lane_u32, triangle: Lane(Triangle), ray_o, r
     hit_mask &= v_mask
     if hit_mask == lane_false do return
     
-    // @todo(viktor): interpolate the vertex normals
-    // @note(viktor): Assuming counter-clockwise winding order
-    normal   := normalize_or_zero(cross(ab, ac))
-    tangent  := normalize_or_zero(ab)
-    binormal := normalize_or_zero(cross(normal, tangent))
-    
-    next_o := ray_o + t*ray_d
-    
     closest_lane := -1
     closest_t := +Infinity
     // @speed can this be done easier?
@@ -496,13 +478,7 @@ hit_triangle :: proc (not_nil_mask: lane_u32, triangle: Lane(Triangle), ray_o, r
     }
     when Check do assert(closest_lane != -1)
     
-    material := lane_gather(lane_member(triangle, "material", u32), not_nil_mask, lane_u32{})
-    
     hit.closest_t = closest_t
     hit.did_hit   = 0xffff_ffff
-    hit.material  = extract(material,    closest_lane)
-    hit.next_o    = extract_v3(next_o,   closest_lane)
-    hit.normal    = extract_v3(normal,   closest_lane)
-    hit.tangent   = extract_v3(tangent,  closest_lane)
-    hit.binormal  = extract_v3(binormal, closest_lane)
+    hit.triangle  = extract(triangle_index, closest_lane)
 }
