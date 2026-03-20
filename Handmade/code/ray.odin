@@ -56,6 +56,8 @@ Collect_Stats :: true
 
 render_tile :: proc(render: ^Render, camera: lane_Camera, rect: Rectangle2i, entropy: ^RandomSeries) {
     image            := render.image
+    triangles        := render.triangles
+    trees            := render.trees
     models           := render.models
     materials        := render.materials
     brdf_data        := render.brdf_data
@@ -88,7 +90,7 @@ render_tile :: proc(render: ^Render, camera: lane_Camera, rect: Rectangle2i, ent
             film_x := linear_blend(cast(f32) -1, 1, cast(f32) px / image_size.x)
             film_p := vec_cast(lane_f32, film_x, film_y)
             
-            cast_result := cast_rays(models, materials, brdf_data, film_p, entropy, pixel_size, half_film_size, film_center, camera, rays_per_pixel, max_bounce_count)
+            cast_result := cast_rays(triangles, trees, models, materials, brdf_data, film_p, entropy, pixel_size, half_film_size, film_center, camera, rays_per_pixel, max_bounce_count)
             
             when Collect_Stats {
                 total.triangles   += cast_result.triangles
@@ -135,7 +137,7 @@ render_tile :: proc(render: ^Render, camera: lane_Camera, rect: Rectangle2i, ent
     atomic_add(&render_stats.tiles_retired, 1)
 }
 
-cast_rays :: proc (models: [] MModel, materials: [] Material, brdf_data: [] v3, init_film_p: lane_v2, entropy: ^RandomSeries,  pixel_size: lane_v2, half_film_size: lane_v2, film_center: lane_v3, camera: lane_Camera, rays_per_pixel, max_bounce_count: u32) -> Cast_Result {
+cast_rays :: proc (triangles: [] Ray_Triangle, trees: [] Tree_Node, models: [] MModel, materials: [] Material, brdf_data: [] v3, init_film_p: lane_v2, entropy: ^RandomSeries,  pixel_size: lane_v2, half_film_size: lane_v2, film_center: lane_v3, camera: lane_Camera, rays_per_pixel, max_bounce_count: u32) -> Cast_Result {
     final_color_lanes: lane_v3
     
     bounces_computed_lanes:  lane_u32
@@ -181,7 +183,10 @@ cast_rays :: proc (models: [] MModel, materials: [] Material, brdf_data: [] v3, 
                 model_ray_d := apply_transform(model.inverse, ray_d, 0)
                 spall_end()
                 
-                hit_mask, tests := hit_tree(model.triangles, model.tree, model_ray_o, model_ray_d, min_t, &hits)
+                model_triangles := triangles[model.triangle_offset : model.triangle_offset + model.triangle_count]
+                model_tree      := trees[    model.tree_offset     : model.tree_offset     + model.tree_count]
+                
+                hit_mask, tests := hit_tree(model_triangles, model_tree, model_ray_o, model_ray_d, min_t, &hits)
                 conditional_assign(hit_mask, &model_index, cast(lane_u32) index)
                 
                 when Collect_Stats {
@@ -237,16 +242,10 @@ cast_rays :: proc (models: [] MModel, materials: [] Material, brdf_data: [] v3, 
             hit_binormal: lane_v3
             {
                 triangle_index := lane_gather(lane_member(lane_hits, "triangle", u32))
-                triangles: Lane(Ray_Triangle)
-                for lane in 0..<LaneWidth {
-                    index := extract(triangle_index, lane)
-                    model := lane_extract(model, lane)
-                    triangle := &model.triangles[index]
-                    replace(&triangles.p, lane, cast(umm) triangle)
-                }
+                triangle := lane_index(to_lane(triangles), lane_gather(lane_member(model, "triangle_offset", u32)) + triangle_index)
                 
-                ab := lane_gather_v(lane_member(triangles, "ab", v3))
-                ac := lane_gather_v(lane_member(triangles, "ac", v3))
+                ab := lane_gather_v(lane_member(triangle, "ab", v3))
+                ac := lane_gather_v(lane_member(triangle, "ac", v3))
                 
                 forward := lane_member(model, "forward", Transform)
                 tx := lane_gather_v(lane_member(forward, "x", v3))

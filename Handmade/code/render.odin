@@ -15,6 +15,8 @@ Render_Stats :: struct {
 }
 
 Render :: struct {
+    triangles: [] Ray_Triangle,
+    trees:     [] Tree_Node,
     models:    [] MModel,
     materials: [] Material,
     brdf_data: [] v3,
@@ -60,8 +62,11 @@ Model :: struct {
 }
 
 MModel :: struct {
-    triangles: [] Ray_Triangle,
-    tree:      Tree,
+    triangle_offset: u32,
+    triangle_count:  u32,
+    tree_offset: u32,
+    tree_count:  u32,
+    
     material:  u32,
     
     forward: Transform,
@@ -143,34 +148,55 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     
     render.stats = {}
     
+    total_triangle_count: u32
+    total_tree_count: u32
+    for model in world.models {
+        total_triangle_count += cast(u32) len(model.triangles)
+        total_tree_count += cast(u32) len(model.tree)
+    }
+    next_free_triangle_offset: u32
+    next_free_tree_offset: u32
+    
+    render.triangles = make([] Ray_Triangle, total_triangle_count, render.allocator)
+    render.trees = make([] Tree_Node, total_tree_count, render.allocator)
+    
     render.models = make([] MModel, len(world.models), render.allocator)
     for model, model_index in world.models {
-        render_model := &render.models[model_index]
-        render_model.material = model.material
+        rm := &render.models[model_index]
+        rm.material = model.material
         
-        render_model.forward.t = model.translation
-        render_model.inverse.t = -vec_cast(lane_f32, render_model.forward.t)
+        rm.forward.t = model.translation
+        rm.inverse.t = -vec_cast(lane_f32, rm.forward.t)
         
-        render_model.forward.x = model.scale_x
-        render_model.forward.y = model.scale_y
-        render_model.forward.z = model.scale_z
+        rm.forward.x = model.scale_x
+        rm.forward.y = model.scale_y
+        rm.forward.z = model.scale_z
         
         determinant := dot(model.scale_x, cross(model.scale_y, model.scale_z))
         inv_x := cross(model.scale_y, model.scale_z) / determinant
         inv_y := cross(model.scale_z, model.scale_x) / determinant
         inv_z := cross(model.scale_x, model.scale_y) / determinant
-        render_model.inverse.x = vec_cast(lane_f32, inv_x)
-        render_model.inverse.y = vec_cast(lane_f32, inv_y)
-        render_model.inverse.z = vec_cast(lane_f32, inv_z)
+        rm.inverse.x = vec_cast(lane_f32, inv_x)
+        rm.inverse.y = vec_cast(lane_f32, inv_y)
+        rm.inverse.z = vec_cast(lane_f32, inv_z)
         
-        render_model.triangles = make([] Ray_Triangle, len(model.triangles), render.allocator)
-        for &it, it_index in render_model.triangles {
+        rm.triangle_offset = next_free_triangle_offset
+        rm.triangle_count  = cast(u32) len(model.triangles)
+        next_free_triangle_offset += rm.triangle_count
+        
+        triangles := render.triangles[rm.triangle_offset : rm.triangle_offset + rm.triangle_count]
+        for &it, it_index in triangles {
             triangle := model.triangles[it_index]
             it.a  = triangle.a
             it.ab = triangle.b - triangle.a
             it.ac = triangle.c - triangle.a
         }
-        render_model.tree = make_shallow_copy(model.tree, render.allocator)
+        
+        rm.tree_offset = next_free_tree_offset
+        rm.tree_count  = cast(u32) len(model.tree)
+        next_free_tree_offset += rm.tree_count
+        tree := render.trees[rm.tree_offset : rm.tree_offset + rm.tree_count]
+        copy(tree, model.tree)
     }
     
     render.brdf_data = world.brdf_data[:]
