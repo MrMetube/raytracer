@@ -28,8 +28,8 @@ main :: proc () {
     ////////////////////////////////////////////////
     
     camera: Camera
-    camera.p = {0, -7, 3}
-    camera.z = normalize_or_zero(camera.p - {0, 0, 1})
+    camera.t = {0, -7, 3}
+    camera.z = normalize_or_zero(camera.t - {0, 0, 1})
     camera.x = normalize_or_zero(cross(v3{0, 0, 1}, camera.z))
     camera.y = normalize_or_zero(cross(camera.z, camera.x))
     
@@ -164,9 +164,9 @@ main :: proc () {
         if length_squared(dp) < square(cast(f32) 0.01) do dp = 0
         
         if dp != 0 {
-            camera.p += dp.x * camera.x    * delta_time
-            camera.p += dp.y * v3{0, 0, 1} * delta_time
-            camera.p += dp.z * camera.z    * delta_time
+            camera.t += dp.x * camera.x    * delta_time
+            camera.t += dp.y * v3{0, 0, 1} * delta_time
+            camera.t += dp.z * camera.z    * delta_time
             
             fast_render.requested = true
         }
@@ -230,21 +230,24 @@ main :: proc () {
             }
         }
         
-        display_line(layout, "Camera: %v : %v ", camera.p, camera.z)
+        display_line(layout, "Camera: %v : %v ", camera.t, camera.z)
         layout_advance(layout, 10)
         
         layout_begin_horizontal(layout)
-            if display_button_highlighted(layout, "Normal",     Debug_View == 0) { Debug_View = 0; fast_render.requested = true }
-            layout_advance(layout, 10)
-            if display_button_highlighted(layout, "Triangles",  Debug_View == 1) { Debug_View = 1; fast_render.requested = true }
-            layout_advance(layout, 10)
-            if display_button_highlighted(layout, "Rectangles", Debug_View == 2) { Debug_View = 2; fast_render.requested = true }
-            layout_advance(layout, 10)
-            if display_button_highlighted(layout, "Both",       Debug_View == 3) { Debug_View = 3; fast_render.requested = true }
+            for kind, kind_index in Debug_View_Kind {
+                if kind_index != 0 {
+                    layout_advance(layout, 10)
+                }
+                
+                if display_button_highlighted(layout, tprint("%v", kind), Debug_View == kind) {
+                    Debug_View = kind
+                    fast_render.requested = true
+                }
+            }
         layout_end_horizontal(layout)
         layout_advance(layout, 10)
         
-        if Debug_View != 0 {
+        if Debug_View in (bit_set[Debug_View_Kind]{ .Triangle_Tests, .Rectangle_Tests, .Both_Tests }) {
             layout_begin_horizontal(layout)
                 if display_slider(layout, 100, &Triangle_Threshold, 10, 10000, "Triangle Threshold", flags = { .logarithmic }) {
                     fast_render.requested = true
@@ -311,9 +314,10 @@ main :: proc () {
                         layout_unindent(layout)
                     }
                                     
-                    if display_slider(layout, 100, &model.translation.x, -100, 100, "translate x", flags={.relative}) do fast_render.requested = true
-                    if display_slider(layout, 100, &model.translation.y, -100, 100, "translate y", flags={.relative}) do fast_render.requested = true
-                    if display_slider(layout, 100, &model.translation.z, -100, 100, "translate z", flags={.relative}) do fast_render.requested = true
+                    if display_slider_v(layout, 300, &model.scale_x, -100, 100, "x", flags={.relative}) do fast_render.requested = true
+                    if display_slider_v(layout, 300, &model.scale_y, -100, 100, "y", flags={.relative}) do fast_render.requested = true
+                    if display_slider_v(layout, 300, &model.scale_z, -100, 100, "z", flags={.relative}) do fast_render.requested = true
+                    if display_slider_v(layout, 300, &model.translation, -100, 100, "translate", flags={.relative}) do fast_render.requested = true
                     
                     if display_slider(layout, 100, &model.material, 1, cast(u32) len(world.materials)-1, "material %v", model.material) {
                         fast_render.requested = true

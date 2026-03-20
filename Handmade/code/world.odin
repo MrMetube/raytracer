@@ -40,6 +40,9 @@ world_create_model :: proc (world: ^World) -> ^Model {
     model_index := len(world.models)
     append_nothing(&world.models)
     result := &world.models[model_index]
+    result.scale_x = {1,0,0}
+    result.scale_y = {0,1,0}
+    result.scale_z = {0,0,1}
     return result
 }
 
@@ -74,7 +77,8 @@ teapot_scene :: proc (world: ^World) {
         clear(&triangles)
         plane := world_create_model(world)
         plane.material = 1
-        
+        plane.scale_x = {500,0,0}
+        plane.scale_y = {0,500,0}
         v0 := v3 {-1, -1, 0}
         v1 := v3 {-1,  1, 0}
         v2 := v3 { 1,  1, 0}
@@ -82,12 +86,6 @@ teapot_scene :: proc (world: ^World) {
         
         append(&triangles, Triangle{ a = v0, b = v2, c = v3})
         append(&triangles, Triangle{ a = v0, b = v1, c = v2})
-        
-        for &t in triangles {
-            t.a.xy *= 500
-            t.b.xy *= 500
-            t.c.xy *= 500
-        }
         
         tree_build(&plane.tree, triangles[:])
         plane.triangles = make_shallow_copy(triangles[:], context.allocator)
@@ -99,6 +97,8 @@ teapot_scene :: proc (world: ^World) {
             plane := world_create_model(world)
             plane.material = 6
             plane.translation = {0,0,4}
+            plane.scale_x = {4,0,0}
+            plane.scale_y = {0,4,0}
             
             v0 := v3 {-1, -1, 0}
             v1 := v3 {-1,  1, 0}
@@ -107,12 +107,6 @@ teapot_scene :: proc (world: ^World) {
             
             append(&triangles, Triangle{ a = v0, b = v2, c = v3})
             append(&triangles, Triangle{ a = v0, b = v1, c = v2})
-            
-            for &t in triangles {
-                t.a.xy *= 4
-                t.b.xy *= 4
-                t.c.xy *= 4
-            }
             
             tree_build(&plane.tree, triangles[:])
             plane.triangles = make_shallow_copy(triangles[:], context.allocator)
@@ -123,6 +117,8 @@ teapot_scene :: proc (world: ^World) {
             plane := world_create_model(world)
             plane.material = 6
             plane.translation = {0,4,0}
+            plane.scale_x = {4,0,0}
+            plane.scale_z = {0,0,4}
             
             v0 := v3 {-1, 0, -1}
             v1 := v3 {-1, 0,  1}
@@ -131,12 +127,6 @@ teapot_scene :: proc (world: ^World) {
             
             append(&triangles, Triangle{ a = v0, b = v2, c = v3})
             append(&triangles, Triangle{ a = v0, b = v1, c = v2})
-            
-            for &t in triangles {
-                t.a.xz *= 4
-                t.b.xz *= 4
-                t.c.xz *= 4
-            }
             
             tree_build(&plane.tree, triangles[:])
             plane.triangles = make_shallow_copy(triangles[:], context.allocator)
@@ -147,6 +137,8 @@ teapot_scene :: proc (world: ^World) {
             plane := world_create_model(world)
             plane.material = 5
             plane.translation = {4,0,0}
+            plane.scale_y = {0,4,0}
+            plane.scale_z = {0,0,4}
             
             v0 := v3 {0, -1, -1}
             v1 := v3 {0, -1,  1}
@@ -155,12 +147,6 @@ teapot_scene :: proc (world: ^World) {
             
             append(&triangles, Triangle{ a = v0, b = v2, c = v3})
             append(&triangles, Triangle{ a = v0, b = v1, c = v2})
-            
-            for &t in triangles {
-                t.a.yz *= 4
-                t.b.yz *= 4
-                t.c.yz *= 4
-            }
             
             tree_build(&plane.tree, triangles[:])
             plane.triangles = make_shallow_copy(triangles[:], context.allocator)
@@ -171,6 +157,8 @@ teapot_scene :: proc (world: ^World) {
             plane := world_create_model(world)
             plane.material = 4
             plane.translation = {-4,0,0}
+            plane.scale_y = {0,4,0}
+            plane.scale_z = {0,0,4}
             
             v0 := v3 {0, -1, -1}
             v1 := v3 {0, -1,  1}
@@ -179,12 +167,6 @@ teapot_scene :: proc (world: ^World) {
             
             append(&triangles, Triangle{ a = v0, b = v2, c = v3})
             append(&triangles, Triangle{ a = v0, b = v1, c = v2})
-            
-            for &t in triangles {
-                t.a.yz *= 4
-                t.b.yz *= 4
-                t.c.yz *= 4
-            }
             
             tree_build(&plane.tree, triangles[:])
             plane.triangles = make_shallow_copy(triangles[:], context.allocator)

@@ -10,7 +10,7 @@ import "core:prof/spall"
 import "core:time"
 import "core:fmt"
 
-@(private="file") SpallBufferSize :: 2 * Gigabyte
+@(private="file") SpallBufferSize :: 3 * Gigabyte
 
 @(private="file") spall_ctx: spall.Context
 @(private="file", thread_local) spall_buffer: spall.Buffer
@@ -37,7 +37,7 @@ when false {
 @(deferred_none = spall_deinit)
 @(disabled=SpallDisabled)
 spall_init :: proc (thread_index: u32 = 0, output_name := "trace", location := #caller_location) {
-    file_name := fmt.tprintf("%v.spall", output_name)
+    file_name := fmt.tprintf("./%v.spall", output_name)
     spall_ctx  = spall.context_create(file_name, 10 * time.Millisecond)
     
     err := make_by_pointer(&backing_buffer, SpallBufferSize); assert(err == nil)

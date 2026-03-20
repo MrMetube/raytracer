@@ -15,8 +15,7 @@ Render_Stats :: struct {
 }
 
 Render :: struct {
-    normals:   [] [] Triangle_Normals,
-    models:    [] Model,
+    models:    [] MModel,
     materials: [] Material,
     brdf_data: [] v3,
     
@@ -49,14 +48,24 @@ Triangle_Normals :: struct {
 }
 
 Model :: struct {
-    // @note(viktor): triangles is used outside the render, ray_triangles is used inside
-    triangles:     [] Triangle,
-    tree:          Tree,
-    translation: v3,
-    material:    u32,
+    triangles: [] Triangle,
+    tree:      Tree,
     
-    ray_triangles: [] Ray_Triangle,
-    ray_translation: lane_v3,
+    translation: v3,
+    scale_x:     v3,
+    scale_y:     v3,
+    scale_z:     v3,
+    
+    material:    u32,
+}
+
+MModel :: struct {
+    triangles: [] Ray_Triangle,
+    tree:      Tree,
+    material:  u32,
+    
+    forward: Transform,
+    inverse: lane_Transform,
 }
 
 Color :: [4] u8
@@ -67,12 +76,20 @@ Image :: struct {
     height: i32,
 }
 
-Camera :: struct {
+Transform :: struct {
     x: v3,
     y: v3,
     z: v3,
-    p: v3,
+    t: v3,
 }
+lane_Transform :: struct {
+    x: lane_v3,
+    y: lane_v3,
+    z: lane_v3,
+    t: lane_v3,
+}
+
+Camera :: distinct Transform
 
 Material :: struct {
     emit:    v3,
@@ -126,35 +143,34 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     
     render.stats = {}
     
-    render.models = make([] Model, len(world.models), render.allocator)
-    render.normals = make([] [] Triangle_Normals, len(world.models), render.allocator)
+    render.models = make([] MModel, len(world.models), render.allocator)
     for model, model_index in world.models {
         render_model := &render.models[model_index]
-        render_model^ = model
-        render_model.ray_translation = vec_cast(lane_f32, model.translation)
+        render_model.material = model.material
         
-        render_model.ray_triangles = make([] Ray_Triangle, len(model.triangles), render.allocator)
-        for &it, it_index in render_model.ray_triangles {
+        render_model.forward.t = model.translation
+        render_model.inverse.t = -vec_cast(lane_f32, render_model.forward.t)
+        
+        render_model.forward.x = model.scale_x
+        render_model.forward.y = model.scale_y
+        render_model.forward.z = model.scale_z
+        
+        determinant := dot(model.scale_x, cross(model.scale_y, model.scale_z))
+        inv_x := cross(model.scale_y, model.scale_z) / determinant
+        inv_y := cross(model.scale_z, model.scale_x) / determinant
+        inv_z := cross(model.scale_x, model.scale_y) / determinant
+        render_model.inverse.x = vec_cast(lane_f32, inv_x)
+        render_model.inverse.y = vec_cast(lane_f32, inv_y)
+        render_model.inverse.z = vec_cast(lane_f32, inv_z)
+        
+        render_model.triangles = make([] Ray_Triangle, len(model.triangles), render.allocator)
+        for &it, it_index in render_model.triangles {
             triangle := model.triangles[it_index]
             it.a  = triangle.a
             it.ab = triangle.b - triangle.a
             it.ac = triangle.c - triangle.a
         }
-        render_model.tree      = make_shallow_copy(model.tree, render.allocator)
-        
-        
-        render_normals := &render.normals[model_index]
-        render_normals^ = make([] Triangle_Normals, len(model.triangles), render.allocator)
-        for &it, it_index in render_normals {
-            triangle := model.triangles[it_index]
-            // @todo(viktor): interpolate the vertex normals
-            // @note(viktor): Assuming counter-clockwise winding order
-            ab := triangle.b - triangle.a
-            ac := triangle.c - triangle.a
-            it.normal   = normalize_or_zero(cross(ab, ac))
-            it.tangent  = normalize_or_zero(ab)
-            it.binormal = normalize_or_zero(cross(it.normal, it.tangent))
-        }
+        render_model.tree = make_shallow_copy(model.tree, render.allocator)
     }
     
     render.brdf_data = world.brdf_data[:]
@@ -180,7 +196,7 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     
     
     lane_camera: lane_Camera
-    lane_camera.p = vec_cast(lane_f32, camera.p)
+    lane_camera.p = vec_cast(lane_f32, camera.t)
     lane_camera.x = vec_cast(lane_f32, camera.x)
     lane_camera.y = vec_cast(lane_f32, camera.y)
     lane_camera.z = vec_cast(lane_f32, camera.z)
