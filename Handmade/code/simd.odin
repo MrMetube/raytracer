@@ -48,6 +48,15 @@ lane_extract :: proc (lane: Lane($T), #any_int lane_index: u32) -> ^T {
 
 ////////////////////////////////////////////////
 
+lane_index_offset :: proc (slice: Lane_Slice($T), offset: lane_u32, caller_location := #caller_location) -> Lane_Slice(T) {
+    when Lane_Slice_Checked {
+        assert(less_than(index, slice.len) == lane_true, loc = caller_location)
+    }
+    result: Lane_Slice(T)
+    result.p = slice.p + cast(lane_umm) offset * size_of(T)
+    return result
+}
+
 lane_index :: proc { lane_index_scalar, lane_index_array }
 lane_index_scalar :: proc (slice: Lane_Slice($T), index: lane_u32, caller_location := #caller_location) -> Lane(T) {
     when Lane_Slice_Checked {

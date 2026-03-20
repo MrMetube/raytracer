@@ -359,7 +359,7 @@ inspect :: proc (nodes: [] Tree_Node, it_index: Node_Index = Root_Index, depth :
     return result
 }
 
-print_inspection :: proc (values: [dynamic] Triangle, inspection: Tree_Info) {
+print_inspection :: proc (values: [] Triangle, inspection: Tree_Info) {
     if len(values) > 0 {
         print("tree info:\n")
         print("            nodes: %v\n", inspection.node_count)

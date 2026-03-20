@@ -137,7 +137,7 @@ bilinear_blend_v :: proc (a: $V/[$N]$E, b, c, d: V, t: [2] E) -> (result: V) {
 }
 
 safe_ratio_or_else :: proc { safe_ratio_or_else_s, safe_ratio_or_else_v }
-safe_ratio_or_else_s :: proc(numerator: $T, divisor: T) -> (T, bool) {
+safe_ratio_or_else_s :: proc(numerator: $T, divisor: T) -> (T, bool) where !intrinsics.type_is_array(T) {
     ratio: T
     ok := divisor != 0
     

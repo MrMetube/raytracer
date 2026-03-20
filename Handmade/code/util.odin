@@ -177,7 +177,7 @@ absolute_difference :: proc (a, b: $T) -> (result: T) {
 }
 
 @(disabled=ODIN_DISABLE_ASSERT)
-assert :: proc (condition: $B, message := #caller_expression(condition), loc := #caller_location, prefix:= "Assertion failed") where intrinsics.type_is_boolean(B) {
+assert :: proc (condition: $B, message := #caller_expression(condition), loc := #caller_location, prefix := "Assertion failed") where intrinsics.type_is_boolean(B) {
     if !condition {
         print("%v %v", loc, prefix)
         if len(message) > 0 {

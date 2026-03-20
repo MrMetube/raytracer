@@ -5,7 +5,6 @@
     - bilinear sample the texture based on uvs
     - make a default 1x1 white pixel texture
     - load a model with uvs and texture and render it
-    - currently each triangle has its own material, is there a better way to allow for differing materials/brdfs across a single model?
 
 - vary sample count over viewport, have a focus region with highest detail
 - think more about the response to a accumulated ray

@@ -278,12 +278,9 @@ cast_rays :: proc (models: [] Model, normals: [] [] Triangle_Normals, materials:
 traverse_tree_and_test_triangles :: proc (triangles: [] Ray_Triangle, tree: Tree, ray_o, ray_d: lane_v3, min_t: lane_f32, hits: ^[LaneWidth] Hit_Info) -> (lane_u32, Test_Info) {
     spall_proc()
     
-    Check :: false
-    
     lane_hits := to_lane_wide(hits)
     closest_t := lane_gather(lane_member(lane_hits, "closest_t", f32))
     
-    // @naming
     inv_d     := 1 / ray_d
     neg_inv_o := -ray_o * inv_d
     
@@ -306,8 +303,7 @@ traverse_tree_and_test_triangles :: proc (triangles: [] Ray_Triangle, tree: Tree
     
     triangles := to_lane(triangles)
     tree_lane := to_lane(tree)
-    // @cleanup make this offset a lane_op
-    tree_lane.p += cast(lane_umm) lane_offset * size_of(tree[0])
+    tree_lane = lane_index_offset(tree_lane, lane_offset)
     
     backing: [Tree_Max_Depth] Node_Index
     stack := backing[:]
@@ -325,18 +321,16 @@ traverse_tree_and_test_triangles :: proc (triangles: [] Ray_Triangle, tree: Tree
         stack[0]     = Root_Index
         stack_count := cast(u32) 1
         
-        for stack_count != 0 {
+        traversal: for stack_count != 0 {
             stack_count -= 1
             it_index := stack[stack_count]
             node     := &tree[it_index]
             
             if node.value_count == 0 {
-                indices  := cast(lane_u32) node.first.subnode
-                subnodes := lane_index(tree_lane, indices)
+                subnodes := lane_index(tree_lane, cast(lane_u32) node.first.subnode)
                 
-                bounds   := lane_member(subnodes, "bounds", Rectangle3)
-                node_min := lane_member(bounds, "min", v3)
-                node_max := lane_member(bounds, "max", v3)
+                node_min := lane_member(subnodes, "bounds", "min", v3)
+                node_max := lane_member(subnodes, "bounds", "max", v3)
                 
                 min := lane_gather_v(node_min)
                 max := lane_gather_v(node_max)
@@ -345,7 +339,7 @@ traverse_tree_and_test_triangles :: proc (triangles: [] Ray_Triangle, tree: Tree
                 when Collect_Stats {
                     info.rectangles += Subnodes_Per_Node
                 }
-                if bounds_hit_mask == lane_false do continue
+                if bounds_hit_mask == lane_false do continue traversal
                 
                 // @note(viktor): the last tests showed that the sorting overhead was not worth the gains it should have provided
                 subnode_indices := cast(lane_u32) node.first.subnode + lane_offset
@@ -360,7 +354,7 @@ traverse_tree_and_test_triangles :: proc (triangles: [] Ray_Triangle, tree: Tree
                     triangle_index := value_index + lane_offset
                     triangle := lane_index(triangles, triangle_index)
                     
-                    triangle_hit_mask, triangle_t := hit_triangle(lane_true, triangle, lane_ray_o, lane_ray_d, min_t, cast(lane_f32) hit.closest_t)
+                    triangle_hit_mask, triangle_t := hit_triangle(lane_true, triangle, lane_ray_o, lane_ray_d, min_t, hit.closest_t)
                     if triangle_hit_mask == lane_false do continue values
                     
                     closest_t, closest_lane := get_closest_lane(triangle_hit_mask, triangle_t)
@@ -374,7 +368,7 @@ traverse_tree_and_test_triangles :: proc (triangles: [] Ray_Triangle, tree: Tree
                     triangle := lane_index(triangles, triangle_index)
                     mask     := less_than(triangle_index, cast(lane_u32) end)
                     
-                    triangle_hit_mask, triangle_t := hit_triangle(mask, triangle, lane_ray_o, lane_ray_d, min_t, cast(lane_f32) hit.closest_t)
+                    triangle_hit_mask, triangle_t := hit_triangle(mask, triangle, lane_ray_o, lane_ray_d, min_t, hit.closest_t)
                     if triangle_hit_mask == lane_false do break tail
                     
                     closest_t, closest_lane := get_closest_lane(triangle_hit_mask, triangle_t)
@@ -396,7 +390,7 @@ traverse_tree_and_test_triangles :: proc (triangles: [] Ray_Triangle, tree: Tree
         }
     }
     
-    t_after  := lane_gather(lane_member(lane_hits, "closest_t", f32))
+    t_after := lane_gather(lane_member(lane_hits, "closest_t", f32))
     model_hit_mask &= less_than(t_after, closest_t)
     
     return model_hit_mask, info
@@ -435,7 +429,6 @@ hit_rectangle :: proc (min, max: lane_v3, neg_inv_o, inv_d: lane_v3, t_min_init,
     return result
 }
 
-// @speed measure branch mispredictions: do i also have an unpredictable branch in these u/v test, because each part is unpredictable but the whole expression should be predicted as false?
 hit_triangle :: proc (not_nil_mask: lane_u32, triangle: Lane(Ray_Triangle), ray_o, ray_d: lane_v3, min_t: lane_f32, max_t: lane_f32) -> (lane_u32, lane_f32) {
     Check :: false
     when Check do assert(not_nil_mask != lane_false)

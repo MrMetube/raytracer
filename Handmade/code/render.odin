@@ -142,6 +142,7 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
         }
         render_model.tree      = make_shallow_copy(model.tree, render.allocator)
         
+        
         render_normals := &render.normals[model_index]
         render_normals^ = make([] Triangle_Normals, len(model.triangles), render.allocator)
         for &it, it_index in render_normals {
