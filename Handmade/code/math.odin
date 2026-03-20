@@ -329,7 +329,7 @@ arm :: proc(angle: f32) -> (result: v2) {
 }
 
 dot :: proc(a: $V/[$N] $E, b: V) -> E {
-    result := fused_mul_add(a.x, b.x, 0)
+    result := a.x * b.x
     result  = fused_mul_add(a.y, b.y, result)
     when N >= 3 do result = fused_mul_add(a.z, b.z, result)
     when N >= 4 do result = fused_mul_add(a.w, b.w, result)
@@ -337,7 +337,7 @@ dot :: proc(a: $V/[$N] $E, b: V) -> E {
 }
 
 cross :: proc(a: $V/[3]$Element, b: V) -> V {
-    result: V
+    result: V = ---
     result.x = fused_mul_add(a.y, b.z, -a.z*b.y)
     result.y = fused_mul_add(a.z, b.x, -a.x*b.z)
     result.z = fused_mul_add(a.x, b.y, -a.y*b.x)
@@ -397,13 +397,13 @@ linear_to_srgb :: proc(l: v3) -> (s: v3) {
 
 color_to_u8 :: proc { color_to_u8_3, color_to_u8_4 }
 color_to_u8_3 :: proc (color: v3) -> Color {
-    v: v4 = 255
+    v := cast(v4) 255
     v.rgb *= color
     result := round(u8, v)
     return result
 }
 color_to_u8_4 :: proc (color: v4) -> Color {
-    v: v4 = 255
+    v := cast(v4) 255
     v.rgba *= color
     result := round(u8, v)
     return result
@@ -445,7 +445,14 @@ equal         :: simd.lanes_eq
 not_equal     :: simd.lanes_ne
 
 fused_mul_add :: proc(a: $T, b, c: T) -> T  {
-    result := simd.fma(a, b, c)
+    when intrinsics.type_is_array(T) {
+        result: T
+        #no_bounds_check #unroll for i in 0..<len(T) {
+            result[i] = simd.fma(a[i], b[i], c[i])
+        }
+    } else {
+        result := simd.fma(a, b, c)
+    }
     return result
 }
 

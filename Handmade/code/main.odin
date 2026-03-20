@@ -402,7 +402,11 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
         layout_end_horizontal(layout)
         
         layout_advance(layout, 5)
-        display_line(layout, "Render time: min = %v, avg = %v, max = %v", render.render_time.min, cast(time.Duration) render.render_time.avg, render.render_time.max)
+        layout_begin_horizontal(layout)
+            if display_button(layout, "Reset") do stat_init(&render.render_time)
+            layout_advance(layout, 5)
+            display_line(layout, "Render time: min = %v, avg = %v, max = %v", render.render_time.min, cast(time.Duration) render.render_time.avg, render.render_time.max)
+        layout_end_horizontal(layout)
         
         layout_advance(layout, 5)
         if render.active && !work_is_completed(&render.queue){
