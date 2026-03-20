@@ -73,6 +73,7 @@ main :: proc () {
     renders := make([dynamic] ^Render, 0, 2, context.allocator)
     append(&renders, &quality_render)
     append(&renders, &fast_render)
+    for &render in renders do stat_init(&render.render_time)
     
     ////////////////////////////////////////////////
     
@@ -127,7 +128,7 @@ main :: proc () {
                 rl.ShowCursor()
             }
             
-            if rl.IsKeyPressed(.R) {
+            if rl.IsKeyDown(.R) {
                 fast_render.requested = true
             }
         }
@@ -182,6 +183,8 @@ main :: proc () {
                     
                     render.active = false
                     render.end = time.now()
+                    stat_update(&render.render_time, time.diff(render.start, render.end))
+                    stat_finalize(&render.render_time)
                     print_render_results(&render.stats, render.start, render.end)
                     
                     free_all(render.allocator)
@@ -391,9 +394,15 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
             display_toggle(layout, "Render", &render.requested)
             
             layout_advance(layout, 5)
-            end := render.active ? time.now() : render.end
-            display_line(layout, "%.2v", time.diff(render.start, end))
+            if render.active {
+                display_line(layout, "%v", time.since(render.start))
+            } else {
+                display_line(layout, "%v", time.diff(render.start, render.end))
+            }
         layout_end_horizontal(layout)
+        
+        layout_advance(layout, 5)
+        display_line(layout, "Render time: min = %v, avg = %v, max = %v", render.render_time.min, cast(time.Duration) render.render_time.avg, render.render_time.max)
         
         layout_advance(layout, 5)
         if render.active && !work_is_completed(&render.queue){

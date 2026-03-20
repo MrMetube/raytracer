@@ -1,6 +1,7 @@
 package main
 
 import "core:slice"
+import "core:time"
 
 Node_Index  :: distinct u32
 Value_Index :: distinct u32
@@ -335,8 +336,8 @@ inspect :: proc (nodes: [] Tree_Node, it_index: Node_Index = Root_Index, depth :
     
     result: Tree_Info
     
-    result.depth = stat_init(depth)
-    result.values_per_node = stat_init(value_count)
+    result.depth = stat_make(depth)
+    result.values_per_node = stat_make(value_count)
     result.node_count = 1
     
     if it.value_count == 0 && it.first.subnode != Root_Index {
@@ -373,23 +374,35 @@ Stat :: struct ($T: typeid) {
     avg: f64,
 }
 
-stat_init :: proc (value: $T) -> Stat(T) {
+stat_init :: proc (stat: ^Stat($T)) {
+    stat.min = max(T)
+    stat.max = min(T)
+    stat.count = 0
+    stat.sum = 0
+}
+stat_make :: proc (value: $T) -> Stat(T) {
     result: Stat(T)
     stat_update(&result, value)
     return result
 }
 
-stat_update :: proc { stat_update_stat, stat_update_value }
+stat_update :: proc { stat_update_time, stat_update_stat, stat_update_value }
 stat_update_stat :: proc (stat: ^Stat($T), other: Stat(T)) {
     stat.min    = min(stat.min, other.min)
     stat.max    = max(stat.max, other.max)
     stat.sum   += other.sum
     stat.count += other.count
 }
-stat_update_value :: proc (stat: ^Stat($T), other: T) {
-    stat.min    = min(stat.min, other)
-    stat.max    = max(stat.max, other)
-    stat.sum   += other
+stat_update_value :: proc (stat: ^Stat($T), value: T) {
+    stat.min    = min(stat.min, value)
+    stat.max    = max(stat.max, value)
+    stat.sum   += value
+    stat.count += 1
+}
+stat_update_time :: proc (stat: ^Stat(time.Duration), value: time.Duration) {
+    stat.min    = min(stat.min, value)
+    stat.max    = max(stat.max, value)
+    stat.sum   += value
     stat.count += 1
 }
 

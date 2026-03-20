@@ -27,6 +27,7 @@ Render :: struct {
     active:    bool,
     
     start, end: time.Time,
+    render_time: Stat(time.Duration),
     
     image:   Image,
     texture: rl.Texture,
@@ -50,10 +51,12 @@ Triangle_Normals :: struct {
 Model :: struct {
     // @note(viktor): triangles is used outside the render, ray_triangles is used inside
     triangles:     [] Triangle,
-    ray_triangles: [] Ray_Triangle,
     tree:          Tree,
     translation: v3,
     material:    u32,
+    
+    ray_triangles: [] Ray_Triangle,
+    ray_translation: lane_v3,
 }
 
 Color :: [4] u8
@@ -128,6 +131,7 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     for model, model_index in world.models {
         render_model := &render.models[model_index]
         render_model^ = model
+        render_model.ray_translation = vec_cast(lane_f32, model.translation)
         
         render_model.ray_triangles = make([] Ray_Triangle, len(model.triangles), render.allocator)
         for &it, it_index in render_model.ray_triangles {
@@ -165,13 +169,21 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     
     Work :: struct {
         render: ^Render,
-        camera:  Camera,
+        camera:  lane_Camera,
         rect:    Rectangle2i, 
         entropy: RandomSeries,
     }
     
     works := make([] Work, tile_count, render.allocator)
     work_index: u32
+    
+    
+    lane_camera: lane_Camera
+    lane_camera.p = vec_cast(lane_f32, camera.p)
+    lane_camera.x = vec_cast(lane_f32, camera.x)
+    lane_camera.y = vec_cast(lane_f32, camera.y)
+    lane_camera.z = vec_cast(lane_f32, camera.z)
+    
     
     render.start = time.now()
     for row in 0..<tile_rows {
@@ -183,7 +195,7 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
             
             work := &works[work_index]
             work_index += 1
-            work ^= { render, camera, rect, entropy }
+            work ^= { render, lane_camera, rect, entropy }
             
             enqueue_work_or_do_immediatly(&render.queue, proc(work: ^Work) {
                 render_tile(work.render, work.camera, work.rect, &work.entropy)
