@@ -219,7 +219,7 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     
     zero_slice(render.image.data)
     
-    tile_size := cast(v2i) max(render.image.width, render.image.height) / cast(i32) core_count
+    tile_size := cast(v2i) max(render.image.width, render.image.height) / cast(i32) core_count / 2
     tile_cols  := (render.image.width  + tile_size.x - 1) / tile_size.x
     tile_rows  := (render.image.height + tile_size.y - 1) / tile_size.y
     tile_count := tile_cols * tile_rows
@@ -251,10 +251,21 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
             work := &works[work_index]
             work_index += 1
             work ^= { render, lane_camera, rect, entropy }
-            
-            enqueue_work_or_do_immediatly(&render.queue, proc(work: ^Work) {
-                render_tile(work.render, work.camera, work.rect, &work.entropy)
-            }, work)
+        }
+    }
+    
+    shift :: 2
+    for oy in cast(i32) 0..<shift {
+        for ox in cast(i32) 0..<shift {
+            for row := oy; row < tile_rows; row += shift {
+                for col := ox; col < tile_cols; col += shift {
+                    index := row * tile_cols + col
+                    work := &works[index]
+                    enqueue_work_or_do_immediatly(&render.queue, proc(work: ^Work) {
+                        render_tile(work.render, work.camera, work.rect, &work.entropy)
+                    }, work)
+                }
+            }
         }
     }
 }

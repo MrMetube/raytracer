@@ -79,48 +79,55 @@ render_tile :: proc(render: ^Render, camera: lane_Transform, rect: Rectangle2i, 
     
     total: Test_Info
     bounces_computed, loops_computed: u64
-    pixels: for py in rect.min.y ..< rect.max.y {
-        film_y := linear_blend(cast(f32) -1, 1, cast(f32) py / image_size.y)
-        for px in rect.min.x ..< rect.max.x {
-            if render.canceled do break pixels
+    shift :: 2
+    pixels: for oy in cast(i32) 0..<shift {
+        for ox in cast(i32) 0..<shift {
+            for y := oy; y < rect.max.y - rect.min.y; y += shift {
+                py := rect.min.y + y
+                film_y := linear_blend(cast(f32) -1, 1, cast(f32) py / image_size.y)
+                for x := ox; x < rect.max.x - rect.min.x; x += shift {
+                    px := rect.min.x + x
+                    if render.canceled do break pixels
             
-            film_x := linear_blend(cast(f32) -1, 1, cast(f32) px / image_size.x)
-            film_p := vec_cast(lane_f32, film_x, film_y)
-            
-            cast_result := cast_rays(triangles, normals, trees, models, materials, brdf_data, film_p, entropy, pixel_size, half_film_size, film_center, camera, rays_per_pixel, max_bounce_count)
-            
-            when Collect_Stats {
-                total.triangles   += cast_result.triangles
-                total.rectangles  += cast_result.rectangles
-                total.empty_lanes += cast_result.empty_lanes
+                    film_x := linear_blend(cast(f32) -1, 1, cast(f32) px / image_size.x)
+                    film_p := vec_cast(lane_f32, film_x, film_y)
+                    
+                    cast_result := cast_rays(triangles, normals, trees, models, materials, brdf_data, film_p, entropy, pixel_size, half_film_size, film_center, camera, rays_per_pixel, max_bounce_count)
+                    
+                    when Collect_Stats {
+                        total.triangles   += cast_result.triangles
+                        total.rectangles  += cast_result.rectangles
+                        total.empty_lanes += cast_result.empty_lanes
+                    }
+                    
+                    bounces_computed += cast_result.bounces_computed
+                    loops_computed   += cast_result.loops_computed
+                    
+                    color := cast_result.final_color
+                    triangle_color  := (cast(f32) cast_result.triangles  / LaneWidth) / Triangle_Threshold
+                    rectangle_color := (cast(f32) cast_result.rectangles / LaneWidth) / Rectangle_Threshold
+                    color = linear_to_srgb(color)
+                    if Debug_View == .Triangle_Tests {
+                        color = triangle_color
+                        if triangle_color > 1 do color = v3{1, 0, 0}
+                    } else if Debug_View == .Rectangle_Tests {
+                        color = rectangle_color
+                        if rectangle_color > 1 do color = v3{1, 0, 0}
+                    } else if Debug_View == .Both_Tests {
+                        color.r = triangle_color
+                        color.g = 0
+                        color.b = rectangle_color
+                        if max(triangle_color, rectangle_color) > 1 do color = v3{1, 1, 1}
+                    }
+                    
+                    pixel := color_to_u8(color)
+                    
+                    pixel_index := (image.height - 1 - py) * image.width + px
+                    image.data[pixel_index] = pixel
+                }
+                atomic_add(&render_stats.pixels_done, auto_cast rectangle_get_dimension(rect).x / shift)
             }
-            
-            bounces_computed += cast_result.bounces_computed
-            loops_computed   += cast_result.loops_computed
-            
-            color := cast_result.final_color
-            triangle_color  := (cast(f32) cast_result.triangles  / LaneWidth) / Triangle_Threshold
-            rectangle_color := (cast(f32) cast_result.rectangles / LaneWidth) / Rectangle_Threshold
-            color = linear_to_srgb(color)
-            if Debug_View == .Triangle_Tests {
-                color = triangle_color
-                if triangle_color > 1 do color = v3{1, 0, 0}
-            } else if Debug_View == .Rectangle_Tests {
-                color = rectangle_color
-                if rectangle_color > 1 do color = v3{1, 0, 0}
-            } else if Debug_View == .Both_Tests {
-                color.r = triangle_color
-                color.g = 0
-                color.b = rectangle_color
-                if max(triangle_color, rectangle_color) > 1 do color = v3{1, 1, 1}
-            }
-            
-            pixel := color_to_u8(color)
-            
-            pixel_index := (image.height - 1 - py) * image.width + px
-            image.data[pixel_index] = pixel
         }
-        atomic_add(&render_stats.pixels_done, auto_cast rectangle_get_dimension(rect).x)
     }
     
     atomic_add(&render.stats.triangles,  total.triangles)
