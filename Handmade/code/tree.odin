@@ -301,31 +301,6 @@ split_node :: proc (tree: [] Tree_Node, it_cost: f32, it_indices: [] Value_Index
 
 ////////////////////////////////////////////////
 
-tree_print :: proc (nodes: [] $T, level: int = 0, it_index: Node_Index = Root_Index) {
-    it := nodes[it_index]
-    
-    for _ in 0..<level * 4 do print(" ")
-    print("node %v\n", it_index)
-    for _ in 0..<level * 4 do print(" ")
-    print("bounds %v\n", it.bounds)
-    if it.value_count == 0 {
-        if it.first.subnode != Root_Index {
-            for _ in 0..<level * 4 do print(" ")
-            print("subnodes:\n")
-            for subnode in it.first.subnode ..< it.first.subnode + Subnodes_Per_Node {
-                tree_print(nodes, level + 1, subnode)
-            }
-            for _ in 0..<level * 4 do print(" ")
-            print(";\n")
-        }
-    } else {
-        for _ in 0..<level * 4 do print(" ")
-        print("first_value %v\n", it.first.value)
-        for _ in 0..<level * 4 do print(" ")
-        print("value_count %v\n", it.value_count)
-    }
-}
-
 Tree_Info :: struct {
     values_per_node: Stat(u32),
     depth: Stat(u32),
@@ -362,15 +337,7 @@ inspect :: proc (nodes: [] Tree_Node, it_index: Node_Index = Root_Index, depth :
     return result
 }
 
-print_inspection :: proc (values: [] Triangle, inspection: Tree_Info) {
-    if len(values) > 0 {
-        print("tree info:\n")
-        print("            nodes: %v\n", inspection.node_count)
-        print("            depth: max = %v, avg = %.2f\n", inspection.depth.max, inspection.depth.avg)
-        print("  values per node: max = %v, avg = %.2f\n", inspection.values_per_node.max, inspection.values_per_node.avg)
-        print("\n")
-    }
-}
+////////////////////////////////////////////////
 
 Stat :: struct ($T: typeid) {
     min, max, sum, count: T,

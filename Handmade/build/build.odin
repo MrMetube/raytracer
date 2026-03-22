@@ -15,7 +15,7 @@ main :: proc () {
         build_native()
         build_pedantic(pedantic)
         if false {
-            append(cmd, "-vet-packages:main -vet-unused-procedures")
+            append(cmd, "-vet-packages:main", "-vet-unused-procedures")
         }
         
         end_build(cmd)
