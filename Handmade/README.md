@@ -8,6 +8,9 @@ BRDFs (Bidirectional Reflectance Distribution Function) are used for reflections
 ## Screenshots
 (anti-chronological order)
 
+![Render 14](data/render_14.png)
+![Render 13](data/render_13.png)
+![Render 12](data/render_12.png)
 ![Render 11](data/render_11.png)
 ![Render 10](data/render_10.png)
 ![Render 9](data/render_9.png)

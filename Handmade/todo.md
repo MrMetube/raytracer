@@ -1,5 +1,10 @@
 ## To be done
 
+- dont enqueue tiles in order
+    - use offsets to evenly distribute work across the screen 
+    - so that partial output is more representative
+    - do the same in the pixel loop, i.e. every even then every odd pixel
+
 - for fast render
     - automatic mode
     - take last frame time, estimate next time by time_per_ray * ray_count -> rays_per_pixel

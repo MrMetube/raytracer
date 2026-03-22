@@ -33,15 +33,3 @@ load_teapot :: proc (triangles: ^[dynamic] Triangle, utah: u32) {
         append(triangles, Triangle{ a = vs[0], b = vs[1], c = vs[2]})
     }
 }
-
-parse_f32 :: proc(str: string) -> f32 {
-    result, ok := strconv.parse_f32(str)
-    assert(ok)
-    return result
-}
-
-chop :: proc (str: ^string, sep: string) -> string {
-    result: string
-    result, _, str^ = strings.partition(str^, sep)
-    return result
-}

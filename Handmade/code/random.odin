@@ -4,13 +4,14 @@ package main
 
 import "base:intrinsics"
 
+
 RandomSeries :: struct {
     state: lane_u32,
 }
 
 seed_random_series :: proc(#any_int seed: u32) -> (result: RandomSeries) {
     result = { state = seed }
-    result.state ~= (lane_offset + 58564) * seed
+    result.state ~= (lane_offset + 4) * seed
     return result
 }
 
@@ -35,21 +36,20 @@ xor_shift :: proc (series: ^RandomSeries) ->  (x: lane_u32) {
 // @todo(viktor): why are all results less than 0.001 ?
 random_unilateral :: proc { random_unilateral_scalar, random_unilateral_array, random_unilateral_vector }
 random_unilateral_scalar :: proc(series: ^RandomSeries, $T: typeid) -> T where !intrinsics.type_is_simd_vector(T), !intrinsics.type_is_array(T) {
-    unilateral := random_unilateral_vector(series, #simd [LaneWidth] T)
+    unilateral := random_unilateral(series)
     result := extract(unilateral, 0)
     return result
 }
 random_unilateral_array :: proc (series: ^RandomSeries, $T: typeid/ [$N] $E) -> T {
     result: T
     #no_bounds_check #unroll for i in 0..<len(T) {
-        result[i] = random_unilateral(series, E)
+        result[i] = random_unilateral(series)
     }
     return result
 }
-random_unilateral_vector :: proc (series: ^RandomSeries, $T: typeid/ #simd [$N] $E) -> T {
+random_unilateral_vector :: proc (series: ^RandomSeries) -> lane_f32 {
     random_value := next_random_lane_u32(series)
-    unilateral := cast(lane_f32) (shift_right(random_value, 1)) / cast(lane_f32) (max(u32) >> 1)
-    result := unilateral
+    result := cast(lane_f32) (shift_right(random_value, 1)) / cast(lane_f32) (max(u32) >> 1)
     return result
 }
 

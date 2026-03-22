@@ -49,9 +49,9 @@ Split_Node :: struct {
 
 ////////////////////////////////////////////////
 
-// @note(viktor): this is not idempotic, as the values are reordered.
-// A second build may encounter values in a different order compared to the first build.
-tree_build :: proc (tree: ^[] Tree_Node, triangles: [] Triangle) {
+// @important @volatile The triangles buffer is sorted at the end.
+// You need to pass all per vertex data along, so that it can be sorted alongside the vertices.
+tree_build :: proc (tree: ^[] Tree_Node, triangles: [] Triangle, normals: [] Normals) {
     allocator := context.temp_allocator
     
     // @note(viktor): 
@@ -164,8 +164,10 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [] Triangle) {
     
     ////////////////////////////////////////////////
     
-    buffer := make_shallow_copy(triangles, allocator)
+    buffer_t := make_shallow_copy(triangles, allocator)
+    buffer_n := make_shallow_copy(normals, allocator)
     zero_slice(triangles[:])
+    zero_slice(normals[:])
     
     next_free_value_index: Value_Index
     
@@ -181,13 +183,14 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [] Triangle) {
                 for buffer_index, offset in indices {
                     value_index := node.first.value + cast(Value_Index) offset
                     assert(triangles[value_index] == {})
-                    value := buffer[buffer_index]
-                    triangles[value_index] = value
+                    assert(normals[value_index] == {})
+                    triangles[value_index] = buffer_t[buffer_index]
+                    normals[value_index]   = buffer_n[buffer_index]
                 }
             }
         }
     }
-    assert(next_free_value_index == cast(Value_Index) len(buffer))
+    assert(next_free_value_index == cast(Value_Index) len(buffer_t))
     
     for node_index := next_free_tree_index-1; node_index > 0; node_index -= 1 {
         node := &tree[node_index]

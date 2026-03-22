@@ -126,7 +126,7 @@ brdf_lookup :: proc (brdf_data: [] v3, material: Lane(Material), view_direction,
     
     indices := (i2) + (i1 * count[2]) + (i0 * count[2] * count[1])
     // @note(viktor): index of [] f32 -> index of [] v3
-    indices = floor(lane_u32, cast(lane_f32) indices / 3) 
+    indices = transmute(lane_u32) (transmute([LaneWidth] u32) indices / 3) 
     
     // @cleanup
     values_index := lane_gather(lane_member(brdf, "values_index", u32))

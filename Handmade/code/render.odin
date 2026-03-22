@@ -16,8 +16,9 @@ Render_Stats :: struct {
 
 Render :: struct {
     triangles: [] Ray_Triangle,
+    normals:   [] Normals,
     trees:     [] Tree_Node,
-    models:    [] MModel,
+    models:    [] RenderModel,
     materials: [] Material,
     brdf_data: [] v3,
     
@@ -45,12 +46,11 @@ Render :: struct {
     stats: Render_Stats,
 }
 
-Triangle_Normals :: struct {
-    normal, tangent, binormal: v3,
-}
+Normals :: [3] v3
 
 Model :: struct {
     triangles: [] Triangle,
+    normals:   [] Normals,
     tree:      Tree,
     
     translation: v3,
@@ -61,7 +61,7 @@ Model :: struct {
     material:    u32,
 }
 
-MModel :: struct {
+RenderModel :: struct {
     triangle_offset: u32,
     triangle_count:  u32,
     tree_offset: u32,
@@ -70,7 +70,8 @@ MModel :: struct {
     material:  u32,
     
     forward: Transform,
-    inverse: lane_Transform,
+    inverse: Transform,
+    lane_inverse: lane_Transform,
 }
 
 Color :: [4] u8
@@ -96,11 +97,6 @@ lane_Transform :: struct {
 }
 
 Camera :: distinct Transform
-
-// @todo(viktor): lane_Transform?
-lane_Camera :: struct {
-    x,y,z,p: lane_v3,
-}
 
 Material :: struct {
     emit:    v3,
@@ -164,9 +160,10 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     next_free_tree_offset: u32
     
     render.triangles = make([] Ray_Triangle, total_triangle_count, render.allocator)
-    render.trees = make([] Tree_Node, total_tree_count, render.allocator)
+    render.normals   = make([] Normals,      total_triangle_count, render.allocator)
+    render.trees     = make([] Tree_Node,    total_tree_count,     render.allocator)
     
-    render.models = make([] MModel, len(world.models), render.allocator)
+    render.models = make([] RenderModel, len(world.models), render.allocator)
     for model, model_index in world.models {
         rm := &render.models[model_index]
         rm.material = model.material
@@ -180,35 +177,46 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
         inv_x := cross(model.scale_y, model.scale_z) / determinant
         inv_y := cross(model.scale_z, model.scale_x) / determinant
         inv_z := cross(model.scale_x, model.scale_y) / determinant
-        rm.inverse.x = vec_cast(lane_f32, inv_x)
-        rm.inverse.y = vec_cast(lane_f32, inv_y)
-        rm.inverse.z = vec_cast(lane_f32, inv_z)
+        rm.inverse.x = inv_x
+        rm.inverse.y = inv_y
+        rm.inverse.z = inv_z
+        rm.inverse.t = transform_mul_0(rm.inverse, -rm.forward.t)
+        rm.lane_inverse.x = vec_cast(lane_f32, rm.inverse.x)
+        rm.lane_inverse.y = vec_cast(lane_f32, rm.inverse.y)
+        rm.lane_inverse.z = vec_cast(lane_f32, rm.inverse.z)
+        rm.lane_inverse.t = vec_cast(lane_f32, rm.inverse.t)
         
-        rm.inverse.t = apply_transform0(rm.inverse, -vec_cast(lane_f32, rm.forward.t))
-        
-        rm.triangle_offset = next_free_triangle_offset
-        rm.triangle_count  = cast(u32) len(model.triangles)
-        next_free_triangle_offset += rm.triangle_count
-        
-        triangles := render.triangles[rm.triangle_offset : rm.triangle_offset + rm.triangle_count]
-        for &it, it_index in triangles {
-            triangle := model.triangles[it_index]
-            it.a  = triangle.a
-            it.ab = triangle.b - triangle.a
-            it.ac = triangle.c - triangle.a
+        {
+            rm.triangle_offset = next_free_triangle_offset
+            rm.triangle_count  = cast(u32) len(model.triangles)
+            next_free_triangle_offset += rm.triangle_count
+            
+            triangles := render.triangles[rm.triangle_offset : rm.triangle_offset + rm.triangle_count]
+            for &it, it_index in triangles {
+                triangle := model.triangles[it_index]
+                it.a  = triangle.a
+                it.ab = triangle.b - triangle.a
+                it.ac = triangle.c - triangle.a
+            }
         }
         
-        rm.tree_offset = next_free_tree_offset
-        rm.tree_count  = cast(u32) len(model.tree)
-        next_free_tree_offset += rm.tree_count
-        tree := render.trees[rm.tree_offset : rm.tree_offset + rm.tree_count]
-        copy(tree, model.tree)
+        {
+            normals := render.normals[rm.triangle_offset : rm.triangle_offset + rm.triangle_count]
+            copy(normals, model.normals)
+        }
+        
+        {
+            rm.tree_offset = next_free_tree_offset
+            rm.tree_count  = cast(u32) len(model.tree)
+            next_free_tree_offset += rm.tree_count
+            tree := render.trees[rm.tree_offset : rm.tree_offset + rm.tree_count]
+            copy(tree, model.tree)
+        }
     }
     
     render.brdf_data = world.brdf_data[:]
     render.materials = make_shallow_copy(world.materials[:], render.allocator)
     
-    // @todo(viktor): make a copy per thread of the image data, so that it cannot be "false shared"
     zero_slice(render.image.data)
     
     tile_size := cast(v2i) max(render.image.width, render.image.height) / cast(i32) core_count
@@ -218,7 +226,7 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     
     Work :: struct {
         render: ^Render,
-        camera:  lane_Camera,
+        camera:  lane_Transform,
         rect:    Rectangle2i, 
         entropy: RandomSeries,
     }
@@ -226,13 +234,11 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     works := make([] Work, tile_count, render.allocator)
     work_index: u32
     
-    
-    lane_camera: lane_Camera
-    lane_camera.p = vec_cast(lane_f32, camera.t)
+    lane_camera: lane_Transform
     lane_camera.x = vec_cast(lane_f32, camera.x)
     lane_camera.y = vec_cast(lane_f32, camera.y)
     lane_camera.z = vec_cast(lane_f32, camera.z)
-    
+    lane_camera.t = vec_cast(lane_f32, camera.t)
     
     render.start = time.now()
     for row in 0..<tile_rows {

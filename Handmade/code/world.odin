@@ -48,151 +48,81 @@ world_create_model :: proc (world: ^World) -> ^Model {
 
 ////////////////////////////////////////////////
 
-teapot_scene :: proc (world: ^World) {
+default_scene :: proc (world: ^World) {
     // @todo(viktor): fixed Buffer of models and return indices
     reserve(&world.models, 128)
     
+    // @cleanup make the model setup less fragile
+    
     triangles := make([dynamic] Triangle, context.temp_allocator)
-    
-    // @cleanup 
-    { // light
-        clear(&triangles)
-        plane := world_create_model(world)
-        plane.material = 3
-        plane.translation = {0,0,4}
-        
-        v0 := v3 {-1, -1, 0}
-        v1 := v3 {-1,  1, 0}
-        v2 := v3 { 1,  1, 0}
-        v3 := v3 { 1, -1, 0}
-        
-        append(&triangles, Triangle{ a = v0, b = v2, c = v3})
-        append(&triangles, Triangle{ a = v0, b = v1, c = v2})
-        
-        tree_build(&plane.tree, triangles[:])
-        plane.triangles = make_shallow_copy(triangles[:], context.allocator) 
-    }
-    
-    { // ground
-        clear(&triangles)
-        plane := world_create_model(world)
-        plane.material = 1
-        plane.scale_x = {50,0,0}
-        plane.scale_y = {0,50,0}
-        v0 := v3 {-1, -1, 0}
-        v1 := v3 {-1,  1, 0}
-        v2 := v3 { 1,  1, 0}
-        v3 := v3 { 1, -1, 0}
-        
-        append(&triangles, Triangle{ a = v0, b = v2, c = v3})
-        append(&triangles, Triangle{ a = v0, b = v1, c = v2})
-        
-        when !Use_Transform do for &t in triangles {
-            t.a.xy *= 50
-            t.b.xy *= 50
-            t.c.xy *= 50
-        }
-        
-        tree_build(&plane.tree, triangles[:])
-        plane.triangles = make_shallow_copy(triangles[:], context.allocator)
-    }
-    
-    if false {
-        { // top
-            clear(&triangles)
-            plane := world_create_model(world)
-            plane.material = 6
-            plane.translation = {0,0,4}
-            plane.scale_x = {4,0,0}
-            plane.scale_y = {0,4,0}
-            
-            v0 := v3 {-1, -1, 0}
-            v1 := v3 {-1,  1, 0}
-            v2 := v3 { 1,  1, 0}
-            v3 := v3 { 1, -1, 0}
-            
-            append(&triangles, Triangle{ a = v0, b = v2, c = v3})
-            append(&triangles, Triangle{ a = v0, b = v1, c = v2})
-            
-            plane.triangles = make_shallow_copy(triangles[:], context.allocator)
-            tree_build(&plane.tree, plane.triangles)
-        }
-        
-        { // back
-            clear(&triangles)
-            plane := world_create_model(world)
-            plane.material = 6
-            plane.translation = {0,4,0}
-            plane.scale_x = {4,0,0}
-            plane.scale_z = {0,0,4}
-            
-            v0 := v3 {-1, 0, -1}
-            v1 := v3 {-1, 0,  1}
-            v2 := v3 { 1, 0,  1}
-            v3 := v3 { 1, 0, -1}
-            
-            append(&triangles, Triangle{ a = v0, b = v2, c = v3})
-            append(&triangles, Triangle{ a = v0, b = v1, c = v2})
-            
-            plane.triangles = make_shallow_copy(triangles[:], context.allocator)
-            tree_build(&plane.tree, plane.triangles)
-        }
-        
-        { // right
-            clear(&triangles)
-            plane := world_create_model(world)
-            plane.material = 5
-            plane.translation = {4,0,0}
-            plane.scale_y = {0,4,0}
-            plane.scale_z = {0,0,4}
-            
-            v0 := v3 {0, -1, -1}
-            v1 := v3 {0, -1,  1}
-            v2 := v3 {0,  1,  1}
-            v3 := v3 {0,  1, -1}
-            
-            append(&triangles, Triangle{ a = v0, b = v2, c = v3})
-            append(&triangles, Triangle{ a = v0, b = v1, c = v2})
-            
-            plane.triangles = make_shallow_copy(triangles[:], context.allocator)
-            tree_build(&plane.tree, plane.triangles)
-        }
-        
-        { // left
-            clear(&triangles)
-            plane := world_create_model(world)
-            plane.material = 4
-            plane.translation = {-4,0,0}
-            plane.scale_y = {0,4,0}
-            plane.scale_z = {0,0,4}
-            
-            v0 := v3 {0, -1, -1}
-            v1 := v3 {0, -1,  1}
-            v2 := v3 {0,  1,  1}
-            v3 := v3 {0,  1, -1}
-            
-            append(&triangles, Triangle{ a = v0, b = v2, c = v3})
-            append(&triangles, Triangle{ a = v0, b = v1, c = v2})
-            
-            plane.triangles = make_shallow_copy(triangles[:], context.allocator)
-            tree_build(&plane.tree, plane.triangles)
-        }
-    }
+    normals   := make([dynamic] Normals, context.temp_allocator)
     
     {
-        clear(&triangles)
         // 0 =   3488 triangles
         // 1 =  19480 triangles, 5.5x 0
         // 2 = 145620 triangles, 7.5x 1
         
-        teapot := world_create_model(world)
-        teapot.material = 2
+        model := world_create_model(world)
+        model.material = 2
+        model.translation = {-3,0,1.5}
         
-        load_teapot(&triangles, 0)
+        load_obj("./models/teapot0.obj", &triangles, &normals)
         
-        teapot.triangles = make_shallow_copy(triangles[:], context.allocator)
-        tree_build(&teapot.tree, teapot.triangles)
+        tree_build(&model.tree, triangles[:], normals[:])
+        model.triangles = make_shallow_copy(triangles[:], context.allocator)
+        model.normals   = make_shallow_copy(normals[:], context.allocator)
+    }
+    
+    {
+        model := world_create_model(world)
+        model.translation = {2,0,1}
+        model.material = 4
+        
+        load_obj("./models/suzanne.obj", &triangles, &normals)
+        
+        tree_build(&model.tree, triangles[:], normals[:])
+        model.triangles = make_shallow_copy(triangles[:], context.allocator)
+        model.normals   = make_shallow_copy(normals[:], context.allocator)
+    }
+    
+    { // light
+        model := world_create_model(world)
+        model.material = 3
+        model.scale_x = {.5,0,0}
+        model.scale_y = {0,.5,0}
+        model.scale_z = {0,0,.5}
+        model.translation = {0,0,3}
+        
+        load_obj("./models/sphere.obj", &triangles, &normals)
+        
+        tree_build(&model.tree, triangles[:], normals[:])
+        model.triangles = make_shallow_copy(triangles[:], context.allocator)
+        model.normals   = make_shallow_copy(normals[:],   context.allocator)
+    }
+    
+    {
+        model := world_create_model(world)
+        model.material = 5
+        model.translation = {0,0,1}
+        
+        // load_obj("./models/uvsphere.obj", &triangles, &normals)
+        load_obj("./models/cube_smooth.obj", &triangles, &normals)
+        
+        tree_build(&model.tree, triangles[:], normals[:])
+        model.triangles = make_shallow_copy(triangles[:], context.allocator)
+        model.normals   = make_shallow_copy(normals[:],   context.allocator)
+    }
+    
+    { // ground
+        model := world_create_model(world)
+        model.material = 1
+        model.scale_x = {50,0,0}
+        model.scale_y = {0,50,0}
+        
+        load_obj("./models/plane.obj", &triangles, &normals)
+        
+        tree_build(&model.tree, triangles[:], normals[:])
+        model.triangles = make_shallow_copy(triangles[:], context.allocator)
+        model.normals   = make_shallow_copy(normals[:],   context.allocator)
     }
 }
-
-Use_Transform :: !false

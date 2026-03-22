@@ -25,7 +25,7 @@ main :: proc () {
     world: World
     world_init(&world)
     
-    teapot_scene(&world)
+    default_scene(&world)
     ////////////////////////////////////////////////
     
     camera: Camera
@@ -304,7 +304,7 @@ main :: proc () {
                         
                         if display_button(layout, "Rebuild") {
                             start := time.now()
-                            tree_build(&model.tree, model.triangles)
+                            tree_build(&model.tree, model.triangles, model.normals)
                             selected_model_build_time = time.since(start)
                             print("building tree took %v\n", selected_model_build_time)
                             selected_model_info = inspect(model.tree)

@@ -504,14 +504,19 @@ min_max :: proc (a: $T, b: T) -> (min, max: T) {
     }
 }
 
+extract :: proc { extract_s, extract_v2, extract_v3 }
 extract_v3 :: proc (a: lane_v3, #any_int n: u32) -> (result: v3) {
     result.x = extract(a.x, n)
     result.y = extract(a.y, n)
     result.z = extract(a.z, n)
     return result
 }
-
-extract :: proc (a: $T/#simd[$N] $Element, #any_int n: u32) -> (result: Element) {
+extract_v2 :: proc (a: lane_v2, #any_int n: u32) -> (result: v2) {
+    result.x = extract(a.x, n)
+    result.y = extract(a.y, n)
+    return result
+}
+extract_s :: proc (a: $T/#simd[$N] $Element, #any_int n: u32) -> (result: Element) {
     when intrinsics.type_is_array(T) {
         #no_bounds_check #unroll for i in 0..<len(T) {
             result[i] = simd.extract(a[i], n)
@@ -523,14 +528,17 @@ extract :: proc (a: $T/#simd[$N] $Element, #any_int n: u32) -> (result: Element)
 }
 
 // @naming
+replace :: proc { replace_s, replace_v2, replace_v3 }
 replace_v3 :: proc (a: ^lane_v3, #any_int n: u32, value: v3) {
     replace(&a.x, n, value.x)
     replace(&a.y, n, value.y)
     replace(&a.z, n, value.z)
 }
-
-// @naming
-replace :: proc (a: ^$T/ #simd[$N] $Element, #any_int n: u32, value: Element) {
+replace_v2 :: proc (a: ^lane_v2, #any_int n: u32, value: v2) {
+    replace(&a.x, n, value.x)
+    replace(&a.y, n, value.y)
+}
+replace_s :: proc (a: ^$T/ #simd[$N] $Element, #any_int n: u32, value: Element) {
     when intrinsics.type_is_array(T) {
         #no_bounds_check #unroll for i in 0..<len(T) {
             a[i] = simd.replace(a[i], n, value[i])

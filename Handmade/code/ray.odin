@@ -30,6 +30,7 @@ Hit_Info :: struct {
     closest_t: f32,
     did_hit:   u32,
     triangle:  u32,
+    triangle_uv: v2,
 }
 
 ////////////////////////////////////////////////
@@ -49,9 +50,10 @@ Rectangle_Threshold : f32 = 500
 
 Collect_Stats :: true
 
-render_tile :: proc(render: ^Render, camera: lane_Camera, rect: Rectangle2i, entropy: ^RandomSeries) {
+render_tile :: proc(render: ^Render, camera: lane_Transform, rect: Rectangle2i, entropy: ^RandomSeries) {
     image            := render.image
     triangles        := render.triangles
+    normals          := render.normals
     trees            := render.trees
     models           := render.models
     materials        := render.materials
@@ -61,7 +63,7 @@ render_tile :: proc(render: ^Render, camera: lane_Camera, rect: Rectangle2i, ent
     max_bounce_count := render.max_bounce_count
     
     film_distance :: 1
-    film_center := camera.p - film_distance * camera.z
+    film_center := camera.t - film_distance * camera.z
     
     film_size := cast(v2) 1
     
@@ -85,7 +87,7 @@ render_tile :: proc(render: ^Render, camera: lane_Camera, rect: Rectangle2i, ent
             film_x := linear_blend(cast(f32) -1, 1, cast(f32) px / image_size.x)
             film_p := vec_cast(lane_f32, film_x, film_y)
             
-            cast_result := cast_rays(triangles, trees, models, materials, brdf_data, film_p, entropy, pixel_size, half_film_size, film_center, camera, rays_per_pixel, max_bounce_count)
+            cast_result := cast_rays(triangles, normals, trees, models, materials, brdf_data, film_p, entropy, pixel_size, half_film_size, film_center, camera, rays_per_pixel, max_bounce_count)
             
             when Collect_Stats {
                 total.triangles   += cast_result.triangles
@@ -132,7 +134,7 @@ render_tile :: proc(render: ^Render, camera: lane_Camera, rect: Rectangle2i, ent
     atomic_add(&render_stats.tiles_retired, 1)
 }
 
-cast_rays :: proc (triangles: [] Ray_Triangle, trees: [] Tree_Node, models: [] MModel, materials: [] Material, brdf_data: [] v3, init_film_p: lane_v2, entropy: ^RandomSeries,  pixel_size: lane_v2, half_film_size: lane_v2, film_center: lane_v3, camera: lane_Camera, rays_per_pixel, max_bounce_count: u32) -> Cast_Result {
+cast_rays :: proc (triangles: [] Ray_Triangle, normals: [] Normals, trees: [] Tree_Node, models: [] RenderModel, materials: [] Material, brdf_data: [] v3, init_film_p: lane_v2, entropy: ^RandomSeries,  pixel_size: lane_v2, half_film_size: lane_v2, film_center: lane_v3, camera: lane_Transform, rays_per_pixel, max_bounce_count: u32) -> Cast_Result {
     final_color_lanes: lane_v3
     
     bounces_computed_lanes:  lane_u32
@@ -151,8 +153,8 @@ cast_rays :: proc (triangles: [] Ray_Triangle, trees: [] Tree_Node, models: [] M
         film_p := film_center + (offset.x * camera.x * half_film_size.x + offset.y * camera.y * half_film_size.y) 
         
         // @todo(viktor): depth blur can be added here by jittering the ray_o
-        ray_o := camera.p
-        ray_d := normalize_or_zero(film_p - camera.p)
+        ray_o := camera.t
+        ray_d := normalize_or_zero(film_p - camera.t)
         spall_end()
         
         attenuation := cast(lane_v3) 1
@@ -176,22 +178,18 @@ cast_rays :: proc (triangles: [] Ray_Triangle, trees: [] Tree_Node, models: [] M
                 model_triangles := triangles[model.triangle_offset : model.triangle_offset + model.triangle_count]
                 model_tree      := trees[    model.tree_offset     : model.tree_offset     + model.tree_count]
                 
-                when Use_Transform {
-                    model_ray_o := apply_transform1(model.inverse, ray_o)
-                    model_ray_d := apply_transform0(model.inverse, ray_d)
-                } else {
-                    model_ray_o := ray_o + model.inverse.t
-                    model_ray_d := ray_d
-                }
+                model_ray_o := transform_mul_1(model.lane_inverse, ray_o)
+                model_ray_d := transform_mul_0(model.lane_inverse, ray_d)
                 
-                model_max_t := lane_gather(lane_member(lane_hits, "closest_t", f32)) - 0.01
+                model_max_t := lane_gather(lane_member(lane_hits, "closest_t", f32))
                 
-                hit_mask, hit_t, hit_triangle, tests := hit_tree(model_triangles, model_tree, model_ray_o, model_ray_d, min_t, model_max_t)
+                hit_mask, hit_t, hit_triangle, hit_uv, tests := hit_tree(model_triangles, model_tree, model_ray_o, model_ray_d, min_t, model_max_t)
                 for lane in 0..<LaneWidth {
                     if extract(hit_mask, lane) != 0 {
-                        hits[lane].did_hit = 0xffff_ffff
-                        hits[lane].closest_t = extract(hit_t, lane)
-                        hits[lane].triangle  = extract(hit_triangle, lane)
+                        hits[lane].did_hit     = 0xffff_ffff
+                        hits[lane].closest_t   = extract(hit_t, lane)
+                        hits[lane].triangle    = extract(hit_triangle, lane)
+                        hits[lane].triangle_uv = extract(hit_uv, lane)
                     }
                 }
                 conditional_assign(hit_mask, &model_index, cast(lane_u32) index)
@@ -236,26 +234,27 @@ cast_rays :: proc (triangles: [] Ray_Triangle, trees: [] Tree_Node, models: [] M
             hit_binormal: lane_v3
             {
                 triangle_index := lane_gather(lane_member(lane_hits, "triangle", u32))
-                triangle := lane_index(to_lane(triangles), lane_gather(lane_member(model, "triangle_offset", u32)) + triangle_index)
+                uv := lane_gather_v(lane_member(lane_hits, "triangle_uv", v2))
+                triangle_normals := lane_index(to_lane(normals), lane_gather(lane_member(model, "triangle_offset", u32)) + triangle_index)
                 
-                ab := lane_gather_v(lane_member(triangle, "ab", v3))
-                ac := lane_gather_v(lane_member(triangle, "ac", v3))
+                n0 := lane_gather_v(lane_index(triangle_normals, 0))
+                n1 := lane_gather_v(lane_index(triangle_normals, 1))
+                n2 := lane_gather_v(lane_index(triangle_normals, 2))
                 
-                forward := lane_member(model, "forward", Transform)
-                tx := lane_gather_v(lane_member(forward, "x", v3))
-                ty := lane_gather_v(lane_member(forward, "y", v3))
-                tz := lane_gather_v(lane_member(forward, "z", v3))
-                tt := lane_gather_v(lane_member(forward, "t", v3))
+                ix := lane_gather_v(lane_member(model, "inverse", "x", v3))
+                iy := lane_gather_v(lane_member(model, "inverse", "y", v3))
+                iz := lane_gather_v(lane_member(model, "inverse", "z", v3))
+                // @note(viktor): no translation
                 
-                when Use_Transform {
-                    ab = apply_transform0(lane_Transform{tx, ty, tz, tt}, ab)
-                    ac = apply_transform0(lane_Transform{tx, ty, tz, tt}, ac)
-                }
+                t := lane_Transform{ix, iy, iz, 0}
+                t = transform_transpose(t)
                 
-                // @todo(viktor): interpolate the vertex normals
-                // @note(viktor): Assuming counter-clockwise winding order
-                hit_normal   = normalize_or_zero(cross(ab, ac))
-                hit_tangent  = normalize_or_zero(ab)
+                hit_normal = normalize_or_zero((1-uv.x-uv.y) * n0 + uv.x * n1 + uv.y * n2)
+                hit_normal = transform_mul_0(t, hit_normal)
+                hit_normal = normalize_or_zero(hit_normal)
+                
+                up_mask := approximate_equal(absolute(dot(hit_normal, lane_v3{0,0,1})), 1)
+                hit_tangent  = normalize_or_zero(ternary(up_mask, cross(hit_normal, lane_v3{0,1,0}), cross(hit_normal, lane_v3{0,0,1})))
                 hit_binormal = normalize_or_zero(cross(hit_normal, hit_tangent))
             }
             spall_end()
@@ -271,7 +270,7 @@ cast_rays :: proc (triangles: [] Ray_Triangle, trees: [] Tree_Node, models: [] M
             pure_bounce   := reflect(ray_d, hit_normal)
             random_bounce := normalize_or_zero(hit_normal + random_bilateral(entropy, lane_v3))
             
-            next_d := linear_blend(pure_bounce, random_bounce, hit_scatter)
+            next_d := normalize_or_zero(linear_blend(pure_bounce, random_bounce, hit_scatter))
             
             ////////////////////////////////////////////////
             reflectance := brdf_lookup(brdf_data, material, -ray_d, hit_normal, hit_tangent, hit_binormal, next_d)
@@ -283,7 +282,7 @@ cast_rays :: proc (triangles: [] Ray_Triangle, trees: [] Tree_Node, models: [] M
             
             ////////////////////////////////////////////////
             hit_t := lane_gather(lane_member(lane_hits, "closest_t", f32))
-            ray_o = fused_mul_add(ray_d, hit_t, ray_o) + hit_normal * 0.000001
+            ray_o = fused_mul_add(ray_d, hit_t, ray_o)
             ray_d = next_d
         }
         
@@ -314,7 +313,22 @@ cast_rays :: proc (triangles: [] Ray_Triangle, trees: [] Tree_Node, models: [] M
 // balance heuristic: 
 //   
 
-apply_transform1 :: proc (m: $Transform, v: $V) -> V {
+transform_transpose :: proc (m: $Transform) -> Transform {
+    result: Transform
+    result.x.x = m.x.x
+    result.y.x = m.x.y
+    result.z.x = m.x.z
+    result.x.y = m.y.x
+    result.y.y = m.y.y
+    result.z.y = m.y.z
+    result.x.z = m.z.x
+    result.y.z = m.z.y
+    result.z.z = m.z.z
+    result.t = 0
+    return result
+}
+
+transform_mul_1 :: proc (m: $Transform, v: $V) -> V {
     result := m.t
     result  = fused_mul_add(m.x, v.x, result)
     result  = fused_mul_add(m.y, v.y, result)
@@ -323,7 +337,7 @@ apply_transform1 :: proc (m: $Transform, v: $V) -> V {
     return result
 }
 
-apply_transform0 :: proc (m: $Transform, v: $V) -> V {
+transform_mul_0 :: proc (m: $Transform, v: $V) -> V {
     result := m.x * v.x
     result  = fused_mul_add(m.y, v.y, result)
     result  = fused_mul_add(m.z, v.z, result)
@@ -333,7 +347,7 @@ apply_transform0 :: proc (m: $Transform, v: $V) -> V {
 
 ////////////////////////////////////////////////
 
-hit_tree :: proc (triangles: [] Ray_Triangle, tree: Tree, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32) -> (lane_u32, lane_f32, lane_u32, Test_Info) {
+hit_tree :: proc (triangles: [] Ray_Triangle, tree: Tree, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32) -> (lane_u32, lane_f32, lane_u32, lane_v2, Test_Info) {
     spall_proc()
     
     inv_d     := 1 / ray_d
@@ -352,7 +366,7 @@ hit_tree :: proc (triangles: [] Ray_Triangle, tree: Tree, ray_o, ray_d: lane_v3,
         }
     }
     
-    if total_hit_mask == lane_false do return lane_false, +Infinity, 0, info
+    if total_hit_mask == lane_false do return lane_false, +Infinity, 0, 0, info
     ////////////////////////////////////////////////
     
     triangles := to_lane(triangles)
@@ -365,17 +379,19 @@ hit_tree :: proc (triangles: [] Ray_Triangle, tree: Tree, ray_o, ray_d: lane_v3,
     model_hit_mask: lane_u32
     model_hit_t: lane_f32 = max_t
     model_hit_triangle: lane_u32
+    model_hit_uv: lane_v2
     for lane in 0..<LaneWidth {
         if extract(total_hit_mask, lane) == 0 do continue
         
         closest_t_hit := extract(model_hit_t, lane)
         did_hit: bool
         triangle_hit: u32
+        hit_uv: v2
         
-        lane_ray_o     := vec_cast(lane_f32, extract_v3(ray_o, lane))
-        lane_ray_d     := vec_cast(lane_f32, extract_v3(ray_d, lane))
-        lane_inv_d     := vec_cast(lane_f32, extract_v3(inv_d, lane))
-        lane_neg_inv_o := vec_cast(lane_f32, extract_v3(neg_inv_o, lane))
+        lane_ray_o     := vec_cast(lane_f32, extract(ray_o, lane))
+        lane_ray_d     := vec_cast(lane_f32, extract(ray_d, lane))
+        lane_inv_d     := vec_cast(lane_f32, extract(inv_d, lane))
+        lane_neg_inv_o := vec_cast(lane_f32, extract(neg_inv_o, lane))
         
         stack[0]     = Root_Index
         stack_count := cast(u32) 1
@@ -413,27 +429,29 @@ hit_tree :: proc (triangles: [] Ray_Triangle, tree: Tree, ray_o, ray_d: lane_v3,
                     triangle_index := value_index + lane_offset
                     triangle := lane_index(triangles, triangle_index)
                     
-                    triangle_hit_mask, triangle_t := hit_triangle(lane_true, triangle, lane_ray_o, lane_ray_d, min_t, closest_t_hit)
+                    triangle_hit_mask, triangle_t, triangle_uv := hit_triangle(lane_true, triangle, lane_ray_o, lane_ray_d, min_t, closest_t_hit)
                     if triangle_hit_mask == lane_false do continue values
                     
                     closest_t, closest_lane := get_closest_lane(triangle_hit_mask, triangle_t)
                     closest_t_hit = closest_t
                     did_hit       = true
                     triangle_hit  = value_index + closest_lane
+                    hit_uv        = extract(triangle_uv, closest_lane)
                 }
                 
                 tail: if value_index := full_end; value_index < end {
                     triangle_index := value_index + lane_offset
                     mask     := less_than(triangle_index, cast(lane_u32) end)
-                    triangle := lane_index(triangles, triangle_index)
+                    triangle := lane_index(triangles, triangle_index & mask)
                     
-                    triangle_hit_mask, triangle_t := hit_triangle(mask, triangle, lane_ray_o, lane_ray_d, min_t, closest_t_hit)
+                    triangle_hit_mask, triangle_t, triangle_uv := hit_triangle(mask, triangle, lane_ray_o, lane_ray_d, min_t, closest_t_hit)
                     if triangle_hit_mask == lane_false do break tail
                     
                     closest_t, closest_lane := get_closest_lane(triangle_hit_mask, triangle_t)
                     closest_t_hit = closest_t
                     did_hit       = true
                     triangle_hit  = value_index + closest_lane
+                    hit_uv        = extract(triangle_uv, closest_lane)
                 }
                 
                 when Collect_Stats {
@@ -452,13 +470,14 @@ hit_tree :: proc (triangles: [] Ray_Triangle, tree: Tree, ray_o, ray_d: lane_v3,
             replace(&model_hit_t,        lane, closest_t_hit)
             replace(&model_hit_mask,     lane, 0xffff_ffff)
             replace(&model_hit_triangle, lane, triangle_hit)
+            replace(&model_hit_uv,       lane, hit_uv)
         }
     }
     
     // @cleanup
     assert(less_than(model_hit_t, max_t) == model_hit_mask)
     
-    return model_hit_mask, model_hit_t, model_hit_triangle, info
+    return model_hit_mask, model_hit_t, model_hit_triangle, model_hit_uv, info
 }
 
 get_closest_lane :: proc (triangle_hit_mask: lane_u32, triangle_t: lane_f32) -> (f32, u32) {
@@ -495,7 +514,7 @@ hit_rectangle :: proc (min, max: lane_v3, neg_inv_o, inv_d: lane_v3, t_min_init,
     return result
 }
 
-hit_triangle :: proc (not_nil_mask: lane_u32, triangle: Lane(Ray_Triangle), ray_o, ray_d: lane_v3, min_t: lane_f32, max_t: lane_f32) -> (lane_u32, lane_f32) {
+hit_triangle :: proc (not_nil_mask: lane_u32, triangle: Lane(Ray_Triangle), ray_o, ray_d: lane_v3, min_t: lane_f32, max_t: lane_f32) -> (lane_u32, lane_f32, lane_v2) {
     Check :: false
     when Check do assert(not_nil_mask != lane_false)
     
@@ -508,23 +527,25 @@ hit_triangle :: proc (not_nil_mask: lane_u32, triangle: Lane(Ray_Triangle), ray_
     
     hit_mask := not_nil_mask
     hit_t    := cast(lane_f32) +Infinity
-    
+    hit_uv: lane_v2
     hit_mask &= greater_than(absolute(determinant), 1e-6)
-    if hit_mask == lane_false do return hit_mask, hit_t
+    if hit_mask == lane_false do return hit_mask, hit_t, hit_uv
     
-    s := (ray_o - a) / determinant
-    u := dot(s, ray_cross_ac)
+    s := (ray_o - a)
+    inv_determinant := 1 / determinant
+    u := dot(s, ray_cross_ac) * inv_determinant
     
     hit_mask &= greater_equal(u, 0) & less_equal(u, 1)
-    if hit_mask == lane_false do return hit_mask, hit_t
+    if hit_mask == lane_false do return hit_mask, hit_t, hit_uv
     
     s_cross_ab := cross(s, ab)
-    v := dot(s_cross_ab, ray_d)
+    v := dot(s_cross_ab, ray_d) * inv_determinant
     hit_mask &= greater_equal(v, 0) & less_equal(u + v, 1)
-    if hit_mask == lane_false do return hit_mask, hit_t
+    if hit_mask == lane_false do return hit_mask, hit_t, hit_uv
     
-    hit_t = dot(s_cross_ab, ac)
+    hit_t = dot(s_cross_ab, ac) * inv_determinant
     hit_mask &= greater_than(hit_t, min_t) & less_than(hit_t, max_t)
+    hit_uv = lane_v2{u, v}
     
-    return hit_mask, hit_t
+    return hit_mask, hit_t, hit_uv
 }

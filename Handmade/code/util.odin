@@ -200,7 +200,7 @@ slice_from_parts_type_of_data_pointer :: proc (data: ^$T, #any_int count: i64) -
     return (cast([^]T) data)[:count] // :PointerArithmetic
 }
 
-dynamic_array_from_parts :: proc ($T: typeid, data: pmm, #any_int length, capacity: int, allocator: Maybe(Allocator) = nil) -> [dynamic] T {
+array_from_parts :: proc ($T: typeid, data: pmm, #any_int length, capacity: int, allocator: Maybe(Allocator) = nil) -> [dynamic] T {
     result := Raw_Dynamic_Array {
         data = data,
         len  = length,
