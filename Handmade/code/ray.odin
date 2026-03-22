@@ -62,6 +62,7 @@ render_tile :: proc(render: ^Render, camera: lane_Transform, rect: Rectangle2i, 
     rays_per_pixel   := render.rays_per_pixel
     max_bounce_count := render.max_bounce_count
     
+    // @waste check what can be a parameter/passed in
     film_distance :: 1
     film_center := camera.t - film_distance * camera.z
     
@@ -77,6 +78,8 @@ render_tile :: proc(render: ^Render, camera: lane_Transform, rect: Rectangle2i, 
     half_film_size := vec_cast(lane_f32, .5 * film_size)
     pixel_size := 1. / vec_cast(lane_f32, image_size)
     
+    image_size_factor := 1 / image_size
+    
     total: Test_Info
     bounces_computed, loops_computed: u64
     shift :: 2
@@ -84,12 +87,13 @@ render_tile :: proc(render: ^Render, camera: lane_Transform, rect: Rectangle2i, 
         for ox in cast(i32) 0..<shift {
             for y := oy; y < rect.max.y - rect.min.y; y += shift {
                 py := rect.min.y + y
-                film_y := linear_blend(cast(f32) -1, 1, cast(f32) py / image_size.y)
+                film_y := linear_blend(cast(f32) -1, 1, cast(f32) py * image_size_factor.y)
+                
                 for x := ox; x < rect.max.x - rect.min.x; x += shift {
-                    px := rect.min.x + x
                     if render.canceled do break pixels
-            
-                    film_x := linear_blend(cast(f32) -1, 1, cast(f32) px / image_size.x)
+                    
+                    px := rect.min.x + x
+                    film_x := linear_blend(cast(f32) -1, 1, cast(f32) px * image_size_factor.x)
                     film_p := vec_cast(lane_f32, film_x, film_y)
                     
                     cast_result := cast_rays(triangles, normals, trees, models, materials, brdf_data, film_p, entropy, pixel_size, half_film_size, film_center, camera, rays_per_pixel, max_bounce_count)

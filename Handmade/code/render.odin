@@ -14,6 +14,7 @@ Render_Stats :: struct {
     using tests: Test_Info,
 }
 
+// @waste only use the render data structure if possible(skip lane_xx for now)
 Render :: struct {
     triangles: [] Ray_Triangle,
     normals:   [] Normals,

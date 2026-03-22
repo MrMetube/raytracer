@@ -1,21 +1,18 @@
 ## To be done
 
-- dont enqueue tiles in order
-    - use offsets to evenly distribute work across the screen 
-    - so that partial output is more representative
-    - do the same in the pixel loop, i.e. every even then every odd pixel
-
-- for fast render
-    - automatic mode
-    - take last frame time, estimate next time by time_per_ray * ray_count -> rays_per_pixel
-
 - store uvs per vertex and assign a texture per model
-    - calculate the rays uvs on hit, and save the texture
+    - save the texture on hit
     - bilinear sample the texture based on uvs
     - make a default 1x1 white pixel texture
     - load a model with uvs and texture and render it
 
+- models
+    - How to handle textures?
+    - separate entity from model, use a model index
+
 - vary sample count over viewport, have a focus region with highest detail
+    - base this on the shifted iteration?
+    - just sample certain regions first/allow partial results to be displayed
 - think more about the response to a accumulated ray
     - do more than store it, get inspired by biology
 
@@ -36,16 +33,6 @@
         - this requires a wavelength per ray, instead of a color
             - how to sample a texture's colors as wavelengths?
 - Energy conservation
-
-- check for "false sharing" between threads in render tiles
-    - maybe adjust sizes
-
-- load multiple models
-    - Load obj files
-    - Normals, UVs
-    - How to handle textures?
-    - allow rotating scaling with a transform
-    - separate entity from model, use a model index
 
 - Code minimization
     - replace random generator with math xorshiro, which seems to be a continuation of the original xor-shift
