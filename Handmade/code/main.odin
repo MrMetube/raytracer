@@ -20,6 +20,7 @@ main :: proc () {
     
     _, logical_core_count, ok := si.cpu_core_count(); assert(ok)
     core_count := cast(u32) logical_core_count - 1
+    print("Using %v cores per render\n", core_count)
     
     world: World
     world_init(&world)
@@ -407,7 +408,10 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
         
         layout_advance(layout, 5)
         layout_begin_horizontal(layout)
-            if display_button(layout, "Reset") do stat_init(&render.render_time)
+            if display_button(layout, "Reset") {
+                stat_init(&render.render_time, time.diff(render.start, render.end))
+                stat_finalize(&render.render_time)
+            }
             layout_advance(layout, 5)
             display_line(layout, "Render time: min = %v, avg = %v, max = %v", render.render_time.min, cast(time.Duration) render.render_time.avg, render.render_time.max)
         layout_end_horizontal(layout)

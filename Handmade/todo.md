@@ -1,5 +1,9 @@
 ## To be done
 
+- for fast render
+    - automatic mode
+    - take last frame time, estimate next time by time_per_ray * ray_count -> rays_per_pixel
+
 - store uvs per vertex and assign a texture per model
     - calculate the rays uvs on hit, and save the texture
     - bilinear sample the texture based on uvs

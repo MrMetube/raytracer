@@ -81,6 +81,7 @@ Image :: struct {
     height: i32,
 }
 
+// @todo(viktor): see if #soa [LaneWidth] struct is equivalent
 Transform :: struct {
     x: v3,
     y: v3,
@@ -95,6 +96,11 @@ lane_Transform :: struct {
 }
 
 Camera :: distinct Transform
+
+// @todo(viktor): lane_Transform?
+lane_Camera :: struct {
+    x,y,z,p: lane_v3,
+}
 
 Material :: struct {
     emit:    v3,
@@ -165,12 +171,10 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
         rm := &render.models[model_index]
         rm.material = model.material
         
-        rm.forward.t = model.translation
-        rm.inverse.t = -vec_cast(lane_f32, rm.forward.t)
-        
         rm.forward.x = model.scale_x
         rm.forward.y = model.scale_y
         rm.forward.z = model.scale_z
+        rm.forward.t = model.translation
         
         determinant := dot(model.scale_x, cross(model.scale_y, model.scale_z))
         inv_x := cross(model.scale_y, model.scale_z) / determinant
@@ -179,6 +183,8 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
         rm.inverse.x = vec_cast(lane_f32, inv_x)
         rm.inverse.y = vec_cast(lane_f32, inv_y)
         rm.inverse.z = vec_cast(lane_f32, inv_z)
+        
+        rm.inverse.t = apply_transform0(rm.inverse, -vec_cast(lane_f32, rm.forward.t))
         
         rm.triangle_offset = next_free_triangle_offset
         rm.triangle_count  = cast(u32) len(model.triangles)

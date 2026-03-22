@@ -374,11 +374,16 @@ Stat :: struct ($T: typeid) {
     avg: f64,
 }
 
-stat_init :: proc (stat: ^Stat($T)) {
-    stat.min = max(T)
-    stat.max = min(T)
-    stat.count = 0
-    stat.sum = 0
+stat_init :: proc { stat_init_nil, stat_init_value }
+stat_init_nil :: proc (stat: ^Stat($T)) {
+    stat^ = {
+        min = max(T),
+        max = min(T),
+    }
+}
+stat_init_value :: proc (stat: ^Stat($T), value: T) {
+    stat_init(stat)
+    stat_update(stat, value)
 }
 stat_make :: proc (value: $T) -> Stat(T) {
     result: Stat(T)

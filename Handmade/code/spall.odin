@@ -10,7 +10,7 @@ import "core:prof/spall"
 import "core:time"
 import "core:fmt"
 
-@(private="file") SpallBufferSize :: 3 * Gigabyte
+@(private="file") SpallBufferSize :: 2 * Gigabyte
 
 @(private="file") spall_ctx: spall.Context
 @(private="file", thread_local) spall_buffer: spall.Buffer
