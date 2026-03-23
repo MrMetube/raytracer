@@ -114,29 +114,9 @@ layout_indent_scope :: proc (layout: ^Layout) {
 ////////////////////////////////////////////////
 
 SliderFlag :: enum {
-    relative,
     logarithmic,
 }
 SliderFlags :: bit_set[SliderFlag]
-
-// @copypasta
-display_slider_v :: proc (layout: ^Layout, width: f32, value: ^$V/[$N] $E, min: V, max: V, format: string = "", args: ..any, flags := SliderFlags{}) -> bool {
-    layout_begin_horizontal(layout)
-    if format != "" {
-        ui_text(layout, format, ..args)
-        layout_advance(layout, 10)
-    }
-    
-    slider_width := (width - 20) / len(V)
-    result: bool
-    for i in 0..<len(V) {
-        result ||= display_slider_raw(layout, slider_width, &value[i], min[i], max[i], flags = flags)
-        layout_advance(layout, 10)
-    }
-    layout_end_horizontal(layout)
-    
-    return result
-}
 
 display_slider :: proc { display_slider_f, display_slider_i }
 display_slider_i :: proc (layout: ^Layout, width: f32, value: ^$T, min: T, max: T, format: string = "", args: ..any, flags : SliderFlags = {}) -> bool where T != f32 {
@@ -165,10 +145,6 @@ display_slider_f :: proc (layout: ^Layout, width: f32, value: ^f32, min: f32, ma
 display_slider_raw :: proc (layout: ^Layout, width: f32, value: ^f32, min: f32, max: f32, flags : SliderFlags = {}) -> bool {
     min := min
     max := max
-    if .relative in flags {
-        min = value^ + (1.0 / min)
-        max = value^ + (1.0 / max)
-    }
     
     size := v2{width, layout.font_size}
     bounds := rectangle_min_dimension(layout.at, size)
@@ -192,18 +168,5 @@ display_slider_raw :: proc (layout: ^Layout, width: f32, value: ^f32, min: f32, 
         value^ = editing_value
     }
     
-    return result
-}
-
-display_button :: proc (layout: ^Layout, text: string, size := v2{}) -> bool {
-    text := ctprint("%v", text)
-    size := size
-    if size == 0 {
-        size = rl.MeasureTextEx(layout.font, text, layout.font_size, 1)
-        size.x += 20
-    }
-    bounds := rect_to_rl(rectangle_min_dimension(layout.at, size))
-    result := rl.GuiButton(bounds, text)
-    layout_advance_2(layout, size)
     return result
 }

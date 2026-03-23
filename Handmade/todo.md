@@ -1,5 +1,11 @@
 ## To be done
 
+- ui
+    - hot_t, active_t, triggered_t interpolators
+    - smooth exponential lerp
+        - https://lisyarus.github.io/blog/posts/exponential-smoothing.html
+        - position = lerp(position, target, 1 - exp(- speed * dt)) or even position = lerp(target, position, exp(- speed * dt))
+
 - store uvs per vertex and assign a texture per model
     - save the texture on hit
     - bilinear sample the texture based on uvs
@@ -39,9 +45,6 @@
 
 ### Editor
 - Make UI to add new objects to a scene
-- UI for Brdfs, how to display? 
-    - Maybe another view with just the selected object rendered alone.
-    - Improve render abstraction to not always copy all data
     
 
 

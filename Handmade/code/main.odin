@@ -379,10 +379,19 @@ main :: proc () {
                         }
                     }
                                     
-                    if display_slider_v(layout, 300, &object.transform.x, -100, 100, "x", flags={.relative}) do fast_render.requested = true
-                    if display_slider_v(layout, 300, &object.transform.y, -100, 100, "y", flags={.relative}) do fast_render.requested = true
-                    if display_slider_v(layout, 300, &object.transform.z, -100, 100, "z", flags={.relative}) do fast_render.requested = true
-                    if display_slider_v(layout, 300, &object.transform.t, -100, 100, "translate", flags={.relative}) do fast_render.requested = true
+                    // @cleanup @api make a background on the value and allow a view parameter for the text of the button/dragger
+                    _, released := ui_dragger(layout, &object.transform.x.x, 0.1, "scale x = %v", object.transform.x.x)
+                    if released do fast_render.requested = true
+                    _, released  = ui_dragger(layout, &object.transform.y.y, 0.1, "scale y = %v", object.transform.y.y)
+                    if released do fast_render.requested = true
+                    _, released  = ui_dragger(layout, &object.transform.z.z, 0.1, "scale z = %v", object.transform.z.z)
+                    if released do fast_render.requested = true
+                    _, released  = ui_dragger(layout, &object.transform.t.x, 0.1, "translation x = %v", object.transform.t.x)
+                    if released do fast_render.requested = true
+                    _, released  = ui_dragger(layout, &object.transform.t.y, 0.1, "translation y = %v", object.transform.t.y)
+                    if released do fast_render.requested = true
+                    _, released  = ui_dragger(layout, &object.transform.t.z, 0.1, "translation z = %v", object.transform.t.z)
+                    if released do fast_render.requested = true
                     
                     if display_slider(layout, 100, &object.material, 1, cast(u32) len(world.materials)-1, "material %v", object.material) {
                         fast_render.requested = true
@@ -403,8 +412,9 @@ main :: proc () {
                 if index == selected_material_index {
                     layout_indent_scope(layout)
                     
-                    if display_slider(layout, 240, &material.scatter,  0,   1, "Scatter") do fast_render.requested = true
-                    if display_slider(layout, 240, &material.emit_factor, 0.00001, 1000, "Emittance", flags = {.logarithmic}) do fast_render.requested = true
+                    _, scatter_released := ui_dragger_clamp(layout, &material.scatter, 0.01,  0,   1, "Scatter %f", material.scatter)
+                    _, emittance_released := ui_dragger_clamp(layout, &material.emit_factor, 1, 0.00001, 1000, "Emittance %f", material.emit_factor, flags = {.logarithmic})
+                    if scatter_released || emittance_released do fast_render.requested = true
                     
                     layout_advance(layout, 10)
                     layout_begin_horizontal(layout)
@@ -503,18 +513,18 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
         
         layout_advance(layout, 5)
         layout_begin_horizontal(layout)
-            if display_button(layout, "-") do render.rays_per_pixel /= 2 
+            if ui_button(layout, set_value_interaction(&render.rays_per_pixel, render.rays_per_pixel / 2 ), "-") do render.rays_per_pixel /= 2 
             layout_advance(layout, 5)
-            if display_button(layout, "+") do render.rays_per_pixel *= 2
+            if ui_button(layout, set_value_interaction(&render.rays_per_pixel, render.rays_per_pixel * 2), "+") do render.rays_per_pixel *= 2
             layout_advance(layout, 5)
             ui_text(layout, "rays per_pixel %v", render.rays_per_pixel)
             render.rays_per_pixel = clamp(render.rays_per_pixel, LaneWidth, 8192)
         layout_end_horizontal(layout)
         
         layout_begin_horizontal(layout)
-            if display_button(layout, "-") do render.max_bounce_count -= render.max_bounce_count <= 8 ? 1 : 2
+            if ui_button(layout, set_value_interaction(&render.max_bounce_count, render.max_bounce_count - 1), "-") do render.max_bounce_count -= render.max_bounce_count <= 8 ? 1 : 2
             layout_advance(layout, 5)
-            if display_button(layout, "+") do render.max_bounce_count += render.max_bounce_count  < 8 ? 1 : 2
+            if ui_button(layout, set_value_interaction(&render.max_bounce_count, render.max_bounce_count + 1), "+") do render.max_bounce_count += render.max_bounce_count  < 8 ? 1 : 2
             render.max_bounce_count = clamp(render.max_bounce_count, 1, 16)
             layout_advance(layout, 5)
             ui_text(layout, "bounces %v", render.max_bounce_count)
@@ -523,9 +533,9 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
         layout_begin_horizontal(layout)
             if !render.active {
                 before := render.image_size_factor
-                if display_button(layout, "-") do render.image_size_factor += 1
+                if ui_button(layout, set_value_interaction(&render.image_size_factor, render.image_size_factor + 1), "-") do render.image_size_factor += 1
                 layout_advance(layout, 5)
-                if display_button(layout, "+") do render.image_size_factor -= 1
+                if ui_button(layout, set_value_interaction(&render.image_size_factor, render.image_size_factor - 1), "+") do render.image_size_factor -= 1
                 render.image_size_factor = clamp(render.image_size_factor, 1, 16)
                 
                 if render.image_size_factor != before {

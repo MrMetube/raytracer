@@ -20,6 +20,8 @@ Interaction :: struct {
     value:  union {
         bool,
         u32,
+        i32,
+        f32,
         int,
         Object_Index,
         Debug_View_Kind,
@@ -227,9 +229,9 @@ ui_button_highlighted :: proc (layout: ^Layout, interaction: Interaction, is_hig
     return result
 }
 
-ui_dragger :: proc (layout: ^Layout, value: ^f32, speed, min, max: f32, format: string, args: ..any, flags := SliderFlags{}) -> (changed: bool, released: bool) {
-    interaction := Interaction{ kind = .Drag, target = value }
-    
+ui_dragger :: proc { ui_dragger_base, ui_dragger_clamp }
+// @copypasta
+ui_dragger_clamp :: proc (layout: ^Layout, value: ^f32, speed, min, max: f32, format: string, args: ..any, flags := SliderFlags{}) -> (changed: bool, released: bool) {interaction := Interaction{ kind = .Drag, target = value }
     before := value^
     
     // @theme
@@ -270,6 +272,43 @@ ui_dragger :: proc (layout: ^Layout, value: ^f32, speed, min, max: f32, format: 
             val += speed * layout.ui.mouse_dp.x
             val = clamp(val, min, max)
         }
+        
+        value^ = val
+        changed = val != before
+    }
+    
+    released = is_triggered(layout.ui, interaction)
+    
+    return changed, released
+}
+ui_dragger_base :: proc (layout: ^Layout, value: ^f32, speed: f32, format: string, args: ..any) -> (changed: bool, released: bool) {
+    interaction := Interaction{ kind = .Drag, target = value }
+    
+    before := value^
+    
+    // @theme
+    text_color := Jasmine
+    if is_hot(layout.ui, interaction) {
+        text_color = Isabelline
+    } else if is_active(layout.ui, interaction) {
+        text_color = Isabelline
+    }
+    
+    text := tprint(format, ..args)
+    size := measure_text(layout, text)
+    
+    text_p := layout.at
+    draw_text(layout, text, text_p, text_color)
+    layout_advance_2(layout, size)
+    
+    rect := rectangle_min_dimension(text_p, size) 
+    if rectangle_contains(rect, layout.ui.mouse_p) {
+        layout.ui.next_hot_interaction = interaction
+    }
+    
+    if is_active(layout.ui, interaction) {
+        val := value^
+        val += speed * layout.ui.mouse_dp.x
         
         value^ = val
         changed = val != before
