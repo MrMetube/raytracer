@@ -106,6 +106,11 @@ layout_unindent :: proc (layout: ^Layout) {
     layout.at.x -= 20
 }
 
+@(deferred_in=layout_unindent)
+layout_indent_scope :: proc (layout: ^Layout) {
+    layout_indent(layout)
+}
+
 ////////////////////////////////////////////////
 
 SliderFlag :: enum {
@@ -118,7 +123,7 @@ SliderFlags :: bit_set[SliderFlag]
 display_slider_v :: proc (layout: ^Layout, width: f32, value: ^$V/[$N] $E, min: V, max: V, format: string = "", args: ..any, flags := SliderFlags{}) -> bool {
     layout_begin_horizontal(layout)
     if format != "" {
-        display_line(layout, format, ..args)
+        ui_text(layout, format, ..args)
         layout_advance(layout, 10)
     }
     
@@ -148,7 +153,7 @@ display_slider_f :: proc (layout: ^Layout, width: f32, value: ^f32, min: f32, ma
     wrap_horizontal := !layout.horizontal
     if wrap_horizontal do layout_begin_horizontal(layout)
     if format != "" {
-        display_line(layout, format, ..args)
+        ui_text(layout, format, ..args)
         layout_advance(layout, 10)
     }
     
@@ -190,19 +195,6 @@ display_slider_raw :: proc (layout: ^Layout, width: f32, value: ^f32, min: f32, 
     return result
 }
 
-display_line :: proc (layout: ^Layout, format: string, args: ..any) {
-    text := ctprint(format, ..args)
-    size := rl.MeasureTextEx(layout.font, text, layout.font_size, 1)
-    rl.DrawTextEx(layout.font, text, layout.at+2, layout.font_size, 1, rl.BLACK)
-    rl.DrawTextEx(layout.font, text, layout.at,   layout.font_size, 1, layout.text_color)
-    layout_advance_2(layout, size)
-}
-
-display_list :: proc (layout: ^Layout, is_open: ^bool, format: string) -> bool {
-    display_toggle(layout, format, is_open)
-    return is_open^
-}
-
 display_button :: proc (layout: ^Layout, text: string, size := v2{}) -> bool {
     text := ctprint("%v", text)
     size := size
@@ -214,29 +206,4 @@ display_button :: proc (layout: ^Layout, text: string, size := v2{}) -> bool {
     result := rl.GuiButton(bounds, text)
     layout_advance_2(layout, size)
     return result
-}
-
-display_toggle :: proc { display_toggle_bool, display_toggle_condition }
-display_toggle_condition :: proc (layout: ^Layout, text: string, condition: bool, size := v2{}) -> (clicked, active: bool) {
-    text := ctprint("%v", text)
-    size := size
-    if size == 0 {
-        size = rl.MeasureTextEx(layout.font, text, layout.font_size, 1)
-        size.x += 20
-    }
-    
-    bounds := rect_to_rl(rectangle_min_dimension(layout.at, size))
-    layout_advance_2(layout, size)
-    
-    cc := condition
-    rl.GuiToggle(bounds, text, &cc)
-    clicked = cc != condition
-    active = cc
-    
-    return clicked, active
-}
-display_toggle_bool :: proc (layout: ^Layout, text: string, condition: ^bool, size := v2{}) -> bool {
-    clicked, active := display_toggle(layout, text, condition^, size)
-    condition^ = active
-    return clicked
 }

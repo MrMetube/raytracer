@@ -19,6 +19,9 @@ Interaction :: struct {
     target: pmm,
     value:  union {
         bool,
+        u32,
+        int,
+        Object_Index,
         Debug_View_Kind,
     },
 }
@@ -28,6 +31,7 @@ Interaction_Kind :: enum {
     NOP,
     SetValue,
     Drag,
+    Select,
 }
 
 begin_ui :: proc (ui: ^UI) {
@@ -42,7 +46,7 @@ interact :: proc (ui: ^UI) {
     if ui.active_interaction.kind != .None {
         switch ui.active_interaction.kind {
         case .None: unreachable()
-        case .NOP, .SetValue: // @note(viktor): nothing
+        case .NOP, .SetValue, .Select: // @note(viktor): nothing
         case .Drag:
             width  := cast(f32) rl.GetScreenWidth()
             height := cast(f32) rl.GetScreenHeight()
@@ -96,7 +100,7 @@ end_interaction :: proc (ui: ^UI) {
     switch action.kind {
     case .None: unreachable()
     case .NOP:  // nothing
-    case .SetValue, .Drag:
+    case .SetValue, .Drag, .Select:
         ui.done_interaction = action^
     }
     
@@ -153,9 +157,35 @@ is_triggered :: proc (ui: ^UI, interaction: Interaction) -> bool {
 
 ////////////////////////////////////////////////
 
+set_value_interaction :: proc (target: ^$T, value: T) -> Interaction {
+    result: Interaction
+    result.kind = .SetValue
+    result.target = target
+    result.value  = value
+    return result
+}
+
+
+
+////////////////////////////////////////////////
+
 // @todo(viktor): @api collapse into begin ui_element set_interaction(used for color) set_outline, set_text, end_ui_element
 ui_button :: proc (layout: ^Layout, interaction: Interaction, format: string, args: ..any) -> bool {
     result := ui_button_highlighted(layout, interaction, false, format, ..args)
+    return result
+}
+
+ui_toggle :: proc (layout: ^Layout, condition: ^bool, text: string) {
+    interaction := set_value_interaction(condition, !condition^)
+    pressed := ui_button_highlighted(layout, interaction, condition^, text)
+    if pressed {
+        condition^ = !condition^
+    }
+}
+
+ui_collapser :: proc (layout: ^Layout, is_open: ^bool, text: string) -> bool {
+    ui_toggle(layout, is_open, text)
+    result := is_open^
     return result
 }
 
@@ -195,23 +225,6 @@ ui_button_highlighted :: proc (layout: ^Layout, interaction: Interaction, is_hig
     }
     
     return result
-}
-
-ui_toggle :: proc (layout: ^Layout, condition: ^bool, text: string) {
-    interaction := Interaction{ kind = .SetValue, target = condition }
-    pressed := ui_button_highlighted(layout, interaction, condition^, text)
-    if pressed {
-        condition^ = !condition^
-    }
-}
-
-ui_text :: proc (layout: ^Layout, format: string, args: ..any) {
-    text := tprint(format, ..args)
-    text_p := layout.at
-    size := measure_text(layout, text)
-    // @theme
-    draw_text(layout, text, text_p, Jasmine)
-    layout_advance_2(layout, size)
 }
 
 ui_dragger :: proc (layout: ^Layout, value: ^f32, speed, min, max: f32, format: string, args: ..any, flags := SliderFlags{}) -> (changed: bool, released: bool) {
@@ -269,18 +282,27 @@ ui_dragger :: proc (layout: ^Layout, value: ^f32, speed, min, max: f32, format: 
 
 ////////////////////////////////////////////////
 
-ui_progress_bar :: proc (layout: ^Layout, percentage: f32, size: v2) {
+ui_text :: proc (layout: ^Layout, format: string, args: ..any) {
+    text := tprint(format, ..args)
+    text_p := layout.at
+    size := measure_text(layout, text)
+    // @theme
+    draw_text(layout, text, text_p, Jasmine)
+    layout_advance_2(layout, size)
+}
+
+ui_progress_bar :: proc (layout: ^Layout, percentage: f32, width: f32) {
     border_size :: 2
-    rect     := rectangle_min_dimension(layout.at, size)
-    progress := rectangle_min_dimension(layout.at, size * v2{percentage, 1}) 
-    
+    size := v2{width, layout.font_size - border_size*2}
+    rect     := rectangle_min_dimension(layout.at+border_size, size)
+    progress := rectangle_min_dimension(layout.at+border_size, size * v2{percentage, 1}) 
     
     // @theme
     draw_rectangle_outline(rect, border_size, DarkGreen)
     draw_rectangle(rect, Green)
     draw_rectangle(progress, Isabelline)
     
-    layout_advance_2(layout, size+border_size*2)
+    layout_advance_2(layout, size)
 }
 
 ////////////////////////////////////////////////

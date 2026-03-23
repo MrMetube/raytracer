@@ -287,14 +287,14 @@ main :: proc () {
         
         ////////////////////////////////////////////////
         
-        display_line(layout, "Camera: %v : %v ", camera.t, camera.z)
+        ui_text(layout, "Camera: %v : %v ", camera.t, camera.z)
         layout_advance(layout, 10)
         
         layout_begin_horizontal(layout)
             for kind, kind_index in Debug_View_Kind {
                 if kind_index != 0 do layout_advance(layout, 5)
                 
-                if ui_button_highlighted(layout, Interaction{ kind = .SetValue, target = &Debug_View, value = kind}, Debug_View == kind, "%v", kind) {
+                if ui_button_highlighted(layout, set_value_interaction(&Debug_View, kind), Debug_View == kind, "%v", kind) {
                     Debug_View = kind
                     fast_render.requested = true
                 }
@@ -333,40 +333,42 @@ main :: proc () {
         ////////////////////////////////////////////////
         
         layout_advance(layout, 10)
-        if display_list(layout, &show_models, "Objects") {
-            layout_indent(layout)
-            defer layout_unindent(layout)
+        if ui_collapser(layout, &show_models, "Objects") {
+            layout_indent_scope(layout)
             
             // @api maybe make an iterator?
             for object_index in 1..=world.last_used_object_index {
                 object := &world.objects[object_index]
                 
-                selected, open := display_toggle(layout, tprint("Object %v", object_index), selected_object_index == object_index)
-                if selected { selected_object_index = object_index; open = true }
-                if open {
-                    layout_indent(layout)
-                    defer layout_unindent(layout)
+                layout_advance(layout, 5)
+                if ui_button_highlighted(layout, set_value_interaction(&selected_object_index, object_index), selected_object_index == object_index, "Object %v", object_index) {
+                    selected_object_index = object_index
+                }
+                
+                if selected_object_index == object_index {
+                    layout_indent_scope(layout)
                     
-                    if focus_selected, focused := display_toggle_condition(layout, "Focus", focused_object_index == object_index); focus_selected {
-                        if focused {
+                    layout_advance(layout, 10)
+                    if ui_button_highlighted(layout, set_value_interaction(&focused_object_index, object_index), focused_object_index == object_index, "Focus") {
+                        if focused_object_index == object_index {
+                            focused_object_index = 0
+                        } else {
                             focused_object_index = object_index
                             focus_render.requested = true
-                        } else {
-                            focused_object_index = 0
                         }
                     }
                     
-                    if display_list(layout, &show_tree_info, "Tree") {
-                        layout_indent(layout)
+                    if ui_collapser(layout, &show_tree_info, "Tree") {
+                        layout_indent_scope(layout)
                         
-                        display_line(layout, "build took %v", selected_model_build_time)
-                        display_line(layout, "node count %v", selected_model_info.node_count)
-                        display_line(layout, "depth: max = %v, avg = %.2f", selected_model_info.depth.max, selected_model_info.depth.avg)
-                        display_line(layout, "values per node: max = %v, avg = %.2f", selected_model_info.values_per_node.max, selected_model_info.values_per_node.avg)
+                        ui_text(layout, "build took %v", selected_model_build_time)
+                        ui_text(layout, "node count %v", selected_model_info.node_count)
+                        ui_text(layout, "depth: max = %v, avg = %.2f", selected_model_info.depth.max, selected_model_info.depth.avg)
+                        ui_text(layout, "values per node: max = %v, avg = %.2f", selected_model_info.values_per_node.max, selected_model_info.values_per_node.avg)
                         layout_advance(layout, 10)
                         
-                        if display_button(layout, "Rebuild") {
-                            m := &Models[object.model]
+                        m := &Models[object.model]
+                        if ui_button(layout, { kind = .Select, target = &m.tree },  "Rebuild") {
                             start := time.now()
                             tree_build(&m.tree, m.triangles, m.normals)
                             selected_model_build_time = time.since(start)
@@ -375,8 +377,6 @@ main :: proc () {
                             
                             fast_render.requested = true
                         }
-                        
-                        layout_unindent(layout)
                     }
                                     
                     if display_slider_v(layout, 300, &object.transform.x, -100, 100, "x", flags={.relative}) do fast_render.requested = true
@@ -392,16 +392,16 @@ main :: proc () {
         }
         
         layout_advance(layout, layout.font_size)
-        if display_list(layout, &show_materials, "Materials") {
-            layout_indent(layout)
-            defer layout_unindent(layout)
+        if ui_collapser(layout, &show_materials, "Materials") {
+            layout_indent_scope(layout)
             
             for &material, index in world.materials {
-                selected, open := display_toggle_condition(layout, tprint("Material %v: material %v", index, world.material_names[index]), index == selected_material_index)
-                if selected { selected_material_index = index; open = true }
-                if open {
-                    layout_indent(layout)
-                    defer layout_unindent(layout)
+                if ui_button_highlighted(layout, set_value_interaction(&selected_material_index, index), index == selected_material_index, "Material %v: material %v", index, world.material_names[index]) {
+                    selected_material_index = index
+                }
+                
+                if index == selected_material_index {
+                    layout_indent_scope(layout)
                     
                     if display_slider(layout, 240, &material.scatter,  0,   1, "Scatter") do fast_render.requested = true
                     if display_slider(layout, 240, &material.emit_factor, 0.00001, 1000, "Emittance", flags = {.logarithmic}) do fast_render.requested = true
@@ -410,7 +410,7 @@ main :: proc () {
                     layout_begin_horizontal(layout)
                     color_size :: 40
                     {
-                        display_line(layout, "Emit")
+                        ui_text(layout, "Emit")
                         layout_advance(layout, 10)
                         
                         color  := rl.ColorFromNormalized(V4(material.emit, 1))
@@ -426,7 +426,7 @@ main :: proc () {
                     }
                     
                     {
-                        display_line(layout, "Reflect")
+                        ui_text(layout, "Reflect")
                         layout_advance(layout, 10)
                         
                         color := rl.ColorFromNormalized(V4(material.reflect, 0))
@@ -456,9 +456,8 @@ main :: proc () {
 
 display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open: ^bool, is_focused: bool, window_size: v2i) -> bool { 
     result: bool
-    if display_list(layout, is_open, name) {
-        layout_indent(layout)
-        defer layout_unindent(layout)
+    if ui_collapser(layout, is_open, name) {
+        layout_indent_scope(layout)
         
         layout_advance(layout, 5)
         layout_begin_horizontal(layout)
@@ -493,7 +492,7 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
             layout_begin_horizontal(layout)
                 total_pixels := render.image.width * render.image.height
                 done_percentage := cast(f32) render.stats.pixels_done / cast(f32) total_pixels
-                ui_progress_bar(layout, done_percentage, {120, layout.font_size})
+                ui_progress_bar(layout, done_percentage, 120)
                 
                 layout_advance(layout, 10)
                 ui_toggle(layout, &render.canceled, "Cancel Render")
@@ -508,7 +507,7 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
             layout_advance(layout, 5)
             if display_button(layout, "+") do render.rays_per_pixel *= 2
             layout_advance(layout, 5)
-            display_line(layout, "rays per_pixel %v", render.rays_per_pixel)
+            ui_text(layout, "rays per_pixel %v", render.rays_per_pixel)
             render.rays_per_pixel = clamp(render.rays_per_pixel, LaneWidth, 8192)
         layout_end_horizontal(layout)
         
@@ -518,7 +517,7 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
             if display_button(layout, "+") do render.max_bounce_count += render.max_bounce_count  < 8 ? 1 : 2
             render.max_bounce_count = clamp(render.max_bounce_count, 1, 16)
             layout_advance(layout, 5)
-            display_line(layout, "bounces %v", render.max_bounce_count)
+            ui_text(layout, "bounces %v", render.max_bounce_count)
         layout_end_horizontal(layout)
         
         layout_begin_horizontal(layout)
