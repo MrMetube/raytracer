@@ -1,12 +1,21 @@
 package main
 
 World :: struct {
-    models: [dynamic] Model,
+    objects:                [1024] Object,
+    last_used_object_index: Object_Index,
     
     materials: [dynamic] Material,
     brdf_data: [dynamic] v3,
     
     material_names: [] string,
+}
+
+Object_Index :: distinct u32
+
+Object :: struct {
+    model:     Model_Index,
+    transform: Transform,
+    material:  u32,
 }
 
 ////////////////////////////////////////////////
@@ -36,24 +45,21 @@ world_load_brdf :: proc (world: ^World, material_index: u32, name: string) {
     world.material_names[material_index] = name
 }
 
-world_create_model :: proc (world: ^World) -> ^Model {
-    model_index := len(world.models)
-    append_nothing(&world.models)
-    result := &world.models[model_index]
-    result.scale_x = {1,0,0}
-    result.scale_y = {0,1,0}
-    result.scale_z = {0,0,1}
+begin_object :: proc (world: ^World) -> ^Object {
+    world.last_used_object_index += 1
+    result := &world.objects[world.last_used_object_index]
+    
+    result.transform.x = {1,0,0}
+    result.transform.y = {0,1,0}
+    result.transform.z = {0,0,1}
+    
     return result
 }
 
 ////////////////////////////////////////////////
 
 default_scene :: proc (world: ^World) {
-    // @todo(viktor): fixed Buffer of models and return indices
-    reserve(&world.models, 128)
-    
     // @cleanup make the model setup less fragile
-    
     triangles := make([dynamic] Triangle, context.temp_allocator)
     normals   := make([dynamic] Normals, context.temp_allocator)
     
@@ -62,67 +68,65 @@ default_scene :: proc (world: ^World) {
         // 1 =  19480 triangles, 5.5x 0
         // 2 = 145620 triangles, 7.5x 1
         
-        model := world_create_model(world)
-        model.material = 2
-        model.translation = {-3,0,1.5}
-        
         load_obj("./models/teapot0.obj", &triangles, &normals)
         
-        tree_build(&model.tree, triangles[:], normals[:])
-        model.triangles = make_shallow_copy(triangles[:], context.allocator)
-        model.normals   = make_shallow_copy(normals[:], context.allocator)
+        object := begin_object(world)
+        model, index := begin_model()
+        object.model = index
+        object.material = 2
+        object.transform.t = {-3,0,1.5}
+        end_model(model, triangles[:], normals[:])
     }
     
     {
-        model := world_create_model(world)
-        model.translation = {2,0,1}
-        model.material = 4
-        
         load_obj("./models/suzanne.obj", &triangles, &normals)
         
-        tree_build(&model.tree, triangles[:], normals[:])
-        model.triangles = make_shallow_copy(triangles[:], context.allocator)
-        model.normals   = make_shallow_copy(normals[:], context.allocator)
+        
+        object := begin_object(world)
+        model, index := begin_model()
+        object.model = index
+        object.transform.t = {2,0,1}
+        object.material = 4
+        end_model(model, triangles[:], normals[:])
     }
     
     { // light
-        model := world_create_model(world)
-        model.material = 3
-        model.scale_x = {.5,0,0}
-        model.scale_y = {0,.5,0}
-        model.scale_z = {0,0,.5}
-        model.translation = {0,0,3}
-        
         load_obj("./models/sphere.obj", &triangles, &normals)
         
-        tree_build(&model.tree, triangles[:], normals[:])
-        model.triangles = make_shallow_copy(triangles[:], context.allocator)
-        model.normals   = make_shallow_copy(normals[:],   context.allocator)
+        object := begin_object(world)
+        model, index := begin_model()
+        object.model = index
+        object.material = 3
+        object.transform.x = {.5,0,0}
+        object.transform.y = {0,.5,0}
+        object.transform.z = {0,0,.5}
+        object.transform.t = {0,0,3}
+        end_model(model, triangles[:], normals[:])
     }
     
     {
-        model := world_create_model(world)
-        model.material = 5
-        model.translation = {0,0,1}
-        
         // load_obj("./models/uvsphere.obj", &triangles, &normals)
         load_obj("./models/cube_smooth.obj", &triangles, &normals)
+     
         
-        tree_build(&model.tree, triangles[:], normals[:])
-        model.triangles = make_shallow_copy(triangles[:], context.allocator)
-        model.normals   = make_shallow_copy(normals[:],   context.allocator)
+        object := begin_object(world)
+        model, index := begin_model()
+        object.model = index
+        object.material = 5
+        object.transform.t = {0,0,1}
+        end_model(model, triangles[:], normals[:])
     }
     
     { // ground
-        model := world_create_model(world)
-        model.material = 1
-        model.scale_x = {50,0,0}
-        model.scale_y = {0,50,0}
-        
         load_obj("./models/plane.obj", &triangles, &normals)
         
-        tree_build(&model.tree, triangles[:], normals[:])
-        model.triangles = make_shallow_copy(triangles[:], context.allocator)
-        model.normals   = make_shallow_copy(normals[:],   context.allocator)
+        
+        object := begin_object(world)
+        model, index := begin_model()
+        object.model = index
+        object.material = 1
+        object.transform.x = {50,0,0}
+        object.transform.y = {0,50,0}
+        end_model(model, triangles[:], normals[:])
     }
 }

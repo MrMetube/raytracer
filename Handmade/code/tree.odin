@@ -142,7 +142,7 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [] Triangle, normals: [] Nor
             
             for sub in subs {
                 tree[next_free_tree_index] = Tree_Node { bounds = sub.bounds }
-                next_free_tree_index += 1 
+                next_free_tree_index += 1
             }
             
             if it.depth+1 < Tree_Max_Depth {

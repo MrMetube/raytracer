@@ -25,9 +25,15 @@ Render :: struct {
     
     ////////////////////////////////////////////////
     
+    draw_camera: Camera,
+    draw_models: [dynamic] Draw_Model,
+    
+    ////////////////////////////////////////////////
+    
     requested: bool,
     canceled:  bool,
     active:    bool,
+    display_progress: bool,
     
     start, end: time.Time,
     render_time: Stat(time.Duration),
@@ -35,6 +41,7 @@ Render :: struct {
     image:   Image,
     texture: rl.Texture,
     queue:   WorkQueue,
+    thread_count: i32,
     
     arena:     mem.Arena,
     allocator: Allocator,
@@ -53,13 +60,12 @@ Model :: struct {
     triangles: [] Triangle,
     normals:   [] Normals,
     tree:      Tree,
-    
-    translation: v3,
-    scale_x:     v3,
-    scale_y:     v3,
-    scale_z:     v3,
-    
-    material:    u32,
+}
+
+Draw_Model :: struct {
+    using m: Model,
+    transform: Transform,
+    material:  u32,
 }
 
 RenderModel :: struct {
@@ -117,6 +123,79 @@ BrdfTable :: struct {
 
 ////////////////////////////////////////////////
 
+// end_render :: proc () {
+//     for model in active_models {
+//         collect triangles normals and trees
+//         // rebuild dirty trees
+//     }
+    
+//     build tree of models
+//     assign work to threads
+// }
+
+Model_Index :: distinct u32
+Models: [256] Model
+last_used_model_index: Model_Index
+
+begin_model :: proc () -> (^Model, Model_Index) {
+    last_used_model_index += 1
+    result := &Models[last_used_model_index]
+    
+    return result, last_used_model_index
+}
+
+end_model :: proc (model: ^Model, triangles: [] Triangle, normals: [] Normals) {
+    model.triangles = make_shallow_copy(triangles, context.allocator)
+    model.normals   = make_shallow_copy(normals,   context.allocator)
+    tree_build(&model.tree, model.triangles, model.normals)
+}
+
+////////////////////////////////////////////////
+
+render_begin :: proc (render: ^Render) {}
+
+draw_model :: proc (render: ^Render, model: Model_Index, material: u32, transform: Transform) {
+    // @todo(viktor): is this okay?
+    if !render.requested || render.active do return
+    
+    if model == 0 do return
+    append(&render.draw_models, Draw_Model{ Models[model], transform, material })
+}
+
+set_camera :: proc (render: ^Render, camera: Camera) {
+    // @todo(viktor): is this okay?
+    if !render.requested || render.active do return
+    render.draw_camera = camera
+}
+
+render_end :: proc (render: ^Render, brdf_data: [] v3, materials: [] Material) {
+    if !render.active {
+        if render.requested {
+            render_start(render, render.draw_camera, render.draw_models[:], brdf_data, materials)
+            clear(&render.draw_models)
+        }
+    } else {
+        reload := false
+        if work_is_completed(&render.queue) {
+            reload = true
+            
+            render.active = false
+            render.end = time.now()
+            stat_update(&render.render_time, time.diff(render.start, render.end))
+            stat_finalize(&render.render_time)
+            print_render_results(&render.stats, render.start, render.end)
+            
+            free_all(render.allocator)
+        }
+        
+        if reload || render.display_progress {
+            load_image_into_texture(&render.texture, render.image)
+        }
+    }
+}
+
+////////////////////////////////////////////////
+
 init_render :: proc (render: ^Render, rays_per_pixel: u32, max_bounce_count: u32, window_size: v2i, image_size_factor: i32, thread_count: u32, name: string) {
     render.rays_per_pixel    = rays_per_pixel
     render.max_bounce_count  = max_bounce_count
@@ -128,6 +207,7 @@ init_render :: proc (render: ^Render, rays_per_pixel: u32, max_bounce_count: u32
     
     init_render_image(render, window_size)
     
+    render.thread_count = cast(i32) thread_count
     init_work_queue(&render.queue, name, thread_count)
 }
 
@@ -142,20 +222,20 @@ init_render_image :: proc (render: ^Render, window_size: v2i) {
     render.image.data   = make([] Color, render.image.width * render.image.height, context.allocator)
 }
 
-begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: Camera) {
+render_start :: proc (render: ^Render, camera: Camera, models: [] Draw_Model, brdf_data: [] v3, materials: [] Material) {
     free_all(render.allocator)
     
     render.active = true
-    render.canceled = false
+    render.canceled  = false
     render.requested = false
     
     render.stats = {}
     
     total_triangle_count: u32
     total_tree_count: u32
-    for model in world.models {
+    for model in models {
         total_triangle_count += cast(u32) len(model.triangles)
-        total_tree_count += cast(u32) len(model.tree)
+        total_tree_count     += cast(u32) len(model.tree)
     }
     next_free_triangle_offset: u32
     next_free_tree_offset: u32
@@ -164,20 +244,17 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
     render.normals   = make([] Normals,      total_triangle_count, render.allocator)
     render.trees     = make([] Tree_Node,    total_tree_count,     render.allocator)
     
-    render.models = make([] RenderModel, len(world.models), render.allocator)
-    for model, model_index in world.models {
+    render.models = make([] RenderModel, len(models), render.allocator)
+    for model, model_index in models {
         rm := &render.models[model_index]
         rm.material = model.material
         
-        rm.forward.x = model.scale_x
-        rm.forward.y = model.scale_y
-        rm.forward.z = model.scale_z
-        rm.forward.t = model.translation
+        rm.forward = model.transform
         
-        determinant := dot(model.scale_x, cross(model.scale_y, model.scale_z))
-        inv_x := cross(model.scale_y, model.scale_z) / determinant
-        inv_y := cross(model.scale_z, model.scale_x) / determinant
-        inv_z := cross(model.scale_x, model.scale_y) / determinant
+        determinant := dot(model.transform.x, cross(model.transform.y, model.transform.z))
+        inv_x := cross(model.transform.y, model.transform.z) / determinant
+        inv_y := cross(model.transform.z, model.transform.x) / determinant
+        inv_z := cross(model.transform.x, model.transform.y) / determinant
         rm.inverse.x = inv_x
         rm.inverse.y = inv_y
         rm.inverse.z = inv_z
@@ -215,12 +292,12 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
         }
     }
     
-    render.brdf_data = world.brdf_data[:]
-    render.materials = make_shallow_copy(world.materials[:], render.allocator)
+    render.brdf_data = brdf_data
+    render.materials = make_shallow_copy(materials, render.allocator)
     
     zero_slice(render.image.data)
     
-    tile_size := cast(v2i) max(render.image.width, render.image.height) / cast(i32) core_count / 2
+    tile_size := cast(v2i) max(render.image.width, render.image.height) / render.thread_count / 2
     tile_cols  := (render.image.width  + tile_size.x - 1) / tile_size.x
     tile_rows  := (render.image.height + tile_size.y - 1) / tile_size.y
     tile_count := tile_cols * tile_rows
@@ -270,6 +347,8 @@ begin_render :: proc (render: ^Render, world: ^World, core_count: u32, camera: C
         }
     }
 }
+
+////////////////////////////////////////////////
 
 print_render_results :: proc (stats: ^Render_Stats, start, end: time.Time) {
     total_time := time.diff(start, end)

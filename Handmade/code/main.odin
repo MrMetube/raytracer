@@ -28,11 +28,17 @@ main :: proc () {
     default_scene(&world)
     ////////////////////////////////////////////////
     
-    camera: Camera
-    camera.t = {0, -7, 3}
-    camera.z = normalize_or_zero(camera.t - {0, 0, 1})
-    camera.x = normalize_or_zero(cross(v3{0, 0, 1}, camera.z))
-    camera.y = normalize_or_zero(cross(camera.z, camera.x))
+    camera := camera_look_at({0, -7, 3}, {0, 0, 1})
+    
+    camera_look_at :: proc (p: v3, at: v3) -> Camera {
+        camera: Camera
+        camera.t = p
+        camera.z = normalize_or_zero(camera.t - at)
+        camera.x = normalize_or_zero(cross(v3{0, 0, 1}, camera.z))
+        camera.y = normalize_or_zero(cross(camera.z, camera.x))
+        return camera
+    }
+    focus_camera: Camera
     
     ////////////////////////////////////////////////
     
@@ -49,7 +55,8 @@ main :: proc () {
         layout_init(layout, font, Jasmine, font_size)
     }
     
-    selected_model_index: int
+    focused_object_index: Object_Index
+    selected_object_index: Object_Index
     show_models: bool
     show_tree_info: bool
     selected_model_info: Tree_Info
@@ -59,17 +66,30 @@ main :: proc () {
     show_materials: bool
     quality_render_is_open: bool
     fast_render_is_open: bool = true
+    focus_render_is_open: bool
     
     quality_render: Render
     fast_render:    Render
+    focus_render:   Render
     init_render(&quality_render, 64, 16, window_size, 2, core_count, "quality render")
     init_render(&fast_render,    32,  4, window_size, 6, core_count, "fast render")
+    init_render(&focus_render,   128, 4, 64*8, 8, core_count, "focus render")
     defer {
         quality_render.canceled = true
         fast_render.canceled    = true
+        focus_render.canceled   = true
         close_work_queue_and_wait_for_threads(&quality_render.queue)
         close_work_queue_and_wait_for_threads(&fast_render.queue)
+        close_work_queue_and_wait_for_threads(&focus_render.queue)
     }
+    focus_render_p: v2 = (vec_cast(f32, window_size) - vec_cast(f32, focus_render.image.width, focus_render.image.height)) / 2
+    focus_render_dragged: bool
+    focus_render_drag_offset: v2
+    focus_render_drag_size :: 12
+    focus_camera_offset: v3 = {0,0,-1}
+    focus_camera_orbit: f32
+    focus_camera_pitch: f32 = 0.0125 * Tau
+    focus_camera_dolly: f32 = 3
     
     renders := make([dynamic] ^Render, 0, 2, context.allocator)
     append(&renders, &quality_render)
@@ -77,8 +97,6 @@ main :: proc () {
     for &render in renders do stat_init(&render.render_time)
     
     ////////////////////////////////////////////////
-    
-    render_display_progress := false
     
     fast_render.requested = true
     fast_image_is_focussed: bool = true
@@ -172,36 +190,6 @@ main :: proc () {
             fast_render.requested = true
         }
         
-        for &render in renders {
-            if !render.active {
-                if render.requested {
-                    begin_render(render, &world, core_count, camera)
-                }
-            } else {
-                reload := false
-                if work_is_completed(&render.queue) {
-                    complete_all_work(&render.queue)
-                    
-                    render.active = false
-                    render.end = time.now()
-                    stat_update(&render.render_time, time.diff(render.start, render.end))
-                    stat_finalize(&render.render_time)
-                    print_render_results(&render.stats, render.start, render.end)
-                    
-                    free_all(render.allocator)
-                    reload = true
-                }
-                
-                if render_display_progress {
-                    reload = true
-                }
-                
-                if reload {
-                    load_image_into_texture(&render.texture, render.image)
-                }
-            }
-        }
-        
         if rl.IsKeyPressed(.TAB) && !(rl.IsKeyDown(.LEFT_ALT) || rl.IsKeyDown(.RIGHT_ALT)) {
             fast_image_is_focussed = !fast_image_is_focussed
         }
@@ -211,6 +199,20 @@ main :: proc () {
             img.write_bmp(ctprint("%v", output_path), quality_render.image.width, quality_render.image.height, 4, &quality_render.image.data[0])
             cwd, _ := os.get_working_directory(context.temp_allocator)
             print("Wrote ouput to %v/%v\n", cwd, output_path)
+        }
+        
+        ////////////////////////////////////////////////
+        
+        for render in renders {
+            render_begin(render)
+            
+            set_camera(render, camera)
+            
+            for object in world.objects {
+                draw_model(render, object.model, object.material, object.transform)
+            }
+            
+            render_end(render, world.brdf_data[:], world.materials[:])
         }
         
         ////////////////////////////////////////////////
@@ -231,7 +233,92 @@ main :: proc () {
             }
         }
         
+        if focused_object_index != 0 {
+            focus_render_size := vec_cast(f32, focus_render.image.width, focus_render.image.height) * cast(f32) focus_render.image_size_factor
+            
+            if rl.IsWindowFocused() {
+                if rl.IsMouseButtonPressed(.LEFT) {
+                    if rectangle_contains(rectangle_min_dimension(focus_render_p, focus_render_drag_size), rl.GetMousePosition()) {
+                        focus_render_drag_offset = focus_render_p - rl.GetMousePosition()
+                        focus_render_dragged = true
+                    }
+                }
+                if rl.IsMouseButtonReleased(.LEFT) {
+                    focus_render_dragged = false
+                }
+                
+                if focus_render_dragged {
+                    focus_render_p = rl.GetMousePosition() + focus_render_drag_offset
+                } else {
+                    if rectangle_contains(rectangle_min_dimension(focus_render_p, focus_render_size), rl.GetMousePosition()) {
+                        changed_camera := false
+                        dmousep := rl.GetMouseDelta()
+                        if rl.IsMouseButtonDown(.LEFT) {
+                            rotation_speed :: 0.001 * Tau
+                            focus_camera_orbit += -dmousep.x * rotation_speed
+                            focus_camera_pitch += -dmousep.y * rotation_speed
+                            changed_camera = true
+                        } else if rl.IsMouseButtonDown(.RIGHT) {
+                            zoom_speed := 0.005 * (focus_camera_offset.z - focus_camera_dolly)
+                            focus_camera_dolly += -dmousep.y * zoom_speed
+                            changed_camera = true
+                        } else if rl.IsMouseButtonDown(.MIDDLE) {
+                            focus_camera = camera
+                            focus_render.requested = true
+                        }
+                        
+                        if changed_camera {
+                            focus_render.requested = true
+                        }
+                        camera_orbit :: proc (p: v3, orbit: f32, dolly, pitch: f32) -> Camera {
+                            offset := p
+                            
+                            camera := xy_rotation(orbit) * yz_rotation(pitch)
+                            offset.z += dolly
+                            offset = multiply(camera, offset)
+                            
+                            result: Camera
+                            result.x = get_column(camera, 0)
+                            result.y = get_column(camera, 1)
+                            result.z = get_column(camera, 2)
+                            result.t = offset
+                            return result
+                        }
+                        
+                        object := world.objects[focused_object_index]
+                        focus_camera = camera_orbit(focus_camera_offset, focus_camera_orbit, focus_camera_dolly, focus_camera_pitch)
+                        focus_camera.t += object.transform.t
+                    }
+                }
+            } else {
+                focus_render_dragged = false
+            }
+            
+            
+            if focused_object_index != 0 {
+                render := &focus_render
+                
+                render_begin(render)
+                object := world.objects[focused_object_index]
+                
+                
+                set_camera(render, focus_camera)
+                draw_model(render, object.model, object.material, object.transform)
+                
+                render_end(render, world.brdf_data[:], world.materials[:])
+            }
+            
+            p := focus_render_p
+            box := rectangle_min_dimension(p, focus_render_size)
+            box = rectangle_add_radius(box, 2)
+            rl.DrawRectangleRec(rect_to_rl(box), rl.BLACK)
+            rl.DrawTextureEx(focus_render.texture, p, 0, cast(f32) focus_render.image_size_factor, rl.WHITE)
+            rl.DrawRectangleV(p, focus_render_drag_size, color_to_rl(Isabelline))
+        }
+        
         display_line(layout, "Camera: %v : %v ", camera.t, camera.z)
+        display_line(layout, "Focus: orbit %v : dolly %v : pitch %v ", focus_camera_orbit, focus_camera_dolly, focus_camera_pitch)
+        display_line(layout, "Focus Camera  %v : %v ", focus_camera.t, focus_camera.z)
         layout_advance(layout, 10)
         
         layout_begin_horizontal(layout)
@@ -267,11 +354,6 @@ main :: proc () {
             layout_advance(layout, 10)
         }
         
-        layout_begin_horizontal(layout)
-            display_toggle(layout, "Display Progress", &render_display_progress)
-        layout_end_horizontal(layout)
-        layout_advance(layout, 10)
-        
         if display_render(layout, &quality_render, "Quality", &quality_render_is_open, !fast_image_is_focussed, window_size) {
             fast_image_is_focussed = false
         }
@@ -279,19 +361,32 @@ main :: proc () {
         if display_render(layout, &fast_render, "Fast", &fast_render_is_open, fast_image_is_focussed, window_size) {
             fast_image_is_focussed = true
         }
+        display_render(layout, &focus_render, "Focus", &focus_render_is_open, false, 256)
         layout_advance(layout, 10)
         
         layout_advance(layout, layout.font_size)
-        if display_list(layout, &show_models, "Models") {
+        if display_list(layout, &show_models, "Objects") {
             layout_indent(layout)
             defer layout_unindent(layout)
             
-            for &model, model_index in world.models {
-                selected, open := display_toggle(layout, tprint("Model %v", model_index), selected_model_index == model_index)
-                if selected { selected_model_index = model_index; open = true }
+            // @api maybe make an iterator?
+            for object_index in 1..=world.last_used_object_index {
+                object := &world.objects[object_index]
+                
+                selected, open := display_toggle(layout, tprint("Object %v", object_index), selected_object_index == object_index)
+                if selected { selected_object_index = object_index; open = true }
                 if open {
                     layout_indent(layout)
                     defer layout_unindent(layout)
+                    
+                    if focus_selected, focused := display_toggle_condition(layout, "Focus", focused_object_index == object_index); focus_selected {
+                        if focused {
+                            focused_object_index = object_index
+                            focus_render.requested = true
+                        } else {
+                            focused_object_index = 0
+                        }
+                    }
                     
                     if display_list(layout, &show_tree_info, "Tree") {
                         layout_indent(layout)
@@ -303,11 +398,12 @@ main :: proc () {
                         layout_advance(layout, 10)
                         
                         if display_button(layout, "Rebuild") {
+                            m := &Models[object.model]
                             start := time.now()
-                            tree_build(&model.tree, model.triangles, model.normals)
+                            tree_build(&m.tree, m.triangles, m.normals)
                             selected_model_build_time = time.since(start)
                             print("building tree took %v\n", selected_model_build_time)
-                            selected_model_info = inspect(model.tree)
+                            selected_model_info = inspect(m.tree)
                             
                             fast_render.requested = true
                         }
@@ -315,12 +411,12 @@ main :: proc () {
                         layout_unindent(layout)
                     }
                                     
-                    if display_slider_v(layout, 300, &model.scale_x, -100, 100, "x", flags={.relative}) do fast_render.requested = true
-                    if display_slider_v(layout, 300, &model.scale_y, -100, 100, "y", flags={.relative}) do fast_render.requested = true
-                    if display_slider_v(layout, 300, &model.scale_z, -100, 100, "z", flags={.relative}) do fast_render.requested = true
-                    if display_slider_v(layout, 300, &model.translation, -100, 100, "translate", flags={.relative}) do fast_render.requested = true
+                    if display_slider_v(layout, 300, &object.transform.x, -100, 100, "x", flags={.relative}) do fast_render.requested = true
+                    if display_slider_v(layout, 300, &object.transform.y, -100, 100, "y", flags={.relative}) do fast_render.requested = true
+                    if display_slider_v(layout, 300, &object.transform.z, -100, 100, "z", flags={.relative}) do fast_render.requested = true
+                    if display_slider_v(layout, 300, &object.transform.t, -100, 100, "translate", flags={.relative}) do fast_render.requested = true
                     
-                    if display_slider(layout, 100, &model.material, 1, cast(u32) len(world.materials)-1, "material %v", model.material) {
+                    if display_slider(layout, 100, &object.material, 1, cast(u32) len(world.materials)-1, "material %v", object.material) {
                         fast_render.requested = true
                     }
                 }
@@ -380,6 +476,11 @@ main :: proc () {
         }
         
         rl.EndDrawing()
+        
+        if fast_render.requested && focused_object_index != 0 {
+            fast_render.requested  = false
+            focus_render.requested = true
+        }
     }
 }
 
@@ -394,6 +495,9 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
         layout_advance(layout, 5)
         layout_begin_horizontal(layout)
             result, _ = display_toggle_condition(layout, "Focus", is_focused)
+            
+            layout_advance(layout, 5)
+            display_toggle(layout, "Display Progress", &render.display_progress)
             
             layout_advance(layout, 5)
             display_toggle(layout, "Render", &render.requested)
