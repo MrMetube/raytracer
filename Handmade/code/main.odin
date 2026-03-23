@@ -30,14 +30,6 @@ main :: proc () {
     
     camera := camera_look_at({0, -7, 3}, {0, 0, 1})
     
-    camera_look_at :: proc (p: v3, at: v3) -> Camera {
-        camera: Camera
-        camera.t = p
-        camera.z = normalize_or_zero(camera.t - at)
-        camera.x = normalize_or_zero(cross(v3{0, 0, 1}, camera.z))
-        camera.y = normalize_or_zero(cross(camera.z, camera.x))
-        return camera
-    }
     focus_camera: Camera
     
     ////////////////////////////////////////////////
@@ -73,7 +65,7 @@ main :: proc () {
     focus_render:   Render
     init_render(&quality_render, 64, 16, window_size, 2, core_count, "quality render")
     init_render(&fast_render,    32,  4, window_size, 6, core_count, "fast render")
-    init_render(&focus_render,   128, 4, 64*8, 8, core_count, "focus render")
+    init_render(&focus_render,   32,  4, 128, 1, core_count, "focus render")
     defer {
         quality_render.canceled = true
         fast_render.canceled    = true
@@ -82,9 +74,9 @@ main :: proc () {
         close_work_queue_and_wait_for_threads(&fast_render.queue)
         close_work_queue_and_wait_for_threads(&focus_render.queue)
     }
-    focus_render_p: v2 = (vec_cast(f32, window_size) - vec_cast(f32, focus_render.image.width, focus_render.image.height)) / 2
-    focus_render_dragged: bool
-    focus_render_drag_offset: v2
+    
+    focus_render_drag: Drag_Interaction
+    focus_render_drag.p = (vec_cast(f32, window_size) - vec_cast(f32, focus_render.image.width, focus_render.image.height)) / 2
     focus_render_drag_size :: 12
     focus_camera_offset: v3 = {0,0,-1}
     focus_camera_orbit: f32
@@ -236,21 +228,13 @@ main :: proc () {
         if focused_object_index != 0 {
             focus_render_size := vec_cast(f32, focus_render.image.width, focus_render.image.height) * cast(f32) focus_render.image_size_factor
             
+            p := focus_render_drag.p
+            draw_rectangle_outline(rectangle_min_dimension(p, focus_render_size), 1, Black)
+            rl.DrawTextureEx(focus_render.texture, p, 0, cast(f32) focus_render.image_size_factor, rl.WHITE)
+            
             if rl.IsWindowFocused() {
-                if rl.IsMouseButtonPressed(.LEFT) {
-                    if rectangle_contains(rectangle_min_dimension(focus_render_p, focus_render_drag_size), rl.GetMousePosition()) {
-                        focus_render_drag_offset = focus_render_p - rl.GetMousePosition()
-                        focus_render_dragged = true
-                    }
-                }
-                if rl.IsMouseButtonReleased(.LEFT) {
-                    focus_render_dragged = false
-                }
-                
-                if focus_render_dragged {
-                    focus_render_p = rl.GetMousePosition() + focus_render_drag_offset
-                } else {
-                    if rectangle_contains(rectangle_min_dimension(focus_render_p, focus_render_size), rl.GetMousePosition()) {
+                if !display_drag_handle(layout, &focus_render_drag, focus_render_drag_size) {
+                    if rectangle_contains(rectangle_min_dimension(focus_render_drag.p, focus_render_size), rl.GetMousePosition()) {
                         changed_camera := false
                         dmousep := rl.GetMouseDelta()
                         if rl.IsMouseButtonDown(.LEFT) {
@@ -270,20 +254,6 @@ main :: proc () {
                         if changed_camera {
                             focus_render.requested = true
                         }
-                        camera_orbit :: proc (p: v3, orbit: f32, dolly, pitch: f32) -> Camera {
-                            offset := p
-                            
-                            camera := xy_rotation(orbit) * yz_rotation(pitch)
-                            offset.z += dolly
-                            offset = multiply(camera, offset)
-                            
-                            result: Camera
-                            result.x = get_column(camera, 0)
-                            result.y = get_column(camera, 1)
-                            result.z = get_column(camera, 2)
-                            result.t = offset
-                            return result
-                        }
                         
                         object := world.objects[focused_object_index]
                         focus_camera = camera_orbit(focus_camera_offset, focus_camera_orbit, focus_camera_dolly, focus_camera_pitch)
@@ -291,29 +261,17 @@ main :: proc () {
                     }
                 }
             } else {
-                focus_render_dragged = false
+                focus_render_drag.dragged = false
             }
             
+            render := &focus_render
+            render_begin(render)
+            object := world.objects[focused_object_index]
             
-            if focused_object_index != 0 {
-                render := &focus_render
-                
-                render_begin(render)
-                object := world.objects[focused_object_index]
-                
-                
-                set_camera(render, focus_camera)
-                draw_model(render, object.model, object.material, object.transform)
-                
-                render_end(render, world.brdf_data[:], world.materials[:])
-            }
+            set_camera(render, focus_camera)
+            draw_model(render, object.model, object.material, object.transform)
             
-            p := focus_render_p
-            box := rectangle_min_dimension(p, focus_render_size)
-            box = rectangle_add_radius(box, 2)
-            rl.DrawRectangleRec(rect_to_rl(box), rl.BLACK)
-            rl.DrawTextureEx(focus_render.texture, p, 0, cast(f32) focus_render.image_size_factor, rl.WHITE)
-            rl.DrawRectangleV(p, focus_render_drag_size, color_to_rl(Isabelline))
+            render_end(render, world.brdf_data[:], world.materials[:])
         }
         
         display_line(layout, "Camera: %v : %v ", camera.t, camera.z)
@@ -616,6 +574,32 @@ axis_angle_rotation :: proc(axis: v3, angle: f32) -> m4 {
         inv_angle*x*z - sin_angle*y, inv_angle*y*z + sin_angle*x, inv_angle*z*z + cos_angle,   0,
         0,                           0,                           0,                           1,
     }
+}
+
+////////////////////////////////////////////////
+
+camera_look_at :: proc (p: v3, at: v3) -> Camera {
+    camera: Camera
+    camera.t = p
+    camera.z = normalize_or_zero(camera.t - at)
+    camera.x = normalize_or_zero(cross(v3{0, 0, 1}, camera.z))
+    camera.y = normalize_or_zero(cross(camera.z, camera.x))
+    return camera
+}
+
+camera_orbit :: proc (p: v3, orbit: f32, dolly, pitch: f32) -> Camera {
+    offset := p
+    
+    camera := xy_rotation(orbit) * yz_rotation(pitch)
+    offset.z += dolly
+    offset = multiply(camera, offset)
+    
+    result: Camera
+    result.x = get_column(camera, 0)
+    result.y = get_column(camera, 1)
+    result.z = get_column(camera, 2)
+    result.t = offset
+    return result
 }
 
 ////////////////////////////////////////////////
