@@ -93,6 +93,7 @@ main :: proc () {
     fast_render.requested = true
     fast_image_is_focussed: bool = true
     
+    __ui: UI
     is_controlling_camera: bool
     ddp: v3
     dp: v3
@@ -165,21 +166,22 @@ main :: proc () {
             fast_render.requested = true
         }
         
-        
-        dddp = normalize_or_zero(dddp)
-        dddp *= speed
-        ddp  += dddp
-        ddp  *= 0.9
-        dp   += ddp * delta_time
-        dp   *= 0.9
-        if length_squared(dp) < square(cast(f32) 0.01) do dp = 0
-        
-        if dp != 0 {
-            camera.t += dp.x * camera.x    * delta_time
-            camera.t += dp.y * v3{0, 0, 1} * delta_time
-            camera.t += dp.z * camera.z    * delta_time
+        if dddp != 0 {
+            dddp = normalize_or_zero(dddp)
+            dddp *= speed
+            ddp  += dddp
+            ddp  *= 0.9
+            dp   += ddp * delta_time
+            dp   *= 0.9
+            if length_squared(dp) < square(cast(f32) 0.01) do dp = 0
             
-            fast_render.requested = true
+            if dp != 0 {
+                camera.t += dp.x * camera.x    * delta_time
+                camera.t += dp.y * v3{0, 0, 1} * delta_time
+                camera.t += dp.z * camera.z    * delta_time
+                
+                fast_render.requested = true
+            }
         }
         
         if rl.IsKeyPressed(.TAB) && !(rl.IsKeyDown(.LEFT_ALT) || rl.IsKeyDown(.RIGHT_ALT)) {
@@ -209,7 +211,16 @@ main :: proc () {
         
         ////////////////////////////////////////////////
         
-        layout_begin(layout, 10)
+        ui: ^UI = &__ui
+        begin_ui(ui)
+        defer {
+            interact(ui)
+            ui.next_hot_interaction = {}
+        }
+        
+        ////////////////////////////////////////////////
+        
+        layout_begin(layout, ui, 10)
         
         {
             small_factor :: 6
@@ -274,18 +285,16 @@ main :: proc () {
             render_end(render, world.brdf_data[:], world.materials[:])
         }
         
+        ////////////////////////////////////////////////
+        
         display_line(layout, "Camera: %v : %v ", camera.t, camera.z)
-        display_line(layout, "Focus: orbit %v : dolly %v : pitch %v ", focus_camera_orbit, focus_camera_dolly, focus_camera_pitch)
-        display_line(layout, "Focus Camera  %v : %v ", focus_camera.t, focus_camera.z)
         layout_advance(layout, 10)
         
         layout_begin_horizontal(layout)
             for kind, kind_index in Debug_View_Kind {
-                if kind_index != 0 {
-                    layout_advance(layout, 10)
-                }
+                if kind_index != 0 do layout_advance(layout, 5)
                 
-                if display_button_highlighted(layout, tprint("%v", kind), Debug_View == kind) {
+                if ui_button_highlighted(layout, Interaction{ kind = .SetValue, target = &Debug_View, value = kind}, Debug_View == kind, "%v", kind) {
                     Debug_View = kind
                     fast_render.requested = true
                 }
@@ -293,24 +302,23 @@ main :: proc () {
         layout_end_horizontal(layout)
         layout_advance(layout, 10)
         
+        
         if Debug_View in (bit_set[Debug_View_Kind]{ .Triangle_Tests, .Rectangle_Tests, .Both_Tests }) {
-            layout_begin_horizontal(layout)
-                if display_slider(layout, 100, &Triangle_Threshold, 10, 10000, "Triangle Threshold", flags = { .logarithmic }) {
-                    fast_render.requested = true
-                }
-                layout_advance(layout, 10)
-                display_line(layout, "%v", view_magnitude(cast(u32) Triangle_Threshold, precision = 1))
-            layout_end_horizontal(layout)
-            layout_advance(layout, 10)
-            layout_begin_horizontal(layout)
-                if display_slider(layout, 100, &Rectangle_Threshold, 10, 10000, "Rectangle Threshold", flags = { .logarithmic }) {
-                    fast_render.requested = true
-                }
-                layout_advance(layout, 10)
-                display_line(layout, "%v", view_magnitude(cast(u32) Rectangle_Threshold, precision = 1))
-            layout_end_horizontal(layout)
+            // @cleanup
+            view := view_magnitude(Triangle_Threshold, precision = 1)
+            _, released := ui_dragger(layout, &Triangle_Threshold, 10, 10, 10000, "Triangle Threshold %v", view, flags = { .logarithmic })
+            if released {
+                fast_render.requested = true
+            }
+            
+            view = view_magnitude(Rectangle_Threshold, precision = 1)
+            _, released = ui_dragger(layout, &Rectangle_Threshold, 10, 10, 10000, "Rectangle Threshold %v", view, flags = { .logarithmic })
+            if released {
+                fast_render.requested = true
+            }
             layout_advance(layout, 10)
         }
+        
         
         if display_render(layout, &quality_render, "Quality", &quality_render_is_open, !fast_image_is_focussed, window_size) {
             fast_image_is_focussed = false
@@ -319,10 +327,12 @@ main :: proc () {
         if display_render(layout, &fast_render, "Fast", &fast_render_is_open, fast_image_is_focussed, window_size) {
             fast_image_is_focussed = true
         }
-        display_render(layout, &focus_render, "Focus", &focus_render_is_open, false, 256)
         layout_advance(layout, 10)
+        display_render(layout, &focus_render, "Focus", &focus_render_is_open, false, 256)
         
-        layout_advance(layout, layout.font_size)
+        ////////////////////////////////////////////////
+        
+        layout_advance(layout, 10)
         if display_list(layout, &show_models, "Objects") {
             layout_indent(layout)
             defer layout_unindent(layout)
@@ -452,30 +462,30 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
         
         layout_advance(layout, 5)
         layout_begin_horizontal(layout)
-            result, _ = display_toggle_condition(layout, "Focus", is_focused)
+            result = ui_button_highlighted(layout, { kind = .SetValue, target = render, value = is_focused }, is_focused, "Focus")
             
             layout_advance(layout, 5)
-            display_toggle(layout, "Display Progress", &render.display_progress)
+            ui_toggle(layout, &render.display_progress, "Display Progress")
             
             layout_advance(layout, 5)
-            display_toggle(layout, "Render", &render.requested)
+            ui_toggle(layout, &render.requested, "Render")
             
             layout_advance(layout, 5)
             if render.active {
-                display_line(layout, "%v", time.since(render.start))
+                ui_text(layout, "%v", time.since(render.start))
             } else {
-                display_line(layout, "%v", time.diff(render.start, render.end))
+                ui_text(layout, "%v", time.diff(render.start, render.end))
             }
         layout_end_horizontal(layout)
         
         layout_advance(layout, 5)
         layout_begin_horizontal(layout)
-            if display_button(layout, "Reset") {
+            if ui_button(layout,  {kind = .SetValue, target = &render.render_time }, "Reset") {
                 stat_init(&render.render_time, time.diff(render.start, render.end))
                 stat_finalize(&render.render_time)
             }
             layout_advance(layout, 5)
-            display_line(layout, "Render time: min = %v, avg = %v, max = %v", render.render_time.min, cast(time.Duration) render.render_time.avg, render.render_time.max)
+            ui_text(layout, "Render time: min = %v, avg = %v, max = %v", render.render_time.min, cast(time.Duration) render.render_time.avg, render.render_time.max)
         layout_end_horizontal(layout)
         
         layout_advance(layout, 5)
@@ -483,30 +493,15 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
             layout_begin_horizontal(layout)
                 total_pixels := render.image.width * render.image.height
                 done_percentage := cast(f32) render.stats.pixels_done / cast(f32) total_pixels
+                ui_progress_bar(layout, done_percentage, {120, layout.font_size})
                 
-                bar_width  :: 120
-                bar_height_scale :: 0.75
-                bar_height := layout.font_size * bar_height_scale
-                border_size :: 2
-                bar_p := layout.at + {0, bar_height * (1 - bar_height_scale)}
-                
-                rect     := rectangle_min_dimension(bar_p, v2{bar_width,                                             bar_height})
-                progress := rectangle_min_dimension(bar_p, v2{linear_blend(cast(f32) 0, bar_width, done_percentage), bar_height})
-                progress  = rectangle_add_radius(progress, -border_size)
-                
-                // @todo(viktor): use the layout/rl gui style colors
-                rl.DrawRectangleRec(    rect_to_rl(rect),              color_to_rl(Green))
-                rl.DrawRectangleLinesEx(rect_to_rl(rect), border_size, color_to_rl(DarkGreen))
-                rl.DrawRectangleRec(    rect_to_rl(progress),          color_to_rl(Isabelline))
-                layout_advance(layout, bar_width)
-                
-                layout_advance(layout, 5)
-                display_toggle(layout, "Cancel Render", &render.canceled)
+                layout_advance(layout, 10)
+                ui_toggle(layout, &render.canceled, "Cancel Render")
             layout_end_horizontal(layout)
         } else {
-            layout_advance_2(layout, layout.font_size)
+            layout_advance(layout, layout.font_size)
         }
-            
+        
         layout_advance(layout, 5)
         layout_begin_horizontal(layout)
             if display_button(layout, "-") do render.rays_per_pixel /= 2 
@@ -540,7 +535,7 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
             }
             
             layout_advance(layout, 5)
-            display_line(layout, "resolution %vx%v", render.image.width, render.image.height)
+            ui_text(layout, "resolution %vx%v", render.image.width, render.image.height)
         layout_end_horizontal(layout)
     }
     

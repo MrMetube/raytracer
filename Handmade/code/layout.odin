@@ -14,7 +14,13 @@ Layout :: struct {
     horizontal: bool,
     largest_y_advance: f32,
     base_x: f32,
+    
+    ////////////////////////////////////////////////
+    
+    ui: ^UI,
 }
+
+////////////////////////////////////////////////
 
 layout_init :: proc (layout: ^Layout, font: rl.Font, text_color: v4, font_size: f32) {
     layout^ = {}
@@ -52,7 +58,9 @@ layout_init :: proc (layout: ^Layout, font: rl.Font, text_color: v4, font_size: 
     }
 }
 
-layout_begin :: proc (layout: ^Layout, begin: v2) {
+layout_begin :: proc (layout: ^Layout, ui: ^UI, begin: v2) {
+    layout.ui = ui
+    
     layout.at = begin
     layout.base_x = {}
     layout.horizontal = {}
@@ -205,13 +213,6 @@ display_button :: proc (layout: ^Layout, text: string, size := v2{}) -> bool {
     bounds := rect_to_rl(rectangle_min_dimension(layout.at, size))
     result := rl.GuiButton(bounds, text)
     layout_advance_2(layout, size)
-    return result
-}
-
-display_button_highlighted :: proc (layout: ^Layout, text: string, highlighted: bool, size := v2{}) -> bool {
-    condition := highlighted
-    display_toggle(layout, text, &condition, size)
-    result := condition != highlighted
     return result
 }
 
