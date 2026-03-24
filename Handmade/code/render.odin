@@ -85,6 +85,7 @@ RenderModel :: struct {
     
     forward: Transform,
     inverse: Transform,
+    normal:  Transform,
     lane_inverse: lane_Transform,
 }
 
@@ -238,9 +239,9 @@ init_render_image :: proc (settings: ^Render_Settings, window_size: v2i) {
 render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camera, models: [] Draw_Model, brdf_data: [] v3, materials: [] Material) {
     free_all(settings.allocator)
     
-    render.active = true
+    render.active   = true
     render.canceled = false
-    settings.active = true
+    settings.active    = true
     settings.requested = false
     
     settings.stats = {}
@@ -277,6 +278,12 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
         rm.lane_inverse.y = vec_cast(lane_f32, rm.inverse.y)
         rm.lane_inverse.z = vec_cast(lane_f32, rm.inverse.z)
         rm.lane_inverse.t = vec_cast(lane_f32, rm.inverse.t)
+        
+        rm.normal.x = inv_x
+        rm.normal.y = inv_y
+        rm.normal.z = inv_z
+        rm.normal.t = {}
+        rm.normal = transform_transpose(rm.normal)
         
         {
             rm.triangle_offset = next_free_triangle_offset

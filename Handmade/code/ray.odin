@@ -248,15 +248,14 @@ cast_rays :: proc (triangles: [] Ray_Triangle, normals: [] Normals, trees: [] Tr
                 n1 := lane_gather_v(lane_index(triangle_normals, 1))
                 n2 := lane_gather_v(lane_index(triangle_normals, 2))
                 
-                ix := lane_gather_v(lane_member(model, "inverse", "x", v3))
-                iy := lane_gather_v(lane_member(model, "inverse", "y", v3))
-                iz := lane_gather_v(lane_member(model, "inverse", "z", v3))
+                ix := lane_gather_v(lane_member(model, "normal", "x", v3))
+                iy := lane_gather_v(lane_member(model, "normal", "y", v3))
+                iz := lane_gather_v(lane_member(model, "normal", "z", v3))
                 // @note(viktor): no translation
                 
                 t := lane_Transform{ix, iy, iz, 0}
-                t = transform_transpose(t)
                 
-                hit_normal = normalize_or_zero((1-uv.x-uv.y) * n0 + uv.x * n1 + uv.y * n2)
+                hit_normal = normalize_or_zero(barycentric_blend(n0, n1, n2, uv))
                 hit_normal = transform_mul_0(t, hit_normal)
                 hit_normal = normalize_or_zero(hit_normal)
                 
