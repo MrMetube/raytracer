@@ -116,8 +116,12 @@ Camera :: distinct Transform
 Material :: struct {
     emit:    v3,
     reflect: v3,
-    emit_factor: f32,
+    emission: f32,
     scatter: f32, // 0 = mirror like, 1 = chalk like
+    
+    index_of_refraction: f32,
+    transmission:        f32,
+    transmit: v3,
     
     brdf: BrdfTable,
 }

@@ -21,13 +21,14 @@ Object :: struct {
 ////////////////////////////////////////////////
 
 world_init :: proc (world: ^World) {
-    append(&world.materials, Material{ emit    = { .3  , .4  , .5  }, emit_factor = 2   })
+    append(&world.materials, Material{ emit    = { .3  , .4  , .5  }, emission = 2   })
     append(&world.materials, Material{ reflect = { .5  , .5  , .5  }, scatter = .99     })
     append(&world.materials, Material{ reflect = { .7  , .5  , .3  }, scatter = .8      })
-    append(&world.materials, Material{ emit    = { .35 , .2 ,  .01 }, emit_factor = 1000 })
+    append(&world.materials, Material{ emit    = { .35 , .2 ,  .01 }, emission = 1000 })
     append(&world.materials, Material{ reflect = { .2  , .8  , .2  }, scatter = .75     })
     append(&world.materials, Material{ reflect = { .65 , .1  , .7  }, scatter = 1.      })
     append(&world.materials, Material{ reflect = { .9  , .9  , .8  }, scatter = .6      })
+    append(&world.materials, Material{ transmit = {0.8, 1.0, 0.9}, transmission = 1, index_of_refraction = 1.5 })
     
     world.material_names = make([] string, len(world.materials), context.allocator)
     
@@ -38,6 +39,7 @@ world_init :: proc (world: ^World) {
     world_load_brdf(world, 4, "green-latex")
     world_load_brdf(world, 5, "purple-paint")
     world_load_brdf(world, 6, "white-marble")
+    world_load_brdf(world, 7, "glass")
 }
 
 world_load_brdf :: proc (world: ^World, material_index: u32, name: string) {
@@ -73,7 +75,7 @@ default_scene :: proc (world: ^World) {
         object := begin_object(world)
         model, index := begin_model()
         object.model = index
-        object.material = 2
+        object.material = 7
         object.transform.t = {-3,0,1.5}
         end_model(model, triangles[:], normals[:])
     }

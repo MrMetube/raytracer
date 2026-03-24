@@ -5,9 +5,16 @@
 (anti-chronological order)
 
 ### Handmade
+![Render 16](Handmade/data/render_16.png)
+The camera is inside a glass like sphere.
+![Render 15](Handmade/data/render_15.png)
+Refractions..
 ![Render 14](Handmade/data/render_14.png)
+Non-uniform scaled models.
 ![Render 13](Handmade/data/render_13.png)
+Fixed buggy normals and uv interpolation.
 ![Render 12](Handmade/data/render_12.png)
+Load obj-files with per vertex normals.
 ![Render 11](Handmade/data/render_11.png)
 ![Render 10](Handmade/data/render_10.png)
 ![Render 9](Handmade/data/render_9.png)

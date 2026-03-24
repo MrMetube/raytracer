@@ -453,12 +453,29 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
                 layout_indent_scope(layout)
                 
                 _, scatter_released := ui_dragger_clamp(layout, &material.scatter, 0.01,  0,   1, "Scatter %f", material.scatter)
-                _, emittance_released := ui_dragger_clamp(layout, &material.emit_factor, 1, 0.00001, 1000, "Emittance %f", material.emit_factor, flags = {.logarithmic})
-                if scatter_released || emittance_released do state.fast_render.requested = true
+                _, emittance_released := ui_dragger_clamp(layout, &material.emission, 1, 0.00001, 1000, "Emission %f", material.emission, flags = {.logarithmic})
+                _, transmission_released := ui_dragger_clamp(layout, &material.transmission, 0.01, 0, 1, "Transmission %f", material.transmission)
+                _, ior_released := ui_dragger_clamp(layout, &material.index_of_refraction, 0.01, 0, 10, "Transmission %f", material.index_of_refraction)
+                if scatter_released || emittance_released || transmission_released || ior_released do state.fast_render.requested = true
                 
                 layout_advance(layout, 10)
                 layout_begin_horizontal(layout)
                 color_size :: 40
+                {
+                    ui_text(layout, "Transmit")
+                    layout_advance(layout, 10)
+                    
+                    color  := rl.ColorFromNormalized(V4(material.transmit, 1))
+                    before := color
+                    size := rect_to_rl(rectangle_min_dimension(layout.at, color_size))
+                    rl.GuiColorPicker(size, "", &color)
+                    if color != before do state.fast_render.requested = true
+                    material.transmit = rl.ColorNormalize(color).rgb
+                    
+                    layout_advance(layout, color_size)
+                    layout_advance(layout, color_size)
+                    layout_advance(layout, 10)
+                }
                 {
                     ui_text(layout, "Emit")
                     layout_advance(layout, 10)
