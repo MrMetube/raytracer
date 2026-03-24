@@ -167,7 +167,17 @@ render_begin :: proc (render: ^Render, settings: ^Render_Settings) -> bool {
         }
         
         if reload || settings.display_progress {
-            load_image_into_texture(&settings.texture, settings.image)
+            rl.UnloadTexture(settings.texture)
+    
+            rl_image := rl.Image {
+                data    = raw_data(settings.image.data),
+                width   = settings.image.width,
+                height  = settings.image.height,
+                mipmaps = 1,
+                format  = .UNCOMPRESSED_R8G8B8A8,
+            }
+            
+            settings.texture = rl.LoadTextureFromImage(rl_image)
         }
     }
     

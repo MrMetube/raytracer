@@ -480,9 +480,6 @@ hit_tree :: proc (triangles: [] Ray_Triangle, tree: Tree, ray_o, ray_d: lane_v3,
         }
     }
     
-    // @cleanup
-    assert(less_than(model_hit_t, max_t) == model_hit_mask)
-    
     return model_hit_mask, model_hit_t, model_hit_triangle, model_hit_uv, info
 }
 

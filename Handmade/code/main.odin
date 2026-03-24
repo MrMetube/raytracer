@@ -70,6 +70,10 @@ init_state :: proc (state: ^State) {
     state.fast_render.requested = true
     
     state.fast_image_is_focussed = true
+    
+    init_render_settings(&state.quality_render, 64, 16, state.window_size, 2)
+    init_render_settings(&state.fast_render,    8,   4, state.window_size, 6)
+    init_render_settings(&state.focus_render,   32,  4, 128, 1)
 }
 
 main :: proc () {
@@ -103,9 +107,6 @@ main :: proc () {
     }
     
     init_render(&state.renderer, core_count)
-    init_render_settings(&state.quality_render, 64, 16, state.window_size, 2)
-    init_render_settings(&state.fast_render,    32,  4, state.window_size, 6)
-    init_render_settings(&state.focus_render,   32,  4, 128, 1)
     defer {
         state.renderer.canceled = true
         close_work_queue_and_wait_for_threads(&state.renderer.queue)
@@ -113,10 +114,10 @@ main :: proc () {
     
     init_state(state)
     
-    renders := make([dynamic] ^Render_Settings, 0, 2, context.allocator)
-    append(&renders, &state.quality_render)
-    append(&renders, &state.fast_render)
-    for &render in renders do stat_init(&render.render_time)
+    render_settings := make([dynamic] ^Render_Settings, 0, 2, context.allocator)
+    append(&render_settings, &state.quality_render)
+    append(&render_settings, &state.fast_render)
+    for &render in render_settings do stat_init(&render.render_time)
     stat_init(&state.focus_render.render_time)
     
     ////////////////////////////////////////////////
@@ -129,15 +130,15 @@ main :: proc () {
         
         delta_time := rl.GetFrameTime()
         layout.dt = delta_time
-        speed: f32 = 60
-        look_speed: f32 = 100
-        dddp: v3
-        dlook: v2
         
         if !rl.IsWindowFocused() {
             state.is_controlling_camera = false
             rl.ShowCursor()
         } else {
+            speed: f32 = 60
+            look_speed: f32 = 100
+            dddp: v3
+            dlook: v2
             if rl.IsMouseButtonPressed(.MIDDLE) {
                 state.is_controlling_camera = !state.is_controlling_camera
             }
@@ -167,61 +168,61 @@ main :: proc () {
             if rl.IsKeyDown(.R) {
                 state.fast_render.requested = true
             }
-        }
-        
-        if dlook != 0 {
-            dlook *= look_speed / vec_cast(f32, state.window_size) * delta_time
-            up :: v3{0, 0, 1}
             
-            yaw   := axis_angle_rotation(state.camera.y,                           dlook.x)
-            pitch := axis_angle_rotation(normalize(multiply(yaw, state.camera.x)), dlook.y)
-            
-            new_z := multiply(pitch * yaw, state.camera.z)
-            
-            if abs(dot(new_z, up)) < 0.9999 {
-                state.camera.z = new_z
-            } else {
-                state.camera.z = multiply(yaw, state.camera.z)
-            }
-            
-            state.camera.x = normalize_or_zero(cross(up, state.camera.z))
-            state.camera.y = normalize_or_zero(cross(state.camera.z, state.camera.x))
-            
-            state.fast_render.requested = true
-        }
-        
-        if dddp != 0 {
-            dddp = normalize_or_zero(dddp)
-            dddp *= speed
-            state.ddp  += dddp
-            state.ddp  *= 0.9
-            state.dp   += state.ddp * delta_time
-            state.dp   *= 0.9
-            if length_squared(state.dp) < square(cast(f32) 0.01) do state.dp = 0
-            
-            if state.dp != 0 {
-                state.camera.t += state.dp.x * state.camera.x    * delta_time
-                state.camera.t += state.dp.y * v3{0, 0, 1} * delta_time
-                state.camera.t += state.dp.z * state.camera.z    * delta_time
+            if dlook != 0 {
+                dlook *= look_speed / vec_cast(f32, state.window_size) * delta_time
+                up :: v3{0, 0, 1}
+                
+                yaw   := axis_angle_rotation(state.camera.y,                           dlook.x)
+                pitch := axis_angle_rotation(normalize(multiply(yaw, state.camera.x)), dlook.y)
+                
+                new_z := multiply(pitch * yaw, state.camera.z)
+                
+                if abs(dot(new_z, up)) < 0.9999 {
+                    state.camera.z = new_z
+                } else {
+                    state.camera.z = multiply(yaw, state.camera.z)
+                }
+                
+                state.camera.x = normalize_or_zero(cross(up, state.camera.z))
+                state.camera.y = normalize_or_zero(cross(state.camera.z, state.camera.x))
                 
                 state.fast_render.requested = true
             }
-        }
-        
-        if rl.IsKeyPressed(.TAB) && !(rl.IsKeyDown(.LEFT_ALT) || rl.IsKeyDown(.RIGHT_ALT)) {
-            state.fast_image_is_focussed = !state.fast_image_is_focussed
-        }
-        
-        if rl.IsKeyPressed(.F5) && !state.quality_render.active {
-            output_path := "./render.bmp"
-            img.write_bmp(ctprint("%v", output_path), state.quality_render.image.width, state.quality_render.image.height, 4, &state.quality_render.image.data[0])
-            cwd, _ := os.get_working_directory(context.temp_allocator)
-            print("Wrote ouput to %v/%v\n", cwd, output_path)
+            
+            if dddp != 0 {
+                dddp = normalize_or_zero(dddp)
+                dddp *= speed
+                state.ddp  += dddp
+                state.ddp  *= 0.9
+                state.dp   += state.ddp * delta_time
+                state.dp   *= 0.9
+                if length_squared(state.dp) < square(cast(f32) 0.01) do state.dp = 0
+                
+                if state.dp != 0 {
+                    state.camera.t += state.dp.x * state.camera.x    * delta_time
+                    state.camera.t += state.dp.y * v3{0, 0, 1} * delta_time
+                    state.camera.t += state.dp.z * state.camera.z    * delta_time
+                    
+                    state.fast_render.requested = true
+                }
+            }
+            
+            if rl.IsKeyPressed(.TAB) && !(rl.IsKeyDown(.LEFT_ALT) || rl.IsKeyDown(.RIGHT_ALT)) {
+                state.fast_image_is_focussed = !state.fast_image_is_focussed
+            }
+            
+            if rl.IsKeyPressed(.F5) && !state.quality_render.active {
+                output_path := "./render.bmp"
+                img.write_bmp(ctprint("%v", output_path), state.quality_render.image.width, state.quality_render.image.height, 4, &state.quality_render.image.data[0])
+                cwd, _ := os.get_working_directory(context.temp_allocator)
+                print("Wrote ouput to %v/%v\n", cwd, output_path)
+            }
         }
         
         ////////////////////////////////////////////////
         
-        for settings in renders {
+        for settings in render_settings {
             if render_begin(&state.renderer, settings) {
                 set_camera(settings, state.camera)
                 
@@ -359,15 +360,15 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
     }
     
     
-    if display_render(state, layout, &state.quality_render, "Quality", !state.fast_image_is_focussed, true, state.window_size) {
+    if draw_render_settings_ui(state, layout, &state.quality_render, "Quality", !state.fast_image_is_focussed, true, state.window_size) {
         state.fast_image_is_focussed = false
     }
     layout_advance(layout, 10)
-    if display_render(state, layout, &state.fast_render, "Fast", state.fast_image_is_focussed, true, state.window_size) {
+    if draw_render_settings_ui(state, layout, &state.fast_render, "Fast", state.fast_image_is_focussed, true, state.window_size) {
         state.fast_image_is_focussed = true
     }
     layout_advance(layout, 10)
-    display_render(state, layout, &state.focus_render, "Focus", false, false, 256)
+    draw_render_settings_ui(state, layout, &state.focus_render, "Focus", false, false, 256)
     
     ////////////////////////////////////////////////
     
@@ -496,7 +497,7 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
 
 ////////////////////////////////////////////////
 
-display_render :: proc (state: ^State, layout: ^Layout, settings: ^Render_Settings, name: string, is_focused: bool, can_be_focused: bool, window_size: v2i) -> bool { 
+draw_render_settings_ui :: proc (state: ^State, layout: ^Layout, settings: ^Render_Settings, name: string, is_focused: bool, can_be_focused: bool, window_size: v2i) -> bool { 
     result: bool
     if ui_collapser(layout, &settings.is_open, name) {
         layout_indent_scope(layout)
@@ -585,35 +586,6 @@ display_render :: proc (state: ^State, layout: ^Layout, settings: ^Render_Settin
     return result
 }
 
-load_image_into_texture :: proc (texture: ^rl.Texture, image: Image) {
-    rl.UnloadTexture(texture^)
-    
-    rl_image := rl.Image {
-        data    = raw_data(image.data),
-        width   = image.width,
-        height  = image.height,
-        mipmaps = 1,
-        format  = .UNCOMPRESSED_R8G8B8A8,
-    }
-    
-    texture^ = rl.LoadTextureFromImage(rl_image)
-}
-
-axis_angle_rotation :: proc(axis: v3, angle: f32) -> m4 {
-    cos_angle := cos(angle)
-    sin_angle := sin(angle)
-    inv_angle := 1.0 - cos_angle
-    
-    x, y, z := axis.x, axis.y, axis.z
-    
-    return m4 {
-        inv_angle*x*x + cos_angle,   inv_angle*x*y - sin_angle*z, inv_angle*x*z + sin_angle*y, 0,
-        inv_angle*x*y + sin_angle*z, inv_angle*y*y + cos_angle,   inv_angle*y*z - sin_angle*x, 0,
-        inv_angle*x*z - sin_angle*y, inv_angle*y*z + sin_angle*x, inv_angle*z*z + cos_angle,   0,
-        0,                           0,                           0,                           1,
-    }
-}
-
 ////////////////////////////////////////////////
 
 camera_look_at :: proc (p: v3, at: v3) -> Camera {
@@ -640,21 +612,17 @@ camera_orbit :: proc (p: v3, orbit: f32, dolly, pitch: f32) -> Camera {
     return result
 }
 
-////////////////////////////////////////////////
-
-rect_to_rl :: proc (rect: Rectangle2) -> rl.Rectangle {
-    result: rl.Rectangle
+axis_angle_rotation :: proc(axis: v3, angle: f32) -> m4 {
+    cos_angle := cos(angle)
+    sin_angle := sin(angle)
+    inv_angle := 1.0 - cos_angle
     
-    result.x = rect.min.x
-    result.y = rect.min.y
-    result.width  = rectangle_get_dimension(rect).x
-    result.height = rectangle_get_dimension(rect).y
+    x, y, z := axis.x, axis.y, axis.z
     
-    return result
-}
-
-color_to_rl :: proc (color: $V) -> rl.Color {
-    bytes := color_to_u8(color)
-    result := transmute(rl.Color) bytes
-    return result
+    return m4 {
+        inv_angle*x*x + cos_angle,   inv_angle*x*y - sin_angle*z, inv_angle*x*z + sin_angle*y, 0,
+        inv_angle*x*y + sin_angle*z, inv_angle*y*y + cos_angle,   inv_angle*y*z - sin_angle*x, 0,
+        inv_angle*x*z - sin_angle*y, inv_angle*y*z + sin_angle*x, inv_angle*z*z + cos_angle,   0,
+        0,                           0,                           0,                           1,
+    }
 }

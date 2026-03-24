@@ -81,7 +81,6 @@ interact :: proc (ui: ^UI) {
                 ui.mouse_dp = {0, 0}
             }
         }
-        // Resize Move
         
         if is_interacting_release(ui) do end_interaction(ui)
         if is_interacting_press(ui)   do begin_interaction(ui)
@@ -97,7 +96,6 @@ interact :: proc (ui: ^UI) {
 begin_interaction :: proc (ui: ^UI) {
     if ui.hot_interaction.kind != .None {
         ui.active_interaction = ui.hot_interaction
-        // auto detect based on type of value
     } else {
         ui.active_interaction.kind = .NOP
     }
@@ -406,4 +404,23 @@ draw_rectangle_outline :: proc (rect: Rectangle2, thickness: f32, color: v4) {
     draw_rectangle(bot, color)
     draw_rectangle(lef, color)
     draw_rectangle(rig, color)
+}
+
+////////////////////////////////////////////////
+
+rect_to_rl :: proc (rect: Rectangle2) -> rl.Rectangle {
+    result: rl.Rectangle
+    
+    result.x = rect.min.x
+    result.y = rect.min.y
+    result.width  = rectangle_get_dimension(rect).x
+    result.height = rectangle_get_dimension(rect).y
+    
+    return result
+}
+
+color_to_rl :: proc (color: $V) -> rl.Color {
+    bytes := color_to_u8(color)
+    result := transmute(rl.Color) bytes
+    return result
 }
