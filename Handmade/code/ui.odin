@@ -20,6 +20,7 @@ Interaction :: struct {
     right, middle: bool,
     
     value:  union {
+        string,
         bool,
         u32,
         i32,

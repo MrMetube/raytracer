@@ -14,8 +14,40 @@ Render_Stats :: struct {
     using tests: Test_Info,
 }
 
+Render_Settings :: struct {
+    is_open: bool,
+    
+    requested: bool,
+    active:    bool,
+    display_progress: bool,
+    
+    start, end: time.Time,
+    render_time: Stat(time.Duration),
+    
+    image:   Image,
+    texture: rl.Texture,
+    
+    image_size_factor: i32,
+    
+    arena:     mem.Arena,
+    allocator: Allocator,
+    
+    draw_camera: Camera,
+    draw_models: [dynamic] Draw_Model,
+    
+    ////////////////////////////////////////////////
+    
+    rays_per_pixel:   u32,
+    max_bounce_count: u32,
+ 
+    stats: Render_Stats,
+}
+
 // @waste only use the render data structure if possible(skip lane_xx for now)
 Render :: struct {
+    active:   bool,
+    canceled: bool,
+    
     triangles: [] Ray_Triangle,
     normals:   [] Normals,
     trees:     [] Tree_Node,
@@ -25,33 +57,8 @@ Render :: struct {
     
     ////////////////////////////////////////////////
     
-    draw_camera: Camera,
-    draw_models: [dynamic] Draw_Model,
-    
-    ////////////////////////////////////////////////
-    
-    requested: bool,
-    canceled:  bool,
-    active:    bool,
-    display_progress: bool,
-    
-    start, end: time.Time,
-    render_time: Stat(time.Duration),
-    
-    image:   Image,
-    texture: rl.Texture,
     queue:   WorkQueue,
     thread_count: i32,
-    
-    arena:     mem.Arena,
-    allocator: Allocator,
-    
-    rays_per_pixel:   u32,
-    max_bounce_count: u32,
-    
-    image_size_factor: i32,
-    
-    stats: Render_Stats,
 }
 
 Normals :: [3] v3
@@ -142,47 +149,49 @@ end_model :: proc (model: ^Model, triangles: [] Triangle, normals: [] Normals) {
 
 ////////////////////////////////////////////////
 
-render_begin :: proc (render: ^Render) -> bool {
-    result := render.requested
-    if render.active {
+render_begin :: proc (render: ^Render, settings: ^Render_Settings) -> bool {
+    if settings.active {
         reload := false
         if work_is_completed(&render.queue) {
             reload = true
             
             render.active = false
-            render.end = time.now()
-            stat_update(&render.render_time, time.diff(render.start, render.end))
-            stat_finalize(&render.render_time)
-            print_render_results(&render.stats, render.start, render.end)
+            settings.active = false
+            settings.end = time.now()
+            stat_update(&settings.render_time, time.diff(settings.start, settings.end))
+            stat_finalize(&settings.render_time)
+            print_render_results(&settings.stats, settings.start, settings.end)
             
-            free_all(render.allocator)
+            free_all(settings.allocator)
         }
         
-        if reload || render.display_progress {
-            load_image_into_texture(&render.texture, render.image)
+        if reload || settings.display_progress {
+            load_image_into_texture(&settings.texture, settings.image)
         }
     }
+    
+    result := settings.requested && !render.active
     return result
 }
 
-draw_model :: proc (render: ^Render, model: Model_Index, material: u32, transform: Transform) {
-    assert(render.requested)
-    assert(!render.active)
+draw_model :: proc (settings: ^Render_Settings, model: Model_Index, material: u32, transform: Transform) {
+    assert(settings.requested)
+    assert(!settings.active)
     
     if model == 0 do return
-    append(&render.draw_models, Draw_Model{ Models[model], transform, material })
+    append(&settings.draw_models, Draw_Model{ Models[model], transform, material })
 }
 
-set_camera :: proc (render: ^Render, camera: Camera) {
-    assert(render.requested)
-    assert(!render.active)
+set_camera :: proc (settings: ^Render_Settings, camera: Camera) {
+    assert(settings.requested)
+    assert(!settings.active)
     
-    render.draw_camera = camera
+    settings.draw_camera = camera
 }
 
-render_end :: proc (render: ^Render, brdf_data: [] v3, materials: [] Material) {
-    assert(render.requested)
-    assert(!render.active)
+render_end :: proc (render: ^Render, settings: ^Render_Settings, brdf_data: [] v3, materials: [] Material) {
+    assert(settings.requested)
+    assert(!settings.active)
     
     //     for model in active_models {
     //         collect triangles normals and trees
@@ -192,46 +201,49 @@ render_end :: proc (render: ^Render, brdf_data: [] v3, materials: [] Material) {
     //     build tree of models
     //     assign work to threads
     
-    render_start(render, render.draw_camera, render.draw_models[:], brdf_data, materials)
-    clear(&render.draw_models)
+    render_start(render, settings, settings.draw_camera, settings.draw_models[:], brdf_data, materials)
+    clear(&settings.draw_models)
 }
 
 ////////////////////////////////////////////////
 
-init_render :: proc (render: ^Render, rays_per_pixel: u32, max_bounce_count: u32, window_size: v2i, image_size_factor: i32, thread_count: u32, name: string) {
-    render.rays_per_pixel    = rays_per_pixel
-    render.max_bounce_count  = max_bounce_count
-    render.image_size_factor = image_size_factor
+init_render_settings :: proc (settings: ^Render_Settings, rays_per_pixel: u32, max_bounce_count: u32, window_size: v2i, image_size_factor: i32) {
+    settings.rays_per_pixel    = rays_per_pixel
+    settings.max_bounce_count  = max_bounce_count
+    settings.image_size_factor = image_size_factor
     
     backing, err := make([] u8, 1 * Gigabyte, context.allocator); assert(err == nil)
-    mem.arena_init(&render.arena, backing)
-    render.allocator = mem.arena_allocator(&render.arena)
+    mem.arena_init(&settings.arena, backing)
+    settings.allocator = mem.arena_allocator(&settings.arena)
     
-    init_render_image(render, window_size)
-    
+    init_render_image(settings, window_size)
+}
+
+init_render :: proc (render: ^Render, thread_count: u32) {
     render.thread_count = cast(i32) thread_count
-    init_work_queue(&render.queue, name, thread_count)
+    init_work_queue(&render.queue, "Render", thread_count)
 }
 
-init_render_image :: proc (render: ^Render, window_size: v2i) {
-    assert(!render.active)
+init_render_image :: proc (settings: ^Render_Settings, window_size: v2i) {
+    assert(!settings.active)
     
-    delete(render.image.data, context.allocator)
+    delete(settings.image.data, context.allocator)
     
-    image_size := window_size / render.image_size_factor
-    render.image.width  = image_size.x
-    render.image.height = image_size.y
-    render.image.data   = make([] Color, render.image.width * render.image.height, context.allocator)
+    image_size := window_size / settings.image_size_factor
+    settings.image.width  = image_size.x
+    settings.image.height = image_size.y
+    settings.image.data   = make([] Color, settings.image.width * settings.image.height, context.allocator)
 }
 
-render_start :: proc (render: ^Render, camera: Camera, models: [] Draw_Model, brdf_data: [] v3, materials: [] Material) {
-    free_all(render.allocator)
+render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camera, models: [] Draw_Model, brdf_data: [] v3, materials: [] Material) {
+    free_all(settings.allocator)
     
     render.active = true
-    render.canceled  = false
-    render.requested = false
+    render.canceled = false
+    settings.active = true
+    settings.requested = false
     
-    render.stats = {}
+    settings.stats = {}
     
     total_triangle_count: u32
     total_tree_count: u32
@@ -242,11 +254,11 @@ render_start :: proc (render: ^Render, camera: Camera, models: [] Draw_Model, br
     next_free_triangle_offset: u32
     next_free_tree_offset: u32
     
-    render.triangles = make([] Ray_Triangle, total_triangle_count, render.allocator)
-    render.normals   = make([] Normals,      total_triangle_count, render.allocator)
-    render.trees     = make([] Tree_Node,    total_tree_count,     render.allocator)
+    render.triangles = make([] Ray_Triangle, total_triangle_count, settings.allocator)
+    render.normals   = make([] Normals,      total_triangle_count, settings.allocator)
+    render.trees     = make([] Tree_Node,    total_tree_count,     settings.allocator)
     
-    render.models = make([] RenderModel, len(models), render.allocator)
+    render.models = make([] RenderModel, len(models), settings.allocator)
     for model, model_index in models {
         rm := &render.models[model_index]
         rm.material = model.material
@@ -295,23 +307,28 @@ render_start :: proc (render: ^Render, camera: Camera, models: [] Draw_Model, br
     }
     
     render.brdf_data = brdf_data
-    render.materials = make_shallow_copy(materials, render.allocator)
+    render.materials = make_shallow_copy(materials, settings.allocator)
     
-    zero_slice(render.image.data)
+    zero_slice(settings.image.data)
     
-    tile_size := cast(v2i) max(render.image.width, render.image.height) / render.thread_count / 2
-    tile_cols  := (render.image.width  + tile_size.x - 1) / tile_size.x
-    tile_rows  := (render.image.height + tile_size.y - 1) / tile_size.y
+    tile_size := cast(v2i) max(settings.image.width, settings.image.height) / render.thread_count / 2
+    tile_cols  := (settings.image.width  + tile_size.x - 1) / tile_size.x
+    tile_rows  := (settings.image.height + tile_size.y - 1) / tile_size.y
     tile_count := tile_cols * tile_rows
     
     Work :: struct {
-        render: ^Render,
-        camera:  lane_Transform,
         rect:    Rectangle2i, 
         entropy: RandomSeries,
+        
+        render:           ^Render,
+        camera:           lane_Transform,
+        image:            Image,
+        stats:            ^Render_Stats,
+        rays_per_pixel:   u32,
+        max_bounce_count: u32,
     }
     
-    works := make([] Work, tile_count, render.allocator)
+    works := make([] Work, tile_count, settings.allocator)
     work_index: u32
     
     lane_camera: lane_Transform
@@ -320,17 +337,26 @@ render_start :: proc (render: ^Render, camera: Camera, models: [] Draw_Model, br
     lane_camera.z = vec_cast(lane_f32, camera.z)
     lane_camera.t = vec_cast(lane_f32, camera.t)
     
-    render.start = time.now()
+    settings.start = time.now()
     for row in 0..<tile_rows {
         for col in 0..<tile_cols {
             rect := rectangle_min_dimension(tile_size * {col, row}, tile_size)
-            rect  = rectangle_intersection(rect, rectangle_zero_dimension(render.image.width, render.image.height))
+            rect  = rectangle_intersection(rect, rectangle_zero_dimension(settings.image.width, settings.image.height))
             
             entropy := seed_random_series(1842098778 + row * 984612097 + col * 237711 + cast(i32) work_index)
             
             work := &works[work_index]
             work_index += 1
-            work ^= { render, lane_camera, rect, entropy }
+            work ^= { 
+                rect,
+                entropy,
+                render,
+                lane_camera,
+                settings.image,
+                &settings.stats,
+                settings.rays_per_pixel,
+                settings.max_bounce_count,
+            }
         }
     }
     
@@ -342,7 +368,7 @@ render_start :: proc (render: ^Render, camera: Camera, models: [] Draw_Model, br
                     index := row * tile_cols + col
                     work := &works[index]
                     enqueue_work_or_do_immediatly(&render.queue, proc(work: ^Work) {
-                        render_tile(work.render, work.camera, work.rect, &work.entropy)
+                        render_tile(work.render, work.camera, work.rect, &work.entropy, work.image, work.stats, work.rays_per_pixel, work.max_bounce_count)
                     }, work)
                 }
             }

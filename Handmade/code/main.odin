@@ -17,9 +17,10 @@ State :: struct {
     ////////////////////////////////////////////////
     
     fast_image_is_focussed: bool,
-    quality_render: Render,
-    fast_render: Render,
-    focus_render: Render,
+    renderer: Render,
+    quality_render: Render_Settings,
+    fast_render:    Render_Settings,
+    focus_render:   Render_Settings,
     
     ////////////////////////////////////////////////
     
@@ -27,9 +28,6 @@ State :: struct {
     focused_object_index:  Object_Index,
     selected_object_index: Object_Index,
     selected_material_index: int,
-    quality_render_is_open: bool,
-    focus_render_is_open:   bool,
-    fast_render_is_open:    bool,
     ojects_is_open:         bool,
     tree_info_is_open:      bool,
     materials_is_open:      bool,
@@ -68,7 +66,7 @@ init_state :: proc (state: ^State) {
     state.focus_camera_pitch = 0.0125 * Tau
     state.focus_camera_dolly = 3
     
-    state.fast_render_is_open = true
+    state.fast_render.is_open = true
     state.fast_render.requested = true
     
     state.fast_image_is_focussed = true
@@ -104,21 +102,18 @@ main :: proc () {
         layout_init(layout, font, Jasmine, font_size)
     }
     
-    init_render(&state.quality_render, 64, 16, state.window_size, 2, core_count, "quality render")
-    init_render(&state.fast_render,    32,  4, state.window_size, 6, core_count, "fast render")
-    init_render(&state.focus_render,   32,  4, 128, 1, core_count, "focus render")
+    init_render(&state.renderer, core_count)
+    init_render_settings(&state.quality_render, 64, 16, state.window_size, 2)
+    init_render_settings(&state.fast_render,    32,  4, state.window_size, 6)
+    init_render_settings(&state.focus_render,   32,  4, 128, 1)
     defer {
-        state.quality_render.canceled = true
-        state.fast_render.canceled    = true
-        state.focus_render.canceled   = true
-        close_work_queue_and_wait_for_threads(&state.quality_render.queue)
-        close_work_queue_and_wait_for_threads(&state.fast_render.queue)
-        close_work_queue_and_wait_for_threads(&state.focus_render.queue)
+        state.renderer.canceled = true
+        close_work_queue_and_wait_for_threads(&state.renderer.queue)
     }
     
     init_state(state)
     
-    renders := make([dynamic] ^Render, 0, 2, context.allocator)
+    renders := make([dynamic] ^Render_Settings, 0, 2, context.allocator)
     append(&renders, &state.quality_render)
     append(&renders, &state.fast_render)
     for &render in renders do stat_init(&render.render_time)
@@ -226,15 +221,15 @@ main :: proc () {
         
         ////////////////////////////////////////////////
         
-        for render in renders {
-            if render_begin(render) {
-                set_camera(render, state.camera)
+        for settings in renders {
+            if render_begin(&state.renderer, settings) {
+                set_camera(settings, state.camera)
                 
                 for object in state.world.objects {
-                    draw_model(render, object.model, object.material, object.transform)
+                    draw_model(settings, object.model, object.material, object.transform)
                 }
                 
-                render_end(render, state.world.brdf_data[:], state.world.materials[:])
+                render_end(&state.renderer, settings, state.world.brdf_data[:], state.world.materials[:])
             }
         }
         
@@ -321,14 +316,15 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
             ui_mover(ui, &state.focus_render_p, state.focus_render_drag_size)
         }
         
-        render := &state.focus_render
-        render_begin(render)
-        object := state.world.objects[state.focused_object_index]
-        
-        set_camera(render, state.focus_camera)
-        draw_model(render, object.model, object.material, object.transform)
-        
-        render_end(render, state.world.brdf_data[:], state.world.materials[:])
+        settings := &state.focus_render
+        if render_begin(&state.renderer, settings) {
+            object := state.world.objects[state.focused_object_index]
+            
+            set_camera(settings, state.focus_camera)
+            draw_model(settings, object.model, object.material, object.transform)
+            
+            render_end(&state.renderer, settings, state.world.brdf_data[:], state.world.materials[:])
+        }
     }
     
     ////////////////////////////////////////////////
@@ -363,15 +359,15 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
     }
     
     
-    if display_render(layout, &state.quality_render, "Quality", &state.quality_render_is_open, !state.fast_image_is_focussed, state.window_size) {
+    if display_render(state, layout, &state.quality_render, "Quality", !state.fast_image_is_focussed, true, state.window_size) {
         state.fast_image_is_focussed = false
     }
     layout_advance(layout, 10)
-    if display_render(layout, &state.fast_render, "Fast", &state.fast_render_is_open, state.fast_image_is_focussed, state.window_size) {
+    if display_render(state, layout, &state.fast_render, "Fast", state.fast_image_is_focussed, true, state.window_size) {
         state.fast_image_is_focussed = true
     }
     layout_advance(layout, 10)
-    display_render(layout, &state.focus_render, "Focus", &state.focus_render_is_open, false, 256)
+    display_render(state, layout, &state.focus_render, "Focus", false, false, 256)
     
     ////////////////////////////////////////////////
     
@@ -500,48 +496,50 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
 
 ////////////////////////////////////////////////
 
-display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open: ^bool, is_focused: bool, window_size: v2i) -> bool { 
+display_render :: proc (state: ^State, layout: ^Layout, settings: ^Render_Settings, name: string, is_focused: bool, can_be_focused: bool, window_size: v2i) -> bool { 
     result: bool
-    if ui_collapser(layout, is_open, name) {
+    if ui_collapser(layout, &settings.is_open, name) {
         layout_indent_scope(layout)
         
         layout_advance(layout, 5)
         layout_begin_horizontal(layout)
-            result = ui_button_highlighted(layout, { kind = .SetValue, target = render, value = is_focused }, is_focused, "Focus")
+            if can_be_focused {
+                result = ui_button_highlighted(layout, { kind = .SetValue, target = settings, value = name }, is_focused, "Focus")
+                layout_advance(layout, 5)
+            }
+            
+            ui_toggle(layout, &settings.display_progress, "Display Progress")
             
             layout_advance(layout, 5)
-            ui_toggle(layout, &render.display_progress, "Display Progress")
+            ui_toggle(layout, &settings.requested, "Render")
             
             layout_advance(layout, 5)
-            ui_toggle(layout, &render.requested, "Render")
-            
-            layout_advance(layout, 5)
-            if render.active {
-                ui_text(layout, "%v", time.since(render.start))
+            if settings.active {
+                ui_text(layout, "%v", time.since(settings.start))
             } else {
-                ui_text(layout, "%v", time.diff(render.start, render.end))
+                ui_text(layout, "%v", time.diff(settings.start, settings.end))
             }
         layout_end_horizontal(layout)
         
         layout_advance(layout, 5)
         layout_begin_horizontal(layout)
-            if ui_button(layout,  {kind = .SetValue, target = &render.render_time }, "Reset") {
-                stat_init(&render.render_time, time.diff(render.start, render.end))
-                stat_finalize(&render.render_time)
+            if ui_button(layout,  {kind = .SetValue, target = &settings.render_time }, "Reset") {
+                stat_init(&settings.render_time, time.diff(settings.start, settings.end))
+                stat_finalize(&settings.render_time)
             }
             layout_advance(layout, 5)
-            ui_text(layout, "Render time: min = %v, avg = %v, max = %v", render.render_time.min, cast(time.Duration) render.render_time.avg, render.render_time.max)
+            ui_text(layout, "Render time: min = %v, avg = %v, max = %v", settings.render_time.min, cast(time.Duration) settings.render_time.avg, settings.render_time.max)
         layout_end_horizontal(layout)
         
         layout_advance(layout, 5)
-        if render.active && !work_is_completed(&render.queue){
+        if settings.active {
             layout_begin_horizontal(layout)
-                total_pixels := render.image.width * render.image.height
-                done_percentage := cast(f32) render.stats.pixels_done / cast(f32) total_pixels
+                total_pixels := settings.image.width * settings.image.height
+                done_percentage := cast(f32) settings.stats.pixels_done / cast(f32) total_pixels
                 ui_progress_bar(layout, done_percentage, 120)
                 
                 layout_advance(layout, 10)
-                ui_toggle(layout, &render.canceled, "Cancel Render")
+                ui_toggle(layout, &state.renderer.canceled, "Cancel Render")
             layout_end_horizontal(layout)
         } else {
             layout_advance(layout, layout.font_size)
@@ -549,38 +547,38 @@ display_render :: proc (layout: ^Layout, render: ^Render, name: string, is_open:
         
         layout_advance(layout, 5)
         layout_begin_horizontal(layout)
-            if ui_button(layout, set_value_interaction(&render.rays_per_pixel, render.rays_per_pixel / 2 ), "-") do render.rays_per_pixel /= 2 
+            if ui_button(layout, set_value_interaction(&settings.rays_per_pixel, settings.rays_per_pixel / 2 ), "-") do settings.rays_per_pixel /= 2 
             layout_advance(layout, 5)
-            if ui_button(layout, set_value_interaction(&render.rays_per_pixel, render.rays_per_pixel * 2), "+") do render.rays_per_pixel *= 2
+            if ui_button(layout, set_value_interaction(&settings.rays_per_pixel, settings.rays_per_pixel * 2), "+") do settings.rays_per_pixel *= 2
             layout_advance(layout, 5)
-            ui_text(layout, "rays per_pixel %v", render.rays_per_pixel)
-            render.rays_per_pixel = clamp(render.rays_per_pixel, LaneWidth, 8192)
+            ui_text(layout, "rays per_pixel %v", settings.rays_per_pixel)
+            settings.rays_per_pixel = clamp(settings.rays_per_pixel, LaneWidth, 8192)
         layout_end_horizontal(layout)
         
         layout_begin_horizontal(layout)
-            if ui_button(layout, set_value_interaction(&render.max_bounce_count, render.max_bounce_count - 1), "-") do render.max_bounce_count -= render.max_bounce_count <= 8 ? 1 : 2
+            if ui_button(layout, set_value_interaction(&settings.max_bounce_count, settings.max_bounce_count - 1), "-") do settings.max_bounce_count -= settings.max_bounce_count <= 8 ? 1 : 2
             layout_advance(layout, 5)
-            if ui_button(layout, set_value_interaction(&render.max_bounce_count, render.max_bounce_count + 1), "+") do render.max_bounce_count += render.max_bounce_count  < 8 ? 1 : 2
-            render.max_bounce_count = clamp(render.max_bounce_count, 1, 16)
+            if ui_button(layout, set_value_interaction(&settings.max_bounce_count, settings.max_bounce_count + 1), "+") do settings.max_bounce_count += settings.max_bounce_count  < 8 ? 1 : 2
+            settings.max_bounce_count = clamp(settings.max_bounce_count, 1, 16)
             layout_advance(layout, 5)
-            ui_text(layout, "bounces %v", render.max_bounce_count)
+            ui_text(layout, "bounces %v", settings.max_bounce_count)
         layout_end_horizontal(layout)
         
         layout_begin_horizontal(layout)
-            if !render.active {
-                before := render.image_size_factor
-                if ui_button(layout, set_value_interaction(&render.image_size_factor, render.image_size_factor + 1), "-") do render.image_size_factor += 1
+            if !settings.active {
+                before := settings.image_size_factor
+                if ui_button(layout, set_value_interaction(&settings.image_size_factor, settings.image_size_factor + 1), "-") do settings.image_size_factor += 1
                 layout_advance(layout, 5)
-                if ui_button(layout, set_value_interaction(&render.image_size_factor, render.image_size_factor - 1), "+") do render.image_size_factor -= 1
-                render.image_size_factor = clamp(render.image_size_factor, 1, 16)
+                if ui_button(layout, set_value_interaction(&settings.image_size_factor, settings.image_size_factor - 1), "+") do settings.image_size_factor -= 1
+                settings.image_size_factor = clamp(settings.image_size_factor, 1, 16)
                 
-                if render.image_size_factor != before {
-                    init_render_image(render, window_size)
+                if settings.image_size_factor != before {
+                    init_render_image(settings, window_size)
                 }
             }
             
             layout_advance(layout, 5)
-            ui_text(layout, "resolution %vx%v", render.image.width, render.image.height)
+            ui_text(layout, "resolution %vx%v", settings.image.width, settings.image.height)
         layout_end_horizontal(layout)
     }
     

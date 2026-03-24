@@ -50,17 +50,13 @@ Rectangle_Threshold : f32 = 500
 
 Collect_Stats :: true
 
-render_tile :: proc(render: ^Render, camera: lane_Transform, rect: Rectangle2i, entropy: ^RandomSeries) {
-    image            := render.image
+render_tile :: proc(render: ^Render, camera: lane_Transform, rect: Rectangle2i, entropy: ^RandomSeries, image: Image, render_stats: ^Render_Stats, rays_per_pixel, max_bounce_count: u32) {
     triangles        := render.triangles
     normals          := render.normals
     trees            := render.trees
     models           := render.models
     materials        := render.materials
     brdf_data        := render.brdf_data
-    render_stats     := &render.stats
-    rays_per_pixel   := render.rays_per_pixel
-    max_bounce_count := render.max_bounce_count
     
     // @waste check what can be a parameter/passed in
     film_distance :: 1
@@ -134,8 +130,8 @@ render_tile :: proc(render: ^Render, camera: lane_Transform, rect: Rectangle2i, 
         }
     }
     
-    atomic_add(&render.stats.triangles,  total.triangles)
-    atomic_add(&render.stats.rectangles, total.rectangles)
+    atomic_add(&render_stats.triangles,  total.triangles)
+    atomic_add(&render_stats.rectangles, total.rectangles)
     for i in 0..<LaneWidth {
         atomic_add(&render_stats.empty_lanes[i], total.empty_lanes[i])
     }
