@@ -123,16 +123,6 @@ BrdfTable :: struct {
 
 ////////////////////////////////////////////////
 
-// end_render :: proc () {
-//     for model in active_models {
-//         collect triangles normals and trees
-//         // rebuild dirty trees
-//     }
-    
-//     build tree of models
-//     assign work to threads
-// }
-
 Model_Index :: distinct u32
 Models: [256] Model
 last_used_model_index: Model_Index
@@ -152,29 +142,9 @@ end_model :: proc (model: ^Model, triangles: [] Triangle, normals: [] Normals) {
 
 ////////////////////////////////////////////////
 
-render_begin :: proc (render: ^Render) {}
-
-draw_model :: proc (render: ^Render, model: Model_Index, material: u32, transform: Transform) {
-    // @todo(viktor): is this okay?
-    if !render.requested || render.active do return
-    
-    if model == 0 do return
-    append(&render.draw_models, Draw_Model{ Models[model], transform, material })
-}
-
-set_camera :: proc (render: ^Render, camera: Camera) {
-    // @todo(viktor): is this okay?
-    if !render.requested || render.active do return
-    render.draw_camera = camera
-}
-
-render_end :: proc (render: ^Render, brdf_data: [] v3, materials: [] Material) {
-    if !render.active {
-        if render.requested {
-            render_start(render, render.draw_camera, render.draw_models[:], brdf_data, materials)
-            clear(&render.draw_models)
-        }
-    } else {
+render_begin :: proc (render: ^Render) -> bool {
+    result := render.requested
+    if render.active {
         reload := false
         if work_is_completed(&render.queue) {
             reload = true
@@ -192,6 +162,38 @@ render_end :: proc (render: ^Render, brdf_data: [] v3, materials: [] Material) {
             load_image_into_texture(&render.texture, render.image)
         }
     }
+    return result
+}
+
+draw_model :: proc (render: ^Render, model: Model_Index, material: u32, transform: Transform) {
+    assert(render.requested)
+    assert(!render.active)
+    
+    if model == 0 do return
+    append(&render.draw_models, Draw_Model{ Models[model], transform, material })
+}
+
+set_camera :: proc (render: ^Render, camera: Camera) {
+    assert(render.requested)
+    assert(!render.active)
+    
+    render.draw_camera = camera
+}
+
+render_end :: proc (render: ^Render, brdf_data: [] v3, materials: [] Material) {
+    assert(render.requested)
+    assert(!render.active)
+    
+    //     for model in active_models {
+    //         collect triangles normals and trees
+    //         // rebuild dirty trees
+    //     }
+        
+    //     build tree of models
+    //     assign work to threads
+    
+    render_start(render, render.draw_camera, render.draw_models[:], brdf_data, materials)
+    clear(&render.draw_models)
 }
 
 ////////////////////////////////////////////////

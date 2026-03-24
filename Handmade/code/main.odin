@@ -7,38 +7,95 @@ import "core:time"
 import img "vendor:stb/image"
 import rl "vendor:raylib"
 
-////////////////////////////////////////////////
-
 Is_Optimized :: ODIN_OPTIMIZATION_MODE == .Speed
 
+////////////////////////////////////////////////
+
+State :: struct {
+    window_size: v2i,
+    
+    ////////////////////////////////////////////////
+    
+    fast_image_is_focussed: bool,
+    quality_render: Render,
+    fast_render: Render,
+    focus_render: Render,
+    
+    ////////////////////////////////////////////////
+    
+    ui: UI,
+    focused_object_index:  Object_Index,
+    selected_object_index: Object_Index,
+    selected_material_index: int,
+    quality_render_is_open: bool,
+    focus_render_is_open:   bool,
+    fast_render_is_open:    bool,
+    ojects_is_open:         bool,
+    tree_info_is_open:      bool,
+    materials_is_open:      bool,
+    
+    selected_model_build_time: time.Duration,
+    selected_model_info: Tree_Info,
+    
+    ////////////////////////////////////////////////
+    
+    camera: Camera,
+    world: World,
+    
+    is_controlling_camera: bool,
+    ddp: v3,
+    dp:  v3,
+    
+    ////////////////////////////////////////////////
+    
+    focus_render_p: v2,
+    focus_render_drag_size: f32,
+    focus_camera: Camera,
+    focus_camera_offset: v3,
+    focus_camera_orbit: f32,
+    focus_camera_pitch: f32,
+    focus_camera_dolly: f32,
+}
+
+init_state :: proc (state: ^State) {
+    state.camera = camera_look_at({0, -7, 3}, {0, 0, 1})
+    world_init(&state.world)
+    default_scene(&state.world)
+    
+    state.focus_render_p = .5 * vec_cast(f32, state.window_size - {state.focus_render.image.width, state.focus_render.image.height})
+    state.focus_render_drag_size = 12
+    state.focus_camera_offset = {0,0,-1}
+    state.focus_camera_pitch = 0.0125 * Tau
+    state.focus_camera_dolly = 3
+    
+    state.fast_render_is_open = true
+    state.fast_render.requested = true
+    
+    state.fast_image_is_focussed = true
+}
+
 main :: proc () {
-    rl.SetTraceLogLevel(.WARNING)
+    spall_init(output_name = tprint("trace_%v", Is_Optimized ? "optimized" : "debug"))
     
     window_title := cprint("Handmade Ray %v", (Is_Optimized ? "Optimized" :  "Debug"))
-    
-    spall_init(output_name = tprint("trace_%v", Is_Optimized ? "optimized" : "debug"))
     
     _, logical_core_count, ok := si.cpu_core_count(); assert(ok)
     core_count := cast(u32) logical_core_count - 1
     print("Using %v cores per render\n", core_count)
     
-    world: World
-    world_init(&world)
-    
-    default_scene(&world)
     ////////////////////////////////////////////////
     
-    camera := camera_look_at({0, -7, 3}, {0, 0, 1})
+    the_state: State
+    state := &the_state
+    ui := &state.ui
     
-    focus_camera: Camera
+    state.window_size = v2i { 1920, 1080 }
     
-    ////////////////////////////////////////////////
-    
-    window_size := v2i { 1920, 1080 }
-    
-    rl.InitWindow(window_size.x, window_size.y, window_title)
+    rl.SetTraceLogLevel(.WARNING)
+    rl.InitWindow(state.window_size.x, state.window_size.y, window_title)
     rl.SetTargetFPS(144)
     
+    ////////////////////////////////////////////////
     the_layout: Layout
     layout := &the_layout
     {
@@ -47,56 +104,28 @@ main :: proc () {
         layout_init(layout, font, Jasmine, font_size)
     }
     
-    focused_object_index: Object_Index
-    selected_object_index: Object_Index
-    show_models: bool
-    show_tree_info: bool
-    selected_model_info: Tree_Info
-    selected_model_build_time: time.Duration
-    
-    selected_material_index: int
-    show_materials: bool
-    quality_render_is_open: bool
-    fast_render_is_open: bool = true
-    focus_render_is_open: bool
-    
-    quality_render: Render
-    fast_render:    Render
-    focus_render:   Render
-    init_render(&quality_render, 64, 16, window_size, 2, core_count, "quality render")
-    init_render(&fast_render,    32,  4, window_size, 6, core_count, "fast render")
-    init_render(&focus_render,   32,  4, 128, 1, core_count, "focus render")
+    init_render(&state.quality_render, 64, 16, state.window_size, 2, core_count, "quality render")
+    init_render(&state.fast_render,    32,  4, state.window_size, 6, core_count, "fast render")
+    init_render(&state.focus_render,   32,  4, 128, 1, core_count, "focus render")
     defer {
-        quality_render.canceled = true
-        fast_render.canceled    = true
-        focus_render.canceled   = true
-        close_work_queue_and_wait_for_threads(&quality_render.queue)
-        close_work_queue_and_wait_for_threads(&fast_render.queue)
-        close_work_queue_and_wait_for_threads(&focus_render.queue)
+        state.quality_render.canceled = true
+        state.fast_render.canceled    = true
+        state.focus_render.canceled   = true
+        close_work_queue_and_wait_for_threads(&state.quality_render.queue)
+        close_work_queue_and_wait_for_threads(&state.fast_render.queue)
+        close_work_queue_and_wait_for_threads(&state.focus_render.queue)
     }
     
-    focus_render_drag: Drag_Interaction
-    focus_render_drag.p = (vec_cast(f32, window_size) - vec_cast(f32, focus_render.image.width, focus_render.image.height)) / 2
-    focus_render_drag_size :: 12
-    focus_camera_offset: v3 = {0,0,-1}
-    focus_camera_orbit: f32
-    focus_camera_pitch: f32 = 0.0125 * Tau
-    focus_camera_dolly: f32 = 3
+    init_state(state)
     
     renders := make([dynamic] ^Render, 0, 2, context.allocator)
-    append(&renders, &quality_render)
-    append(&renders, &fast_render)
+    append(&renders, &state.quality_render)
+    append(&renders, &state.fast_render)
     for &render in renders do stat_init(&render.render_time)
+    stat_init(&state.focus_render.render_time)
     
     ////////////////////////////////////////////////
     
-    fast_render.requested = true
-    fast_image_is_focussed: bool = true
-    
-    __ui: UI
-    is_controlling_camera: bool
-    ddp: v3
-    dp: v3
     for !rl.WindowShouldClose() {
         free_all(context.temp_allocator)
         
@@ -111,14 +140,14 @@ main :: proc () {
         dlook: v2
         
         if !rl.IsWindowFocused() {
-            is_controlling_camera = false
+            state.is_controlling_camera = false
             rl.ShowCursor()
         } else {
             if rl.IsMouseButtonPressed(.MIDDLE) {
-                is_controlling_camera = !is_controlling_camera
+                state.is_controlling_camera = !state.is_controlling_camera
             }
             
-            if is_controlling_camera {
+            if state.is_controlling_camera {
                 if rl.IsKeyDown(.A) do dddp += {-1, 0,  0}
                 if rl.IsKeyDown(.D) do dddp += { 1, 0,  0}
                 if rl.IsKeyDown(.W) do dddp += { 0, 0, -1}
@@ -128,69 +157,69 @@ main :: proc () {
                 if rl.IsKeyDown(.LEFT_SHIFT) do dddp += {0,-1,  0}
                 
                 if !rl.IsMouseButtonDown(.RIGHT) {
-                    ddp *= 0.1
+                    state.ddp *= 0.1
                 } else {
                     look_speed *= 5
                 }
             
                 dlook = -rl.GetMouseDelta()
                 rl.HideCursor()
-                rl.SetMousePosition(window_size.x / 2, window_size.y / 2)
+                rl.SetMousePosition(state.window_size.x / 2, state.window_size.y / 2)
             } else {
                 rl.ShowCursor()
             }
             
             if rl.IsKeyDown(.R) {
-                fast_render.requested = true
+                state.fast_render.requested = true
             }
         }
         
         if dlook != 0 {
-            dlook *= look_speed / vec_cast(f32, window_size) * delta_time
+            dlook *= look_speed / vec_cast(f32, state.window_size) * delta_time
             up :: v3{0, 0, 1}
             
-            yaw   := axis_angle_rotation(camera.y,                           dlook.x)
-            pitch := axis_angle_rotation(normalize(multiply(yaw, camera.x)), dlook.y)
+            yaw   := axis_angle_rotation(state.camera.y,                           dlook.x)
+            pitch := axis_angle_rotation(normalize(multiply(yaw, state.camera.x)), dlook.y)
             
-            new_z := multiply(pitch * yaw, camera.z)
+            new_z := multiply(pitch * yaw, state.camera.z)
             
             if abs(dot(new_z, up)) < 0.9999 {
-                camera.z = new_z
+                state.camera.z = new_z
             } else {
-                camera.z = multiply(yaw, camera.z)
+                state.camera.z = multiply(yaw, state.camera.z)
             }
             
-            camera.x = normalize_or_zero(cross(up, camera.z))
-            camera.y = normalize_or_zero(cross(camera.z, camera.x))
+            state.camera.x = normalize_or_zero(cross(up, state.camera.z))
+            state.camera.y = normalize_or_zero(cross(state.camera.z, state.camera.x))
             
-            fast_render.requested = true
+            state.fast_render.requested = true
         }
         
         if dddp != 0 {
             dddp = normalize_or_zero(dddp)
             dddp *= speed
-            ddp  += dddp
-            ddp  *= 0.9
-            dp   += ddp * delta_time
-            dp   *= 0.9
-            if length_squared(dp) < square(cast(f32) 0.01) do dp = 0
+            state.ddp  += dddp
+            state.ddp  *= 0.9
+            state.dp   += state.ddp * delta_time
+            state.dp   *= 0.9
+            if length_squared(state.dp) < square(cast(f32) 0.01) do state.dp = 0
             
-            if dp != 0 {
-                camera.t += dp.x * camera.x    * delta_time
-                camera.t += dp.y * v3{0, 0, 1} * delta_time
-                camera.t += dp.z * camera.z    * delta_time
+            if state.dp != 0 {
+                state.camera.t += state.dp.x * state.camera.x    * delta_time
+                state.camera.t += state.dp.y * v3{0, 0, 1} * delta_time
+                state.camera.t += state.dp.z * state.camera.z    * delta_time
                 
-                fast_render.requested = true
+                state.fast_render.requested = true
             }
         }
         
         if rl.IsKeyPressed(.TAB) && !(rl.IsKeyDown(.LEFT_ALT) || rl.IsKeyDown(.RIGHT_ALT)) {
-            fast_image_is_focussed = !fast_image_is_focussed
+            state.fast_image_is_focussed = !state.fast_image_is_focussed
         }
         
-        if rl.IsKeyPressed(.F5) && !quality_render.active {
+        if rl.IsKeyPressed(.F5) && !state.quality_render.active {
             output_path := "./render.bmp"
-            img.write_bmp(ctprint("%v", output_path), quality_render.image.width, quality_render.image.height, 4, &quality_render.image.data[0])
+            img.write_bmp(ctprint("%v", output_path), state.quality_render.image.width, state.quality_render.image.height, 4, &state.quality_render.image.data[0])
             cwd, _ := os.get_working_directory(context.temp_allocator)
             print("Wrote ouput to %v/%v\n", cwd, output_path)
         }
@@ -198,268 +227,275 @@ main :: proc () {
         ////////////////////////////////////////////////
         
         for render in renders {
-            render_begin(render)
-            
-            set_camera(render, camera)
-            
-            for object in world.objects {
-                draw_model(render, object.model, object.material, object.transform)
+            if render_begin(render) {
+                set_camera(render, state.camera)
+                
+                for object in state.world.objects {
+                    draw_model(render, object.model, object.material, object.transform)
+                }
+                
+                render_end(render, state.world.brdf_data[:], state.world.materials[:])
             }
-            
-            render_end(render, world.brdf_data[:], world.materials[:])
         }
         
         ////////////////////////////////////////////////
         
-        ui: ^UI = &__ui
         begin_ui(ui)
-        defer {
-            interact(ui)
-            ui.next_hot_interaction = {}
-        }
+        
+        draw_ui(layout, ui, state)
+        
+        interact(ui)
         
         ////////////////////////////////////////////////
         
-        layout_begin(layout, ui, 10)
-        
-        {
-            small_factor :: 6
-            small_size := window_size / small_factor
-            p := window_size - small_size
-            p.y = 0
-            if fast_image_is_focussed {
-                rl.DrawTextureEx(fast_render.texture, 0, 0, cast(f32) fast_render.image_size_factor, rl.WHITE)
-                rl.DrawTextureEx(quality_render.texture, vec_cast(f32, p), 0, cast(f32) quality_render.image_size_factor / small_factor, rl.WHITE)
-            } else {
-                rl.DrawTextureEx(quality_render.texture, 0, 0, cast(f32) quality_render.image_size_factor, rl.WHITE)
-                rl.DrawTextureEx(fast_render.texture, vec_cast(f32, p), 0, cast(f32) fast_render.image_size_factor / small_factor, rl.WHITE)
-            }
-        }
-        
-        if focused_object_index != 0 {
-            focus_render_size := vec_cast(f32, focus_render.image.width, focus_render.image.height) * cast(f32) focus_render.image_size_factor
-            
-            p := focus_render_drag.p
-            draw_rectangle_outline(rectangle_min_dimension(p, focus_render_size), 1, Black)
-            rl.DrawTextureEx(focus_render.texture, p, 0, cast(f32) focus_render.image_size_factor, rl.WHITE)
-            
-            if rl.IsWindowFocused() {
-                if !display_drag_handle(layout, &focus_render_drag, focus_render_drag_size) {
-                    if rectangle_contains(rectangle_min_dimension(focus_render_drag.p, focus_render_size), rl.GetMousePosition()) {
-                        changed_camera := false
-                        dmousep := rl.GetMouseDelta()
-                        if rl.IsMouseButtonDown(.LEFT) {
-                            rotation_speed :: 0.001 * Tau
-                            focus_camera_orbit += -dmousep.x * rotation_speed
-                            focus_camera_pitch += -dmousep.y * rotation_speed
-                            changed_camera = true
-                        } else if rl.IsMouseButtonDown(.RIGHT) {
-                            zoom_speed := 0.005 * (focus_camera_offset.z - focus_camera_dolly)
-                            focus_camera_dolly += -dmousep.y * zoom_speed
-                            changed_camera = true
-                        } else if rl.IsMouseButtonDown(.MIDDLE) {
-                            focus_camera = camera
-                            focus_render.requested = true
-                        }
-                        
-                        if changed_camera {
-                            focus_render.requested = true
-                        }
-                        
-                        object := world.objects[focused_object_index]
-                        focus_camera = camera_orbit(focus_camera_offset, focus_camera_orbit, focus_camera_dolly, focus_camera_pitch)
-                        focus_camera.t += object.transform.t
-                    }
-                }
-            } else {
-                focus_render_drag.dragged = false
-            }
-            
-            render := &focus_render
-            render_begin(render)
-            object := world.objects[focused_object_index]
-            
-            set_camera(render, focus_camera)
-            draw_model(render, object.model, object.material, object.transform)
-            
-            render_end(render, world.brdf_data[:], world.materials[:])
-        }
-        
-        ////////////////////////////////////////////////
-        
-        ui_text(layout, "Camera: %v : %v ", camera.t, camera.z)
-        layout_advance(layout, 10)
-        
-        layout_begin_horizontal(layout)
-            for kind, kind_index in Debug_View_Kind {
-                if kind_index != 0 do layout_advance(layout, 5)
-                
-                if ui_button_highlighted(layout, set_value_interaction(&Debug_View, kind), Debug_View == kind, "%v", kind) {
-                    Debug_View = kind
-                    fast_render.requested = true
-                }
-            }
-        layout_end_horizontal(layout)
-        layout_advance(layout, 10)
-        
-        
-        if Debug_View in (bit_set[Debug_View_Kind]{ .Triangle_Tests, .Rectangle_Tests, .Both_Tests }) {
-            // @cleanup
-            view := view_magnitude(Triangle_Threshold, precision = 1)
-            _, released := ui_dragger(layout, &Triangle_Threshold, 10, 10, 10000, "Triangle Threshold %v", view, flags = { .logarithmic })
-            if released {
-                fast_render.requested = true
-            }
-            
-            view = view_magnitude(Rectangle_Threshold, precision = 1)
-            _, released = ui_dragger(layout, &Rectangle_Threshold, 10, 10, 10000, "Rectangle Threshold %v", view, flags = { .logarithmic })
-            if released {
-                fast_render.requested = true
-            }
-            layout_advance(layout, 10)
-        }
-        
-        
-        if display_render(layout, &quality_render, "Quality", &quality_render_is_open, !fast_image_is_focussed, window_size) {
-            fast_image_is_focussed = false
-        }
-        layout_advance(layout, 10)
-        if display_render(layout, &fast_render, "Fast", &fast_render_is_open, fast_image_is_focussed, window_size) {
-            fast_image_is_focussed = true
-        }
-        layout_advance(layout, 10)
-        display_render(layout, &focus_render, "Focus", &focus_render_is_open, false, 256)
-        
-        ////////////////////////////////////////////////
-        
-        layout_advance(layout, 10)
-        if ui_collapser(layout, &show_models, "Objects") {
-            layout_indent_scope(layout)
-            
-            // @api maybe make an iterator?
-            for object_index in 1..=world.last_used_object_index {
-                object := &world.objects[object_index]
-                
-                layout_advance(layout, 5)
-                if ui_button_highlighted(layout, set_value_interaction(&selected_object_index, object_index), selected_object_index == object_index, "Object %v", object_index) {
-                    selected_object_index = object_index
-                }
-                
-                if selected_object_index == object_index {
-                    layout_indent_scope(layout)
-                    
-                    layout_advance(layout, 10)
-                    if ui_button_highlighted(layout, set_value_interaction(&focused_object_index, object_index), focused_object_index == object_index, "Focus") {
-                        if focused_object_index == object_index {
-                            focused_object_index = 0
-                        } else {
-                            focused_object_index = object_index
-                            focus_render.requested = true
-                        }
-                    }
-                    
-                    if ui_collapser(layout, &show_tree_info, "Tree") {
-                        layout_indent_scope(layout)
-                        
-                        ui_text(layout, "build took %v", selected_model_build_time)
-                        ui_text(layout, "node count %v", selected_model_info.node_count)
-                        ui_text(layout, "depth: max = %v, avg = %.2f", selected_model_info.depth.max, selected_model_info.depth.avg)
-                        ui_text(layout, "values per node: max = %v, avg = %.2f", selected_model_info.values_per_node.max, selected_model_info.values_per_node.avg)
-                        layout_advance(layout, 10)
-                        
-                        m := &Models[object.model]
-                        if ui_button(layout, { kind = .Select, target = &m.tree },  "Rebuild") {
-                            start := time.now()
-                            tree_build(&m.tree, m.triangles, m.normals)
-                            selected_model_build_time = time.since(start)
-                            print("building tree took %v\n", selected_model_build_time)
-                            selected_model_info = inspect(m.tree)
-                            
-                            fast_render.requested = true
-                        }
-                    }
-                                    
-                    // @cleanup @api make a background on the value and allow a view parameter for the text of the button/dragger
-                    _, released := ui_dragger(layout, &object.transform.x.x, 0.1, "scale x = %v", object.transform.x.x)
-                    if released do fast_render.requested = true
-                    _, released  = ui_dragger(layout, &object.transform.y.y, 0.1, "scale y = %v", object.transform.y.y)
-                    if released do fast_render.requested = true
-                    _, released  = ui_dragger(layout, &object.transform.z.z, 0.1, "scale z = %v", object.transform.z.z)
-                    if released do fast_render.requested = true
-                    _, released  = ui_dragger(layout, &object.transform.t.x, 0.1, "translation x = %v", object.transform.t.x)
-                    if released do fast_render.requested = true
-                    _, released  = ui_dragger(layout, &object.transform.t.y, 0.1, "translation y = %v", object.transform.t.y)
-                    if released do fast_render.requested = true
-                    _, released  = ui_dragger(layout, &object.transform.t.z, 0.1, "translation z = %v", object.transform.t.z)
-                    if released do fast_render.requested = true
-                    
-                    if display_slider(layout, 100, &object.material, 1, cast(u32) len(world.materials)-1, "material %v", object.material) {
-                        fast_render.requested = true
-                    }
-                }
-            }
-        }
-        
-        layout_advance(layout, layout.font_size)
-        if ui_collapser(layout, &show_materials, "Materials") {
-            layout_indent_scope(layout)
-            
-            for &material, index in world.materials {
-                if ui_button_highlighted(layout, set_value_interaction(&selected_material_index, index), index == selected_material_index, "Material %v: material %v", index, world.material_names[index]) {
-                    selected_material_index = index
-                }
-                
-                if index == selected_material_index {
-                    layout_indent_scope(layout)
-                    
-                    _, scatter_released := ui_dragger_clamp(layout, &material.scatter, 0.01,  0,   1, "Scatter %f", material.scatter)
-                    _, emittance_released := ui_dragger_clamp(layout, &material.emit_factor, 1, 0.00001, 1000, "Emittance %f", material.emit_factor, flags = {.logarithmic})
-                    if scatter_released || emittance_released do fast_render.requested = true
-                    
-                    layout_advance(layout, 10)
-                    layout_begin_horizontal(layout)
-                    color_size :: 40
-                    {
-                        ui_text(layout, "Emit")
-                        layout_advance(layout, 10)
-                        
-                        color  := rl.ColorFromNormalized(V4(material.emit, 1))
-                        before := color
-                        size := rect_to_rl(rectangle_min_dimension(layout.at, color_size))
-                        rl.GuiColorPicker(size, "", &color)
-                        if color != before do fast_render.requested = true
-                        material.emit = rl.ColorNormalize(color).rgb
-                        
-                        layout_advance(layout, color_size)
-                        layout_advance(layout, color_size)
-                        layout_advance(layout, 10)
-                    }
-                    
-                    {
-                        ui_text(layout, "Reflect")
-                        layout_advance(layout, 10)
-                        
-                        color := rl.ColorFromNormalized(V4(material.reflect, 0))
-                        before := color
-                        size := rect_to_rl(rectangle_min_dimension(layout.at, color_size))
-                        rl.GuiColorPicker(size, "", &color)
-                        if color != before do fast_render.requested = true
-                        material.reflect = rl.ColorNormalize(color).rgb
-                        layout_advance(layout, color_size)
-                    }
-                    layout_end_horizontal(layout)
-                    layout_advance(layout, color_size)
-                }
-            }
+        // @cleanup the request system, can we just render every frame?
+        if state.fast_render.requested && state.focused_object_index != 0 {
+            state.fast_render.requested  = false
+            state.focus_render.requested = true
         }
         
         rl.EndDrawing()
-        
-        if fast_render.requested && focused_object_index != 0 {
-            fast_render.requested  = false
-            focus_render.requested = true
+    }
+}
+
+////////////////////////////////////////////////
+
+draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
+    layout_begin(layout, ui, 10)
+    
+    {
+        small_factor :: 6
+        small_size := state.window_size / small_factor
+        p := state.window_size - small_size
+        p.y = 0
+        if state.fast_image_is_focussed {
+            rl.DrawTextureEx(state.fast_render.texture, 0, 0, cast(f32) state.fast_render.image_size_factor, rl.WHITE)
+            rl.DrawTextureEx(state.quality_render.texture, vec_cast(f32, p), 0, cast(f32) state.quality_render.image_size_factor / small_factor, rl.WHITE)
+        } else {
+            rl.DrawTextureEx(state.quality_render.texture, 0, 0, cast(f32) state.quality_render.image_size_factor, rl.WHITE)
+            rl.DrawTextureEx(state.fast_render.texture, vec_cast(f32, p), 0, cast(f32) state.fast_render.image_size_factor / small_factor, rl.WHITE)
         }
     }
+    
+    if state.focused_object_index != 0 {
+        focus_render_size := vec_cast(f32, state.focus_render.image.width, state.focus_render.image.height) * cast(f32) state.focus_render.image_size_factor
+        
+        p := state.focus_render_p
+        draw_rectangle_outline(rectangle_min_dimension(p, focus_render_size), 1, Black)
+        rl.DrawTextureEx(state.focus_render.texture, p, 0, cast(f32) state.focus_render.image_size_factor, rl.WHITE)
+        
+        if rl.IsWindowFocused() {
+            // @api how can one hot surface have multiple interactions?
+            interaction := Interaction { kind = .NOP, target = &state.focus_camera, right = true, middle = true }
+            rect := rectangle_min_dimension(state.focus_render_p, focus_render_size)
+            if rectangle_contains(rect, layout.ui.mouse_p) {
+                layout.ui.next_hot_interaction = interaction
+            }
+            
+            if is_active(layout.ui, interaction) {
+                changed_camera := false
+                dmousep := rl.GetMouseDelta()
+                if rl.IsMouseButtonDown(.LEFT) {
+                    rotation_speed :: 0.001 * Tau
+                    state.focus_camera_orbit += -dmousep.x * rotation_speed
+                    state.focus_camera_pitch += -dmousep.y * rotation_speed
+                    changed_camera = true
+                } else if rl.IsMouseButtonDown(.RIGHT) {
+                    zoom_speed := 0.005 * (state.focus_camera_offset.z - state.focus_camera_dolly)
+                    state.focus_camera_dolly += -dmousep.y * zoom_speed
+                    changed_camera = true
+                } else if rl.IsMouseButtonDown(.MIDDLE) {
+                    state.focus_camera = state.camera
+                    state.focus_render.requested = true
+                }
+                
+                if changed_camera {
+                    state.focus_render.requested = true
+                }
+                
+                object := state.world.objects[state.focused_object_index]
+                state.focus_camera = camera_orbit(state.focus_camera_offset, state.focus_camera_orbit, state.focus_camera_dolly, state.focus_camera_pitch)
+                state.focus_camera.t += object.transform.t
+            }
+            
+            ui_mover(ui, &state.focus_render_p, state.focus_render_drag_size)
+        }
+        
+        render := &state.focus_render
+        render_begin(render)
+        object := state.world.objects[state.focused_object_index]
+        
+        set_camera(render, state.focus_camera)
+        draw_model(render, object.model, object.material, object.transform)
+        
+        render_end(render, state.world.brdf_data[:], state.world.materials[:])
+    }
+    
+    ////////////////////////////////////////////////
+    
+    layout_begin_horizontal(layout)
+        for kind, kind_index in Debug_View_Kind {
+            if kind_index != 0 do layout_advance(layout, 5)
+            
+            if ui_button_highlighted(layout, set_value_interaction(&Debug_View, kind), Debug_View == kind, "%v", kind) {
+                Debug_View = kind
+                state.fast_render.requested = true
+            }
+        }
+    layout_end_horizontal(layout)
+    layout_advance(layout, 10)
+    
+    
+    if Debug_View in (bit_set[Debug_View_Kind]{ .Triangle_Tests, .Rectangle_Tests, .Both_Tests }) {
+        // @cleanup
+        view := view_magnitude(Triangle_Threshold, precision = 1)
+        _, released := ui_dragger(layout, &Triangle_Threshold, 10, 10, 10000, "Triangle Threshold %v", view, flags = { .logarithmic })
+        if released {
+            state.fast_render.requested = true
+        }
+        
+        view = view_magnitude(Rectangle_Threshold, precision = 1)
+        _, released = ui_dragger(layout, &Rectangle_Threshold, 10, 10, 10000, "Rectangle Threshold %v", view, flags = { .logarithmic })
+        if released {
+            state.fast_render.requested = true
+        }
+        layout_advance(layout, 10)
+    }
+    
+    
+    if display_render(layout, &state.quality_render, "Quality", &state.quality_render_is_open, !state.fast_image_is_focussed, state.window_size) {
+        state.fast_image_is_focussed = false
+    }
+    layout_advance(layout, 10)
+    if display_render(layout, &state.fast_render, "Fast", &state.fast_render_is_open, state.fast_image_is_focussed, state.window_size) {
+        state.fast_image_is_focussed = true
+    }
+    layout_advance(layout, 10)
+    display_render(layout, &state.focus_render, "Focus", &state.focus_render_is_open, false, 256)
+    
+    ////////////////////////////////////////////////
+    
+    layout_advance(layout, 10)
+    if ui_collapser(layout, &state.ojects_is_open, "Objects") {
+        layout_indent_scope(layout)
+        
+        // @api maybe make an iterator?
+        for object_index in 1..=state.world.last_used_object_index {
+            object := &state.world.objects[object_index]
+            
+            layout_advance(layout, 5)
+            if ui_button_highlighted(layout, set_value_interaction(&state.selected_object_index, object_index), state.selected_object_index == object_index, "Object %v", object_index) {
+                state.selected_object_index = object_index
+            }
+            
+            if state.selected_object_index == object_index {
+                layout_indent_scope(layout)
+                
+                layout_advance(layout, 10)
+                if ui_button_highlighted(layout, set_value_interaction(&state.focused_object_index, object_index), state.focused_object_index == object_index, "Focus") {
+                    if state.focused_object_index == object_index {
+                        state.focused_object_index = 0
+                    } else {
+                        state.focused_object_index = object_index
+                        state.focus_render.requested = true
+                    }
+                }
+                
+                if ui_collapser(layout, &state.tree_info_is_open, "Tree") {
+                    layout_indent_scope(layout)
+                    
+                    ui_text(layout, "build took %v", state.selected_model_build_time)
+                    ui_text(layout, "node count %v", state.selected_model_info.node_count)
+                    ui_text(layout, "depth: max = %v, avg = %.2f", state.selected_model_info.depth.max, state.selected_model_info.depth.avg)
+                    ui_text(layout, "values per node: max = %v, avg = %.2f", state.selected_model_info.values_per_node.max, state.selected_model_info.values_per_node.avg)
+                    layout_advance(layout, 10)
+                    
+                    m := &Models[object.model]
+                    if ui_button(layout, { kind = .Select, target = &m.tree },  "Rebuild") {
+                        start := time.now()
+                        tree_build(&m.tree, m.triangles, m.normals)
+                        state.selected_model_build_time = time.since(start)
+                        print("building tree took %v\n", state.selected_model_build_time)
+                        state.selected_model_info = inspect(m.tree)
+                        
+                        state.fast_render.requested = true
+                    }
+                }
+                                
+                // @cleanup @api make a background on the value and allow a view parameter for the text of the button/dragger
+                _, released := ui_dragger(layout, &object.transform.x.x, 0.1, "scale x = %v", object.transform.x.x)
+                if released do state.fast_render.requested = true
+                _, released  = ui_dragger(layout, &object.transform.y.y, 0.1, "scale y = %v", object.transform.y.y)
+                if released do state.fast_render.requested = true
+                _, released  = ui_dragger(layout, &object.transform.z.z, 0.1, "scale z = %v", object.transform.z.z)
+                if released do state.fast_render.requested = true
+                _, released  = ui_dragger(layout, &object.transform.t.x, 0.1, "translation x = %v", object.transform.t.x)
+                if released do state.fast_render.requested = true
+                _, released  = ui_dragger(layout, &object.transform.t.y, 0.1, "translation y = %v", object.transform.t.y)
+                if released do state.fast_render.requested = true
+                _, released  = ui_dragger(layout, &object.transform.t.z, 0.1, "translation z = %v", object.transform.t.z)
+                if released do state.fast_render.requested = true
+                
+                if display_slider(layout, 100, &object.material, 1, cast(u32) len(state.world.materials)-1, "material %v", object.material) {
+                    state.fast_render.requested = true
+                }
+            }
+        }
+    }
+    
+    layout_advance(layout, layout.font_size)
+    if ui_collapser(layout, &state.materials_is_open, "Materials") {
+        layout_indent_scope(layout)
+        
+        for &material, index in state.world.materials {
+            if ui_button_highlighted(layout, set_value_interaction(&state.selected_material_index, index), index == state.selected_material_index, "Material %v: material %v", index, state.world.material_names[index]) {
+                state.selected_material_index = index
+            }
+            
+            if index == state.selected_material_index {
+                layout_indent_scope(layout)
+                
+                _, scatter_released := ui_dragger_clamp(layout, &material.scatter, 0.01,  0,   1, "Scatter %f", material.scatter)
+                _, emittance_released := ui_dragger_clamp(layout, &material.emit_factor, 1, 0.00001, 1000, "Emittance %f", material.emit_factor, flags = {.logarithmic})
+                if scatter_released || emittance_released do state.fast_render.requested = true
+                
+                layout_advance(layout, 10)
+                layout_begin_horizontal(layout)
+                color_size :: 40
+                {
+                    ui_text(layout, "Emit")
+                    layout_advance(layout, 10)
+                    
+                    color  := rl.ColorFromNormalized(V4(material.emit, 1))
+                    before := color
+                    size := rect_to_rl(rectangle_min_dimension(layout.at, color_size))
+                    rl.GuiColorPicker(size, "", &color)
+                    if color != before do state.fast_render.requested = true
+                    material.emit = rl.ColorNormalize(color).rgb
+                    
+                    layout_advance(layout, color_size)
+                    layout_advance(layout, color_size)
+                    layout_advance(layout, 10)
+                }
+                
+                {
+                    ui_text(layout, "Reflect")
+                    layout_advance(layout, 10)
+                    
+                    color := rl.ColorFromNormalized(V4(material.reflect, 0))
+                    before := color
+                    size := rect_to_rl(rectangle_min_dimension(layout.at, color_size))
+                    rl.GuiColorPicker(size, "", &color)
+                    if color != before do state.fast_render.requested = true
+                    material.reflect = rl.ColorNormalize(color).rgb
+                    layout_advance(layout, color_size)
+                }
+                layout_end_horizontal(layout)
+                layout_advance(layout, color_size)
+            }
+        }
+    }
+    
 }
 
 ////////////////////////////////////////////////

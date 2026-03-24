@@ -4,7 +4,7 @@ import "core:math"
 import rl "vendor:raylib"
 
 UI :: struct {
-    done_interaction:     Interaction,
+    ended_interaction:    Interaction, // @naming
     active_interaction:   Interaction,
     hot_interaction:      Interaction,
     next_hot_interaction: Interaction,
@@ -15,8 +15,10 @@ UI :: struct {
 
 Interaction :: struct {
     kind: Interaction_Kind,
-    
     target: pmm,
+    
+    right, middle: bool,
+    
     value:  union {
         bool,
         u32,
@@ -33,6 +35,7 @@ Interaction_Kind :: enum {
     NOP,
     SetValue,
     Drag,
+    Move,
     Select,
 }
 
@@ -43,12 +46,12 @@ begin_ui :: proc (ui: ^UI) {
 
 
 interact :: proc (ui: ^UI) {
-    ui.done_interaction = {}
+    ui.ended_interaction = {}
     
     if ui.active_interaction.kind != .None {
         switch ui.active_interaction.kind {
         case .None: unreachable()
-        case .NOP, .SetValue, .Select: // @note(viktor): nothing
+        case .NOP, .SetValue, .Select, .Move: // @note(viktor): nothing
         case .Drag:
             width  := cast(f32) rl.GetScreenWidth()
             height := cast(f32) rl.GetScreenHeight()
@@ -79,13 +82,15 @@ interact :: proc (ui: ^UI) {
         }
         // Resize Move
         
-        if rl.IsMouseButtonReleased(.LEFT) do end_interaction(ui)
-        if rl.IsMouseButtonPressed(.LEFT)  do begin_interaction(ui)
+        if is_interacting_release(ui) do end_interaction(ui)
+        if is_interacting_press(ui)   do begin_interaction(ui)
     } else {
         ui.hot_interaction = ui.next_hot_interaction
-        if rl.IsMouseButtonPressed(.LEFT)  do begin_interaction(ui)
-        if rl.IsMouseButtonReleased(.LEFT) do end_interaction(ui)
+        if is_interacting_press(ui)   do begin_interaction(ui)
+        if is_interacting_release(ui) do end_interaction(ui)
     }
+    
+    ui.next_hot_interaction = {}
 }
 
 begin_interaction :: proc (ui: ^UI) {
@@ -102,44 +107,39 @@ end_interaction :: proc (ui: ^UI) {
     switch action.kind {
     case .None: unreachable()
     case .NOP:  // nothing
-    case .SetValue, .Drag, .Select:
-        ui.done_interaction = action^
+    case .SetValue, .Drag, .Select, .Move:
+        ui.ended_interaction = action^
     }
     
     action^ = {}
 }
 
-////////////////////////////////////////////////
-
-Drag_Interaction :: struct {
-    dragged: bool,
-    offset:  v2,
+is_interacting_press :: proc (ui: ^UI) -> bool {
+    it := ui.active_interaction
+    if ui.active_interaction.kind == .None {
+        it = ui.hot_interaction
+    }
     
-    p: v2,
+    result: bool
+    result ||= rl.IsMouseButtonPressed(.LEFT)
+    if it.middle do result ||= rl.IsMouseButtonPressed(.MIDDLE)
+    if it.right  do result ||= rl.IsMouseButtonPressed(.RIGHT)
+    
+    return result
 }
 
-display_drag_handle :: proc (layout: ^Layout, drag: ^Drag_Interaction, size: v2) -> bool {
-    rect := rectangle_min_dimension(drag.p, size)
-    
-    if rl.IsMouseButtonPressed(.LEFT) {
-        if rectangle_contains(rect, rl.GetMousePosition()) {
-            drag.offset = drag.p - rl.GetMousePosition()
-            drag.dragged = true
-        }
-    }
-    if rl.IsMouseButtonReleased(.LEFT) {
-        drag.dragged = false
+is_interacting_release :: proc (ui: ^UI) -> bool {
+    it := ui.active_interaction
+    if ui.active_interaction.kind == .None {
+        it = ui.hot_interaction
     }
     
-    if drag.dragged {
-        drag.p = rl.GetMousePosition() + drag.offset
-    }
+    result: bool
+    result ||= rl.IsMouseButtonReleased(.LEFT)
+    if it.middle do result ||= rl.IsMouseButtonReleased(.MIDDLE)
+    if it.right  do result ||= rl.IsMouseButtonReleased(.RIGHT)
     
-    handle := rectangle_min_dimension(drag.p, size)
-    draw_rectangle_outline(handle, 1, Black)
-    draw_rectangle(handle, Isabelline)
-    
-    return drag.dragged
+    return result
 }
 
 ////////////////////////////////////////////////
@@ -148,12 +148,15 @@ is_hot :: proc (ui: ^UI, interaction: Interaction) -> bool {
     result := ui.hot_interaction == interaction
     return result
 }
+
 is_active :: proc (ui: ^UI, interaction: Interaction) -> bool {
     result := ui.active_interaction == interaction
     return result
 }
-is_triggered :: proc (ui: ^UI, interaction: Interaction) -> bool {
-    result := ui.done_interaction == interaction
+
+// @naming
+is_ended :: proc (ui: ^UI, interaction: Interaction) -> bool {
+    result := ui.ended_interaction == interaction
     return result
 }
 
@@ -167,27 +170,11 @@ set_value_interaction :: proc (target: ^$T, value: T) -> Interaction {
     return result
 }
 
-
-
 ////////////////////////////////////////////////
 
 // @todo(viktor): @api collapse into begin ui_element set_interaction(used for color) set_outline, set_text, end_ui_element
 ui_button :: proc (layout: ^Layout, interaction: Interaction, format: string, args: ..any) -> bool {
     result := ui_button_highlighted(layout, interaction, false, format, ..args)
-    return result
-}
-
-ui_toggle :: proc (layout: ^Layout, condition: ^bool, text: string) {
-    interaction := set_value_interaction(condition, !condition^)
-    pressed := ui_button_highlighted(layout, interaction, condition^, text)
-    if pressed {
-        condition^ = !condition^
-    }
-}
-
-ui_collapser :: proc (layout: ^Layout, is_open: ^bool, text: string) -> bool {
-    ui_toggle(layout, is_open, text)
-    result := is_open^
     return result
 }
 
@@ -223,15 +210,38 @@ ui_button_highlighted :: proc (layout: ^Layout, interaction: Interaction, is_hig
     result: bool
     if rectangle_contains(size, layout.ui.mouse_p) {
         layout.ui.next_hot_interaction = interaction
-        result = is_triggered(layout.ui, interaction)
+        result = is_ended(layout.ui, interaction)
     }
+    
+    return result
+}
+
+ui_mover :: proc (ui: ^UI, drag: ^v2, size: v2) -> bool {
+    rect := rectangle_min_dimension(drag^, size)
+    
+    interaction := Interaction { kind = .Move, target = drag }
+    if rectangle_contains(rect, ui.mouse_p) {
+        ui.next_hot_interaction = interaction
+    }
+    
+    result: bool
+    if is_active(ui, interaction) {
+        drag^ += ui.mouse_dp
+        result = true
+    }
+    
+    // @theme
+    handle := rectangle_min_dimension(drag^, size)
+    draw_rectangle_outline(handle, 1, Black)
+    draw_rectangle(handle, Isabelline)
     
     return result
 }
 
 ui_dragger :: proc { ui_dragger_base, ui_dragger_clamp }
 // @copypasta
-ui_dragger_clamp :: proc (layout: ^Layout, value: ^f32, speed, min, max: f32, format: string, args: ..any, flags := SliderFlags{}) -> (changed: bool, released: bool) {interaction := Interaction{ kind = .Drag, target = value }
+ui_dragger_clamp :: proc (layout: ^Layout, value: ^f32, speed, min, max: f32, format: string, args: ..any, flags := SliderFlags{}) -> (changed: bool, released: bool) {
+    interaction := Interaction{ kind = .Drag, target = value }
     before := value^
     
     // @theme
@@ -277,7 +287,7 @@ ui_dragger_clamp :: proc (layout: ^Layout, value: ^f32, speed, min, max: f32, fo
         changed = val != before
     }
     
-    released = is_triggered(layout.ui, interaction)
+    released = is_ended(layout.ui, interaction)
     
     return changed, released
 }
@@ -314,9 +324,25 @@ ui_dragger_base :: proc (layout: ^Layout, value: ^f32, speed: f32, format: strin
         changed = val != before
     }
     
-    released = is_triggered(layout.ui, interaction)
+    released = is_ended(layout.ui, interaction)
     
     return changed, released
+}
+
+////////////////////////////////////////////////
+
+ui_toggle :: proc (layout: ^Layout, condition: ^bool, text: string) {
+    interaction := set_value_interaction(condition, !condition^)
+    pressed := ui_button_highlighted(layout, interaction, condition^, text)
+    if pressed {
+        condition^ = !condition^
+    }
+}
+
+ui_collapser :: proc (layout: ^Layout, is_open: ^bool, text: string) -> bool {
+    ui_toggle(layout, is_open, text)
+    result := is_open^
+    return result
 }
 
 ////////////////////////////////////////////////
