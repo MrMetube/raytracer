@@ -169,10 +169,12 @@ cast_rays :: proc (triangles: [] Ray_Triangle, normals: [] Normals, trees: [] Tr
         sample: lane_v3
         
         bounces: for _ in 0..<max_bounce_count {
+            spall_scope("ray bounce")
             bounces_computed_lanes += 1 & lane_mask
             loops_computed_lanes   += 1
             
             ////////////////////////////////////////////////
+            // Hit Detection
             
             hits: [LaneWidth] Hit_Info
             model_index: lane_u32
@@ -209,6 +211,9 @@ cast_rays :: proc (triangles: [] Ray_Triangle, normals: [] Normals, trees: [] Tr
             }
             spall_end()
             
+            ////////////////////////////////////////////////
+            // Color Accumulation
+            
             spall_begin("ray color accumulation")
             hit_did_hit := lane_gather(lane_member(lane_hits, "did_hit", u32))
             
@@ -221,7 +226,6 @@ cast_rays :: proc (triangles: [] Ray_Triangle, normals: [] Normals, trees: [] Tr
             hit_emit_factor := lane_gather(  lane_member(material, "emit_factor", f32))
             hit_emit        *= hit_emit_factor
             
-            ////////////////////////////////////////////////
             // only allow world.no_hit on the first time we didn't hit anything
             hit_emit  *= cast(lane_f32) (1 & lane_mask)
             lane_mask &= hit_did_hit
@@ -232,6 +236,8 @@ cast_rays :: proc (triangles: [] Ray_Triangle, normals: [] Normals, trees: [] Tr
             if lane_mask == lane_false do break bounces
             
             ////////////////////////////////////////////////
+            // Reflection
+            
             spall_scope("ray reflection")
             
             spall_begin("model to world")
@@ -278,15 +284,12 @@ cast_rays :: proc (triangles: [] Ray_Triangle, normals: [] Normals, trees: [] Tr
             
             next_d := normalize_or_zero(linear_blend(pure_bounce, random_bounce, hit_scatter))
             
-            ////////////////////////////////////////////////
             reflectance := brdf_lookup(brdf_data, material, -ray_d, hit_normal, hit_tangent, hit_binormal, next_d)
             
-            ////////////////////////////////////////////////
             hit_reflect := lane_gather_v(lane_member(material, "reflect", v3))
             hit_reflect *= reflectance
             conditional_assign(hit_did_hit, &attenuation, attenuation * hit_reflect)
             
-            ////////////////////////////////////////////////
             hit_t := lane_gather(lane_member(lane_hits, "closest_t", f32))
             ray_o = fused_mul_add(ray_d, hit_t, ray_o)
             ray_d = next_d
@@ -372,10 +375,13 @@ hit_tree :: proc (triangles: [] Ray_Triangle, tree: Tree, ray_o, ray_d: lane_v3,
         }
     }
     
-    if total_hit_mask == lane_false do return lane_false, +Infinity, 0, 0, info
+    if total_hit_mask == lane_false {
+        return lane_false, +Infinity, 0, 0, info
+    }
     ////////////////////////////////////////////////
     
     triangles := to_lane(triangles)
+    triangles = lane_index_offset(triangles, lane_offset)
     tree_lane := to_lane(tree)
     tree_lane = lane_index_offset(tree_lane, lane_offset)
     
@@ -408,6 +414,7 @@ hit_tree :: proc (triangles: [] Ray_Triangle, tree: Tree, ray_o, ray_d: lane_v3,
             node     := &tree[it_index]
             
             if node.value_count == 0 {
+                spall_scope("subnodes")
                 subnodes := lane_index(tree_lane, cast(lane_u32) node.first.subnode)
                 
                 node_min := lane_member(subnodes, "bounds", "min", v3)
@@ -428,29 +435,31 @@ hit_tree :: proc (triangles: [] Ray_Triangle, tree: Tree, ray_o, ray_d: lane_v3,
                 simd.masked_compress_store(&stack[stack_count], subnode_indices, bounds_hit_mask)
                 stack_count += horizontal_add(1 & bounds_hit_mask)
             } else {
+                spall_scope("triangles")
                 end := cast(u32) node.first.value + node.value_count
                 full_end := end - (node.value_count % LaneWidth)
                 
                 values: for value_index := cast(u32) node.first.value; value_index < full_end; value_index += LaneWidth {
-                    triangle_index := value_index + lane_offset
+                    triangle_index := cast(lane_u32) value_index
                     triangle := lane_index(triangles, triangle_index)
                     
-                    triangle_hit_mask, triangle_t, triangle_uv := hit_triangle(lane_true, triangle, lane_ray_o, lane_ray_d, min_t, closest_t_hit)
+                    triangle_hit_mask, triangle_t, triangle_uv := hit_triangle(triangle, lane_ray_o, lane_ray_d, min_t, closest_t_hit)
                     if triangle_hit_mask == lane_false do continue values
                     
                     closest_t, closest_lane := get_closest_lane(triangle_hit_mask, triangle_t)
-                    closest_t_hit = closest_t
+                    closest_t_hit = closest_t 
                     did_hit       = true
                     triangle_hit  = value_index + closest_lane
                     hit_uv        = extract(triangle_uv, closest_lane)
                 }
                 
                 tail: if value_index := full_end; value_index < end {
-                    triangle_index := value_index + lane_offset
-                    mask     := less_than(triangle_index, cast(lane_u32) end)
-                    triangle := lane_index(triangles, triangle_index & mask)
+                    triangle_index := cast(lane_u32) value_index
+                    index_mask     := less_than(triangle_index + lane_offset, cast(lane_u32) end)
+                    triangle := lane_index(triangles, triangle_index)
                     
-                    triangle_hit_mask, triangle_t, triangle_uv := hit_triangle(mask, triangle, lane_ray_o, lane_ray_d, min_t, closest_t_hit)
+                    triangle_hit_mask, triangle_t, triangle_uv := hit_triangle(triangle, lane_ray_o, lane_ray_d, min_t, closest_t_hit)
+                    triangle_hit_mask &= index_mask
                     if triangle_hit_mask == lane_false do break tail
                     
                     closest_t, closest_lane := get_closest_lane(triangle_hit_mask, triangle_t)
@@ -485,8 +494,9 @@ hit_tree :: proc (triangles: [] Ray_Triangle, tree: Tree, ray_o, ray_d: lane_v3,
 
 get_closest_lane :: proc (triangle_hit_mask: lane_u32, triangle_t: lane_f32) -> (f32, u32) {
     // @waste should just return Infinity? but what about the last calculation of t?
-    // its either larger than max_t, or smaller than min_t
-    masked_t   := simd.select(triangle_hit_mask, triangle_t, cast(lane_f32) +Infinity)
+    // It's either larger than max_t, which would be fine for this,
+    // or smaller than min_t
+    masked_t   := ternary(triangle_hit_mask, triangle_t, cast(lane_f32) +Infinity)
     closest_t  := simd.reduce_min(masked_t)
     is_closest := equal(triangle_t, cast(lane_f32) closest_t) & triangle_hit_mask
     high_bits  := transmute(u8) simd.extract_msbs(is_closest)
@@ -517,21 +527,17 @@ hit_rectangle :: proc (min, max: lane_v3, neg_inv_o, inv_d: lane_v3, t_min_init,
     return result
 }
 
-hit_triangle :: proc (not_nil_mask: lane_u32, triangle: Lane(Ray_Triangle), ray_o, ray_d: lane_v3, min_t: lane_f32, max_t: lane_f32) -> (lane_u32, lane_f32, lane_v2) {
-    Check :: false
-    when Check do assert(not_nil_mask != lane_false)
-    
-    a  := lane_gather_v(lane_member(triangle, "a",  v3), not_nil_mask, lane_v3{})
-    ab := lane_gather_v(lane_member(triangle, "ab", v3), not_nil_mask, lane_v3{})
-    ac := lane_gather_v(lane_member(triangle, "ac", v3), not_nil_mask, lane_v3{})
+hit_triangle :: proc (triangle: Lane(Ray_Triangle), ray_o, ray_d: lane_v3, min_t: lane_f32, max_t: lane_f32) -> (lane_u32, lane_f32, lane_v2) {
+    a  := lane_gather_v(lane_member(triangle, "a",  v3))
+    ab := lane_gather_v(lane_member(triangle, "ab", v3))
+    ac := lane_gather_v(lane_member(triangle, "ac", v3))
     
     ray_cross_ac := cross(ray_d, ac)
     determinant  := dot(ab, ray_cross_ac)
     
-    hit_mask := not_nil_mask
-    hit_t    := cast(lane_f32) +Infinity
     hit_uv: lane_v2
-    hit_mask &= greater_than(absolute(determinant), 1e-6)
+    hit_t    := cast(lane_f32) +Infinity
+    hit_mask := greater_than(absolute(determinant), 1e-6)
     if hit_mask == lane_false do return hit_mask, hit_t, hit_uv
     
     s := (ray_o - a)

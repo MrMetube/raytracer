@@ -28,8 +28,8 @@ Tree_Node :: struct #align(32) {
 Root_Index  :: 0
 
 Subnodes_Per_Node :: 8
+Values_Per_Node   :: 128 // determined through experimentation, higher is better, after this point there were no more gains, this may be because the most complex model is then reduced to a depth 1 tree
 
-// @todo(viktor): this can be a lot lower if we do 3 depth of splits per node now, if it matters
 Tree_Max_Depth :: 32
 
 Node_Info :: struct {
@@ -115,7 +115,7 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [] Triangle, normals: [] Nor
         
         all_better := false
         subs: [Subnodes_Per_Node] Split_Node
-        split: if len(it.indices) > LaneWidth {
+        split: if len(it.indices) > Values_Per_Node {
             s0, s1 := split_node(tree^, it.cost, it.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
             
             s00, s10 := split_node(tree^, s0.cost, s0.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
