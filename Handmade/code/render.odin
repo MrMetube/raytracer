@@ -97,7 +97,6 @@ Image :: struct {
     height: i32,
 }
 
-// @todo(viktor): see if #soa [LaneWidth] struct is equivalent
 Transform :: struct {
     x: v3,
     y: v3,
@@ -117,7 +116,9 @@ Material :: struct {
     emit:    v3,
     reflect: v3,
     emission: f32,
-    scatter: f32, // 0 = mirror like, 1 = chalk like
+    // 0 = mirror like for dielectrics and metals
+    // 1 = chalk  like for lambertian
+    scatter: f32, 
     
     index_of_refraction: f32,
     transmission:        f32,

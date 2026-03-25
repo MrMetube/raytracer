@@ -8,7 +8,7 @@
 ![Render 16](Handmade/data/render_16.png)
 The camera is inside a glass like sphere.
 ![Render 15](Handmade/data/render_15.png)
-Refractions..
+Refractions.
 ![Render 14](Handmade/data/render_14.png)
 Non-uniform scaled models.
 ![Render 13](Handmade/data/render_13.png)

@@ -109,33 +109,6 @@ vec_cast :: proc { vcast_2, vcast_3, vcast_4, vcast_vec }
     return result
 }
 
-// @todo(viktor): Naming vec_max max_vec
-@(require_results) min_vec :: proc (a,b: [$N] $E) -> (result: [N] E) {
-    #no_bounds_check #unroll for i in 0..<N {
-        result[i] = min(a[i], b[i])
-    }
-    return result
-}
-@(require_results) max_vec :: proc (a,b: [$N] $E) -> (result: [N] E) {
-    #no_bounds_check #unroll for i in 0..<N {
-        result[i] = max(a[i], b[i])
-    }
-    return result
-}
-@(require_results) abs_vec :: proc (a: [$N] $E) -> (result: [N] E) {
-    when intrinsics.type_is_simd_vector(E) {
-        #no_bounds_check #unroll for i in 0..<N {
-            result[i] = absolute(a[i])
-        }
-    } else {
-        #no_bounds_check #unroll for i in 0..<N {
-            result[i] = abs(a[i])
-        }
-    }
-    return result
-}
-
-
 vec_max :: proc (a: $T, b: T) -> (result: T) {
     when intrinsics.type_is_simd_vector(T) {
         result = simd.max(a, b)
@@ -158,6 +131,19 @@ vec_min :: proc (a: $T, b: T) -> (result: T) {
         }
     } else {
         result = min(a, b)
+    }
+    return result
+}
+
+vec_abs :: proc (a: $T) -> (result: T) {
+    when intrinsics.type_is_simd_vector(T) {
+        result = simd.abs(a)
+    } else when intrinsics.type_is_array(T) {
+        #no_bounds_check #unroll for i in 0..<len(T) {
+            result[i] = vec_abs(a[i])
+        }
+    } else {
+        result = abs(a)
     }
     return result
 }

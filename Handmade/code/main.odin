@@ -453,9 +453,10 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
                 layout_indent_scope(layout)
                 
                 _, scatter_released := ui_dragger_clamp(layout, &material.scatter, 0.01,  0,   1, "Scatter %f", material.scatter)
+                material.emission = max(0.000001, material.emission)
                 _, emittance_released := ui_dragger_clamp(layout, &material.emission, 1, 0.00001, 1000, "Emission %f", material.emission, flags = {.logarithmic})
                 _, transmission_released := ui_dragger_clamp(layout, &material.transmission, 0.01, 0, 1, "Transmission %f", material.transmission)
-                _, ior_released := ui_dragger_clamp(layout, &material.index_of_refraction, 0.01, 0, 10, "Transmission %f", material.index_of_refraction)
+                _, ior_released := ui_dragger_clamp(layout, &material.index_of_refraction, 0.01, 0, 10, "Index of Refraction %f", material.index_of_refraction)
                 if scatter_released || emittance_released || transmission_released || ior_released do state.fast_render.requested = true
                 
                 layout_advance(layout, 10)

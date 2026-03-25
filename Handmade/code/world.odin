@@ -21,14 +21,14 @@ Object :: struct {
 ////////////////////////////////////////////////
 
 world_init :: proc (world: ^World) {
-    append(&world.materials, Material{ emit    = { .3  , .4  , .5  }, emission = 2   })
+    append(&world.materials, Material{ emit    = { .3  , .4  , .5  }, emission = 2      })
     append(&world.materials, Material{ reflect = { .5  , .5  , .5  }, scatter = .99     })
     append(&world.materials, Material{ reflect = { .7  , .5  , .3  }, scatter = .8      })
-    append(&world.materials, Material{ emit    = { .35 , .2 ,  .01 }, emission = 1000 })
+    append(&world.materials, Material{ emit    = { .35 , .2 ,  .01 }, emission = 200, scatter = 1 })
     append(&world.materials, Material{ reflect = { .2  , .8  , .2  }, scatter = .75     })
     append(&world.materials, Material{ reflect = { .65 , .1  , .7  }, scatter = 1.      })
     append(&world.materials, Material{ reflect = { .9  , .9  , .8  }, scatter = .6      })
-    append(&world.materials, Material{ transmit = {0.8, 1.0, 0.9}, transmission = 1, index_of_refraction = 1.5 })
+    append(&world.materials, Material{ reflect = { .8  , .9  , .8  }, transmit = {0.8, 1.0, 0.9}, transmission = 1, index_of_refraction = 1.5 })
     
     world.material_names = make([] string, len(world.materials), context.allocator)
     

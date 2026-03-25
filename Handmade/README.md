@@ -11,7 +11,7 @@ BRDFs (Bidirectional Reflectance Distribution Function) are used for reflections
 ![Render 16](data/render_16.png)
 The camera is inside a glass like sphere.
 ![Render 15](data/render_15.png)
-Refractions..
+Refractions.
 ![Render 14](data/render_14.png)
 Non-uniform scaled models.
 ![Render 13](data/render_13.png)
