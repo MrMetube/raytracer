@@ -444,28 +444,12 @@ get_time_per_ray_and_print_stats :: proc (stats: ^Render_Stats, total_time: time
     
     
     
-    total_lanes: u32
-    wasted_lanes: u32
-    for count, lanes in stats.empty_lanes {
-        total_lanes  += count * LaneWidth
-        wasted_lanes += count * cast(u32) lanes
-    }
-    
-    
     total_tests := stats.triangles + stats.rectangles
     
     print("Hit tests:\n")
     print("  total tests = %v\n",      view_magnitude(total_tests))
     print("  triangles   = %v (%v)\n", view_magnitude(stats.triangles),  view_percentage(stats.triangles, total_tests))
     print("  rectangles  = %v (%v)\n", view_magnitude(stats.rectangles), view_percentage(stats.rectangles, total_tests))
-    print("  empty lanes: [")
-    for e, i in stats.empty_lanes {
-        if i > 0 do print(", ")
-        print("%v = %v", i, view_percentage(e, total_lanes))
-    }
-    print("]\n")
-    print("  total  lanes = %v\n",    view_magnitude(total_lanes))
-    print("  wasted lanes = %v %v\n", view_magnitude(wasted_lanes), view_percentage(wasted_lanes, total_lanes))
     
     print("\n")
     

@@ -25,7 +25,6 @@ Cast_Result :: struct {
 Test_Info :: struct {
     rectangles: u64,
     triangles:  u64,
-    empty_lanes: [LaneWidth] u32,
 }
 
 ////////////////////////////////////////////////
@@ -39,11 +38,12 @@ Debug_View_Kind :: enum {
     Tangents,
     Binormals,
 }
-Debug_View: Debug_View_Kind
-Triangle_Threshold  : f32 = 500
-Rectangle_Threshold : f32 = 500
 
-Collect_Stats :: true
+Debug_View: Debug_View_Kind
+Triangle_Threshold  : f32 = 2500
+Rectangle_Threshold : f32 = 100
+
+Collect_Stats_For_Debug_View :: true
 
 Render_Tile_Info :: struct #all_or_none {
     triangles: [] lane_Triangle,
@@ -88,10 +88,9 @@ render_tile :: proc(render: ^Render, rect: Rectangle2i, entropy: ^RandomSeries, 
                     film_p := vec_cast(lane_f32, film_x, film_y)
                     cast_result := cast_rays(film_p, entropy, info)
                     
-                    when Collect_Stats {
+                    when Collect_Stats_For_Debug_View {
                         total.triangles   += cast_result.triangles
                         total.rectangles  += cast_result.rectangles
-                        total.empty_lanes += cast_result.empty_lanes
                     }
                     
                     bounces_computed += cast_result.bounces_computed
@@ -126,9 +125,6 @@ render_tile :: proc(render: ^Render, rect: Rectangle2i, entropy: ^RandomSeries, 
     
     atomic_add(&render_stats.triangles,  total.triangles)
     atomic_add(&render_stats.rectangles, total.rectangles)
-    for i in 0..<LaneWidth {
-        atomic_add(&render_stats.empty_lanes[i], total.empty_lanes[i])
-    }
     
     atomic_add(&render_stats.bounces_computed, bounces_computed)
     atomic_add(&render_stats.loops_computed, loops_computed)
@@ -205,10 +201,9 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 conditional_assign(hit_mask, &hit_triangle_uv,    hit_uv)
                 conditional_assign(hit_mask, &hit_model_index,    cast(lane_u32) index)
                 
-                when Collect_Stats {
+                when Collect_Stats_For_Debug_View {
                     result.triangles   += tests.triangles
                     result.rectangles  += tests.rectangles
-                    result.empty_lanes += tests.empty_lanes
                 }
             }
             spall_end()
@@ -395,7 +390,7 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
 }
 
 /// target_fps = 30
-/// ns_per_ray = 40
+/// ns_per_ray = 34
 /// width  = 1920 / 4
 /// height = 1080 / 4
 ///  width
@@ -405,7 +400,6 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
 /// rays_per_frame = ns_per_frame / ns_per_ray
 /// rays_per_pixel = rays_per_frame / pixels
 /// rays_per_pixel
-
 
 ////////////////////////////////////////////////
 // @todo(viktor): Importance Sampling
@@ -465,7 +459,7 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
         max := vec_cast(lane_f32, root.bounds.max)
         
         total_hit_mask = hit_rectangle(min, max, neg_inv_o, inv_d, min_t, max_t)
-        when Collect_Stats {
+        when Collect_Stats_For_Debug_View {
             info.rectangles += LaneWidth
         }
     }
@@ -516,8 +510,10 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
                 min := lane_gather_v(node_min)
                 max := lane_gather_v(node_max)
                 
+                // @todo(viktor): @speed should we divide each node into even more subnodes, like 16?
+                #assert(false, "try this with more subnodes")
                 bounds_hit_mask := hit_rectangle(min, max, lane_neg_inv_o, lane_inv_d, min_t, closest_t)
-                when Collect_Stats {
+                when Collect_Stats_For_Debug_View {
                     info.rectangles += Subnodes_Per_Node
                 }
                 if bounds_hit_mask == lane_false do continue traversal
@@ -529,17 +525,16 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
                 stack_count += horizontal_add(1 & bounds_hit_mask)
             } else {
                 spall_scope("triangles")
-                end := cast(u32) node.first.value + node.value_count
-                remaining := node.value_count % LaneWidth
-                assert(remaining == 0)
+                start := cast(u32) node.first.value / LaneWidth
+                end   := start   + node.value_count / LaneWidth
                 
-                for value_index := cast(u32) node.first.value; value_index < end; value_index += LaneWidth {
-                    triangle_index := value_index / LaneWidth
-                    triangle := &triangles[triangle_index]
+                // @note(viktor): a "for i in start..<end" seems to be minutely slower
+                for triangle_index := start; triangle_index < end; triangle_index += 1 {
+                    #no_bounds_check triangle := &triangles[triangle_index]
                     
                     triangle_hit_mask, triangle_t, triangle_uv := hit_triangle(triangle, lane_ray_o, lane_ray_d, min_t, closest_t)
                     
-                    did_hit ||= triangle_hit_mask != lane_false
+                    // @note(viktor): The expectation is to not hit any triangle most of the time.
                     if triangle_hit_mask != lane_false {
                         conditional_assign(~triangle_hit_mask, &triangle_t, +Infinity)
                         
@@ -548,17 +543,14 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
                         high_bits  := cast(u32) transmute(u8) simd.extract_msbs(is_closest)
                         closest_lane := simd.count_trailing_zeros(high_bits)
                         
-                        triangle_hit = value_index + closest_lane
+                        did_hit      = true
+                        triangle_hit = triangle_index * LaneWidth + closest_lane
                         hit_uv       = extract(triangle_uv, closest_lane)
                     }
                 }
                 
-                when Collect_Stats {
+                when Collect_Stats_For_Debug_View {
                     info.triangles += cast(u64) node.value_count
-                    
-                    info.empty_lanes[0] += (node.value_count / LaneWidth) * LaneWidth
-                    // @todo(viktor): how do we know how many are empty padding triangles?
-                    if remaining != 0 do info.empty_lanes[LaneWidth - remaining] += 1
                 }
             }
         }
