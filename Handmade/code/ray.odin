@@ -327,6 +327,7 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             
             ////////////////////////////////////////////////
             
+            // @todo(viktor): i am not satisfied with this, can scatter just be lerped into reflection and refraction in the same way, and the other value just slides between relfection and refraction chance?
             hit_scatter      := lane_gather(lane_member(material, "scatter", f32))
             hit_transmission := lane_gather(lane_member(material, "transmission", f32))
             
@@ -603,10 +604,15 @@ hit_triangle :: proc (triangle: ^lane_Triangle, ray_o, ray_d: lane_v3, min_t: la
     ray_cross_ac := cross(ray_d, ac)
     determinant  := dot(ab, ray_cross_ac)
     
+    // @note(viktor): Experimentation revealed that the u-branch is the most crucial.
+    // Intuitively we expect to not hit a triangle so u_mask can be predicted to be false.
+    // A random ray being parallel to the plane of the triangle is generally not true, so that branch is rarely taken, and though it may save the most work, it will also incur a branch misprediction.
+    // The v-branch is generally more helpful than harmful, but does not have the same magnitude as the u-branch.
+    
     hit_uv: lane_v2
     hit_t    := cast(lane_f32) +Infinity
     hit_mask := greater_than(absolute(determinant), 1e-6)
-    if hit_mask == lane_false do return hit_mask, hit_t, hit_uv
+    // if hit_mask == lane_false do return hit_mask, hit_t, hit_uv
     
     s := (ray_o - a)
     inv_determinant := 1 / determinant

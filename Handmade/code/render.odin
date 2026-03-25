@@ -23,6 +23,7 @@ Render_Settings :: struct {
     
     start, end: time.Time,
     render_time: Stat(time.Duration),
+    time_per_ray: Stat(time.Duration),
     
     image:   Image,
     texture: rl.Texture,
@@ -164,9 +165,12 @@ render_begin :: proc (render: ^Render, settings: ^Render_Settings) -> bool {
             render.active = false
             settings.active = false
             settings.end = time.now()
-            stat_update(&settings.render_time, time.diff(settings.start, settings.end))
+            total_time := time.diff(settings.start, settings.end)
+            stat_update(&settings.render_time, total_time)
             stat_finalize(&settings.render_time)
-            print_render_results(&settings.stats, settings.start, settings.end)
+            time_per_ray := get_time_per_ray_and_print_stats(&settings.stats, total_time)
+            stat_update(&settings.time_per_ray, time_per_ray)
+            stat_finalize(&settings.time_per_ray)
             
             free_all(settings.allocator)
         }
@@ -420,9 +424,7 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
 
 ////////////////////////////////////////////////
 
-print_render_results :: proc (stats: ^Render_Stats, start, end: time.Time) {
-    total_time := time.diff(start, end)
-    
+get_time_per_ray_and_print_stats :: proc (stats: ^Render_Stats, total_time: time.Duration) -> time.Duration {
     print("\n")
     
     bounces_computed := volatile_load(&stats.bounces_computed)
@@ -439,6 +441,8 @@ print_render_results :: proc (stats: ^Render_Stats, start, end: time.Time) {
     print("  time per ray %v\n",       cast(time.Duration) time_per_ray)
     print("  time per triangle %v\n",  cast(time.Duration) time_per_triangle)
     print("  time per rectangle %v\n", cast(time.Duration) time_per_rectangle)
+    
+    
     
     total_lanes: u32
     wasted_lanes: u32
@@ -464,4 +468,6 @@ print_render_results :: proc (stats: ^Render_Stats, start, end: time.Time) {
     print("  wasted lanes = %v %v\n", view_magnitude(wasted_lanes), view_percentage(wasted_lanes, total_lanes))
     
     print("\n")
+    
+    return cast(time.Duration) time_per_ray
 }

@@ -117,8 +117,12 @@ main :: proc () {
     render_settings := make([dynamic] ^Render_Settings, 0, 2, context.allocator)
     append(&render_settings, &state.quality_render)
     append(&render_settings, &state.fast_render)
-    for &render in render_settings do stat_init(&render.render_time)
+    for &render in render_settings {
+        stat_init(&render.render_time)
+        stat_init(&render.time_per_ray)
+    }
     stat_init(&state.focus_render.render_time)
+    stat_init(&state.focus_render.time_per_ray)
     
     ////////////////////////////////////////////////
     
@@ -544,14 +548,18 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Layout, settings: ^Rend
         layout_end_horizontal(layout)
         
         layout_advance(layout, 5)
-        layout_begin_horizontal(layout)
+        layout_indent(layout)
             if ui_button(layout,  {kind = .SetValue, target = &settings.render_time }, "Reset") {
                 stat_init(&settings.render_time, time.diff(settings.start, settings.end))
                 stat_finalize(&settings.render_time)
+                stat_init(&settings.time_per_ray)
+                stat_finalize(&settings.time_per_ray)
             }
             layout_advance(layout, 5)
-            ui_text(layout, "Render time: min = %v, avg = %v, max = %v", settings.render_time.min, cast(time.Duration) settings.render_time.avg, settings.render_time.max)
-        layout_end_horizontal(layout)
+            ui_text(layout, "Time: min %v, avg %v, max %v", settings.render_time.min, cast(time.Duration) settings.render_time.avg, settings.render_time.max)
+            layout_advance(layout, 5)
+            ui_text(layout, "Time per Ray: min %v, avg %v, max %v", settings.time_per_ray.min, cast(time.Duration) settings.time_per_ray.avg, settings.time_per_ray.max)
+        layout_unindent(layout)
         
         layout_advance(layout, 5)
         if settings.active {
