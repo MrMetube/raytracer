@@ -49,9 +49,9 @@ load_obj :: proc (path: string, triangles: ^[dynamic] Triangle, triangle_normals
             v3n := chop(&v2, "/")
             
             t: Triangle
-            t.a = vertices[parse_i32(v1p)-1]
-            t.b = vertices[parse_i32(v2p)-1]
-            t.c = vertices[parse_i32(v3p)-1]
+            t.a  = vertices[parse_i32(v1p)-1]
+            t.ab = vertices[parse_i32(v2p)-1] - t.a
+            t.ac = vertices[parse_i32(v3p)-1] - t.a
             append(triangles, t)
             
             n:[3] v3

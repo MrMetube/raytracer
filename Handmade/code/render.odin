@@ -48,7 +48,7 @@ Render :: struct {
     active:   bool,
     canceled: bool,
     
-    triangles: [] Ray_Triangle,
+    triangles: [] Triangle,
     normals:   [] Normals,
     trees:     [] Tree_Node,
     models:    [] RenderModel,
@@ -150,7 +150,7 @@ begin_model :: proc () -> (^Model, Model_Index) {
 end_model :: proc (model: ^Model, triangles: [] Triangle, normals: [] Normals) {
     model.triangles = make_shallow_copy(triangles, context.allocator)
     model.normals   = make_shallow_copy(normals,   context.allocator)
-    tree_build(&model.tree, model.triangles, model.normals)
+    model.tree      = tree_build(model.triangles, model.normals, context.allocator)
 }
 
 ////////////////////////////////////////////////
@@ -209,13 +209,7 @@ render_end :: proc (render: ^Render, settings: ^Render_Settings, brdf_data: [] v
     assert(settings.requested)
     assert(!settings.active)
     
-    //     for model in active_models {
-    //         collect triangles normals and trees
-    //         // rebuild dirty trees
-    //     }
-        
-    //     build tree of models
-    //     assign work to threads
+    // @speed build tree of models once there are enough models in a scene
     
     render_start(render, settings, settings.draw_camera, settings.draw_models[:], brdf_data, materials)
     clear(&settings.draw_models)
@@ -270,16 +264,16 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
     next_free_triangle_offset: u32
     next_free_tree_offset: u32
     
-    render.triangles = make([] Ray_Triangle, total_triangle_count, settings.allocator)
+    render.triangles = make([] Triangle, total_triangle_count, settings.allocator)
     render.normals   = make([] Normals,      total_triangle_count, settings.allocator)
     render.trees     = make([] Tree_Node,    total_tree_count,     settings.allocator)
     
     render.models = make([] RenderModel, len(models), settings.allocator)
     for model, model_index in models {
         rm := &render.models[model_index]
-        rm.material = model.material
         
-        rm.forward = model.transform
+        rm.material = model.material
+        rm.forward  = model.transform
         
         determinant := dot(model.transform.x, cross(model.transform.y, model.transform.z))
         inv_x := cross(model.transform.y, model.transform.z) / determinant
@@ -306,12 +300,7 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
             next_free_triangle_offset += rm.triangle_count
             
             triangles := render.triangles[rm.triangle_offset : rm.triangle_offset + rm.triangle_count]
-            for &it, it_index in triangles {
-                triangle := model.triangles[it_index]
-                it.a  = triangle.a
-                it.ab = triangle.b - triangle.a
-                it.ac = triangle.c - triangle.a
-            }
+            copy(triangles, model.triangles)
         }
         
         {
@@ -331,6 +320,7 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
     render.brdf_data = brdf_data
     render.materials = make_shallow_copy(materials, settings.allocator)
     
+    // @todo(viktor): make this a copy and preserve the image until this is completed and so canceling isn't so bad
     zero_slice(settings.image.data)
     
     tile_size := cast(v2i) max(settings.image.width, settings.image.height) / render.thread_count / 2
@@ -339,25 +329,51 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
     tile_count := tile_cols * tile_rows
     
     Work :: struct {
+        render: ^Render,
         rect:    Rectangle2i, 
         entropy: RandomSeries,
+        stats:  ^Render_Stats,
         
-        render:           ^Render,
-        camera:           lane_Transform,
-        image:            Image,
-        stats:            ^Render_Stats,
-        rays_per_pixel:   u32,
-        max_bounce_count: u32,
+        info: Render_Tile_Info,
     }
     
-    works := make([] Work, tile_count, settings.allocator)
-    work_index: u32
+    works := make([dynamic] Work, 0, tile_count, settings.allocator)
     
-    lane_camera: lane_Transform
-    lane_camera.x = vec_cast(lane_f32, camera.x)
-    lane_camera.y = vec_cast(lane_f32, camera.y)
-    lane_camera.z = vec_cast(lane_f32, camera.z)
-    lane_camera.t = vec_cast(lane_f32, camera.t)
+    film_distance :: 1
+    film_center := camera.t - film_distance * camera.z
+    
+    film_size := cast(v2) 1
+    
+    image := settings.image
+    image_size := vec_cast(f32, image.width, image.height)
+    if image_size.x > image_size.y {
+        film_size.x = film_size.y * image_size.x / image_size.y
+    } else if image_size.x < image_size.y {
+        film_size.y = film_size.x * image_size.y / image_size.x
+    }
+    
+    half_film_size    := .5 * film_size
+    pixel_size        := 1 / image_size
+    image_size_factor := 1 / image_size
+    
+    info := Render_Tile_Info {
+        image_size_factor = image_size_factor,
+        film_center       = film_center,
+        pixel_size        = pixel_size,
+        image             = image,
+        rays_per_pixel   = settings.rays_per_pixel,
+        max_bounce_count = settings.max_bounce_count,
+        triangles = render.triangles,
+        normals   = render.normals,
+        trees     = render.trees,
+        models    = render.models,
+        materials = render.materials,
+        brdf_data = render.brdf_data,
+        
+        camera_x = vec_cast(lane_f32, half_film_size.x * camera.x),
+        camera_y = vec_cast(lane_f32, half_film_size.y * camera.y),
+        camera_p = vec_cast(lane_f32, camera.t),
+    }
     
     settings.start = time.now()
     for row in 0..<tile_rows {
@@ -365,24 +381,21 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
             rect := rectangle_min_dimension(tile_size * {col, row}, tile_size)
             rect  = rectangle_intersection(rect, rectangle_zero_dimension(settings.image.width, settings.image.height))
             
-            entropy := seed_random_series(1842098778 + row * 984612097 + col * 237711 + cast(i32) work_index)
+            entropy := seed_random_series(1842098778 + row * 984612097 + col * 237711 + cast(i32) len(works))
             
-            work := &works[work_index]
-            work_index += 1
-            work ^= { 
+            work := Work { 
+                render,
                 rect,
                 entropy,
-                render,
-                lane_camera,
-                settings.image,
                 &settings.stats,
-                settings.rays_per_pixel,
-                settings.max_bounce_count,
+                
+                info,
             }
+            append(&works, work)
         }
     }
     
-    shift :: 2
+    shift :: 3
     for oy in cast(i32) 0..<shift {
         for ox in cast(i32) 0..<shift {
             for row := oy; row < tile_rows; row += shift {
@@ -390,7 +403,7 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
                     index := row * tile_cols + col
                     work := &works[index]
                     enqueue_work_or_do_immediatly(&render.queue, proc(work: ^Work) {
-                        render_tile(work.render, work.camera, work.rect, &work.entropy, work.image, work.stats, work.rays_per_pixel, work.max_bounce_count)
+                        render_tile(work.render, work.rect, &work.entropy, work.stats, work.info)
                     }, work)
                 }
             }

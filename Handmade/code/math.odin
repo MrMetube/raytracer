@@ -339,7 +339,7 @@ arm :: proc(angle: f32) -> (result: v2) {
     return result
 }
 
-dot :: proc(a: $V/[$N] $E, b: V) -> E {
+dot :: proc(a: $V/ [$N] $E, b: V) -> E {
     result := a.x * b.x
     result  = fused_mul_add(a.y, b.y, result)
     when N >= 3 do result = fused_mul_add(a.z, b.z, result)
@@ -347,8 +347,8 @@ dot :: proc(a: $V/[$N] $E, b: V) -> E {
     return result
 }
 
-cross :: proc(a: $V/[3]$Element, b: V) -> V {
-    result: V = ---
+cross :: proc(a: $V, b: V) -> V {
+    result: V
     result.x = fused_mul_add(a.y, b.z, -a.z*b.y)
     result.y = fused_mul_add(a.z, b.x, -a.x*b.z)
     result.z = fused_mul_add(a.x, b.y, -a.y*b.x)

@@ -51,7 +51,7 @@ Split_Node :: struct {
 
 // @important @volatile The triangles buffer is sorted at the end.
 // You need to pass all per vertex data along, so that it can be sorted alongside the vertices.
-tree_build :: proc (tree: ^[] Tree_Node, triangles: [] Triangle, normals: [] Normals) {
+tree_build :: proc (triangles: [] Triangle, normals: [] Normals, tree_allocator := context.allocator) -> [] Tree_Node {
     allocator := context.temp_allocator
     
     // @note(viktor): 
@@ -60,9 +60,8 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [] Triangle, normals: [] Nor
     // leaves = atmost N
     // branches = N/S parents + N/S² grandparents + ...
     // -> N leaves + branches <= 2N nodes
-    delete(tree^)
-    make_by_pointer(tree, len(triangles)*2)
-    if len(triangles) == 0 do return
+    work_tree := make([] Tree_Node, len(triangles)*2, allocator)
+    if len(triangles) == 0 do return nil
     
     ////////////////////////////////////////////////
     next_free_tree_index := cast(Node_Index) 1 // root
@@ -70,22 +69,22 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [] Triangle, normals: [] Nor
     triangle_centers := make([] v3, len(triangles), allocator)
     triangle_bounds  := make([] Rectangle3, len(triangles), allocator)
     
-    root := &tree[Root_Index]
+    root := &work_tree[Root_Index]
     root.bounds = rectangle_inverted_infinity(Rectangle3)
     
     root_values := make([] Value_Index, len(triangles), allocator)
-    for value_index in cast(Value_Index) 0 ..< cast(Value_Index) len(triangles) {
+    for value_index in 0 ..< cast(Value_Index) len(triangles) {
         root_values[value_index] = value_index
         
         triangle := triangles[value_index]
         
-        center := (triangle.a + triangle.b + triangle.c) / 3
+        center := triangle.a + (triangle.ab + triangle.ac) / 3
         triangle_centers[value_index] = center
         
         bounds := rectangle_inverted_infinity(Rectangle3)
         bounds = rectangle_union_point(bounds, triangle.a)
-        bounds = rectangle_union_point(bounds, triangle.b)
-        bounds = rectangle_union_point(bounds, triangle.c)
+        bounds = rectangle_union_point(bounds, triangle.a + triangle.ab)
+        bounds = rectangle_union_point(bounds, triangle.a + triangle.ac)
         triangle_bounds[value_index] = bounds
         
         root.bounds = rectangle_union(root.bounds, bounds)
@@ -111,20 +110,20 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [] Triangle, normals: [] Nor
     for len(stack) > 0 {
         it := pop(stack)
         
-        node := &tree[it.index]
+        node := &work_tree[it.index]
         
         all_better := false
         subs: [Subnodes_Per_Node] Split_Node
         split: if len(it.indices) > Values_Per_Node {
-            s0, s1 := split_node(tree^, it.cost, it.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
+            s0, s1 := split_node(work_tree, it.cost, it.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
             
-            s00, s10 := split_node(tree^, s0.cost, s0.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
-            s01, s11 := split_node(tree^, s1.cost, s1.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
+            s00, s10 := split_node(work_tree, s0.cost, s0.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
+            s01, s11 := split_node(work_tree, s1.cost, s1.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
             
-            s0, s1  = split_node(tree^, s00.cost, s00.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
-            s2, s3 := split_node(tree^, s01.cost, s01.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
-            s4, s5 := split_node(tree^, s10.cost, s10.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
-            s6, s7 := split_node(tree^, s11.cost, s11.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
+            s0, s1  = split_node(work_tree, s00.cost, s00.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
+            s2, s3 := split_node(work_tree, s01.cost, s01.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
+            s4, s5 := split_node(work_tree, s10.cost, s10.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
+            s6, s7 := split_node(work_tree, s11.cost, s11.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
             
             subs[0] = s0
             subs[1] = s1 
@@ -141,7 +140,7 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [] Triangle, normals: [] Nor
             node.first.subnode = next_free_tree_index
             
             for sub in subs {
-                tree[next_free_tree_index] = Tree_Node { bounds = sub.bounds }
+                work_tree[next_free_tree_index] = Tree_Node { bounds = sub.bounds }
                 next_free_tree_index += 1
             }
             
@@ -164,6 +163,10 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [] Triangle, normals: [] Nor
     
     ////////////////////////////////////////////////
     
+    count := align(Subnodes_Per_Node, len(work_tree) - 1) + 1
+    tree  := make([] Tree_Node, count, tree_allocator)
+    copy(tree, work_tree)
+    
     buffer_t := make_shallow_copy(triangles, allocator)
     buffer_n := make_shallow_copy(normals, allocator)
     zero_slice(triangles[:])
@@ -171,39 +174,38 @@ tree_build :: proc (tree: ^[] Tree_Node, triangles: [] Triangle, normals: [] Nor
     
     next_free_value_index: Value_Index
     
-    for node_index := cast(Node_Index) Root_Index; node_index < next_free_tree_index; node_index += 1 {
-        node := &tree[node_index]
-        indices, ok := final_indices[node_index]
-        if ok {
-            node.value_count = cast(u32) len(indices)
-            if node.value_count != 0 {
-                node.first.value       = next_free_value_index
-                next_free_value_index += cast(Value_Index) node.value_count
-                
-                for buffer_index, offset in indices {
-                    value_index := node.first.value + cast(Value_Index) offset
-                    assert(triangles[value_index] == {})
-                    assert(normals[value_index] == {})
-                    triangles[value_index] = buffer_t[buffer_index]
-                    normals[value_index]   = buffer_n[buffer_index]
-                }
+    for &node, node_index in tree {
+        indices := final_indices[cast(Node_Index) node_index] or_continue
+        
+        node.value_count = cast(u32) len(indices)
+        if node.value_count != 0 {
+            node.first.value       = next_free_value_index
+            next_free_value_index += cast(Value_Index) node.value_count
+            
+            for buffer_index, offset in indices {
+                value_index := node.first.value + cast(Value_Index) offset
+                assert(triangles[value_index] == {})
+                assert(normals[value_index] == {})
+                triangles[value_index] = buffer_t[buffer_index]
+                normals[value_index]   = buffer_n[buffer_index]
             }
         }
     }
     assert(next_free_value_index == cast(Value_Index) len(buffer_t))
     
-    for node_index := next_free_tree_index-1; node_index > 0; node_index -= 1 {
-        node := &tree[node_index]
-        
+    #reverse for &node in tree {
         // @note(viktor): leaf nodes are already fitted
         if node.value_count == 0 {
             bounds := rectangle_inverted_infinity(Rectangle3)
             for subnode in cast(Node_Index) 0 ..< Subnodes_Per_Node {
-                bounds = rectangle_union(bounds, tree[node.first.subnode + subnode].bounds)
+                sub := tree[node.first.subnode + subnode]
+                bounds = rectangle_union(bounds, sub.bounds)
             }
             node.bounds = bounds
         }
     }
+    
+    return tree
 }
 
 split_node :: proc (tree: [] Tree_Node, it_cost: f32, it_indices: [] Value_Index, triangle_centers: [] v3, triangle_bounds: [] Rectangle3, temp_indices: [] Value_Index) -> (Split_Node, Split_Node, bool) {

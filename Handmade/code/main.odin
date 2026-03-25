@@ -410,7 +410,10 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
                     m := &Models[object.model]
                     if ui_button(layout, { kind = .Select, target = &m.tree },  "Rebuild") {
                         start := time.now()
-                        tree_build(&m.tree, m.triangles, m.normals)
+                        
+                        delete(m.tree, context.allocator)
+                        m.tree = tree_build(m.triangles, m.normals, context.allocator)
+                        
                         state.selected_model_build_time = time.since(start)
                         print("building tree took %v\n", state.selected_model_build_time)
                         state.selected_model_info = inspect(m.tree)
