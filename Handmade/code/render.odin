@@ -48,7 +48,7 @@ Render :: struct {
     active:   bool,
     canceled: bool,
     
-    triangles: [] Triangle,
+    triangles: [] lane_Triangle,
     normals:   [] Normals,
     trees:     [] Tree_Node,
     models:    [] RenderModel,
@@ -150,7 +150,7 @@ begin_model :: proc () -> (^Model, Model_Index) {
 end_model :: proc (model: ^Model, triangles: [] Triangle, normals: [] Normals) {
     model.triangles = make_shallow_copy(triangles, context.allocator)
     model.normals   = make_shallow_copy(normals,   context.allocator)
-    model.tree      = tree_build(model.triangles, model.normals, context.allocator)
+    model.tree      = tree_build(&model.triangles, &model.normals, context.allocator)
 }
 
 ////////////////////////////////////////////////
@@ -258,15 +258,15 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
     total_triangle_count: u32
     total_tree_count: u32
     for model in models {
-        total_triangle_count += cast(u32) len(model.triangles)
+        total_triangle_count += cast(u32) align(LaneWidth, len(model.triangles))
         total_tree_count     += cast(u32) len(model.tree)
     }
     next_free_triangle_offset: u32
     next_free_tree_offset: u32
     
-    render.triangles = make([] Triangle, total_triangle_count, settings.allocator)
-    render.normals   = make([] Normals,      total_triangle_count, settings.allocator)
-    render.trees     = make([] Tree_Node,    total_tree_count,     settings.allocator)
+    render.triangles = make([] lane_Triangle, total_triangle_count, settings.allocator)
+    render.normals   = make([] Normals,       total_triangle_count, settings.allocator)
+    render.trees     = make([] Tree_Node ,    total_tree_count,     settings.allocator)
     
     render.models = make([] RenderModel, len(models), settings.allocator)
     for model, model_index in models {
@@ -296,14 +296,21 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
         
         {
             rm.triangle_offset = next_free_triangle_offset
-            rm.triangle_count  = cast(u32) len(model.triangles)
+            rm.triangle_count  = cast(u32) align(LaneWidth, len(model.triangles))
             next_free_triangle_offset += rm.triangle_count
             
             triangles := render.triangles[rm.triangle_offset : rm.triangle_offset + rm.triangle_count]
-            copy(triangles, model.triangles)
-        }
-        
-        {
+            for &triangle, triangle_index in triangles {
+                index := triangle_index * LaneWidth
+                for lane in 0..<LaneWidth {
+                    if index + lane < len(model.triangles) {
+                        replace(&triangle.a,  lane, model.triangles[index + lane].a)
+                        replace(&triangle.ab, lane, model.triangles[index + lane].ab)
+                        replace(&triangle.ac, lane, model.triangles[index + lane].ac)
+                    }
+                }
+            }
+            
             normals := render.normals[rm.triangle_offset : rm.triangle_offset + rm.triangle_count]
             copy(normals, model.normals)
         }

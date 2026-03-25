@@ -9,6 +9,12 @@ Triangle :: struct {
     ac: v3,
 }
 
+lane_Triangle :: struct {
+    a:  lane_v3,
+    ab: lane_v3,
+    ac: lane_v3,
+}
+
 Cast_Result :: struct {
     final_color: v3, 
     bounces_computed, loops_computed: u64,
@@ -40,7 +46,7 @@ Rectangle_Threshold : f32 = 500
 Collect_Stats :: true
 
 Render_Tile_Info :: struct #all_or_none {
-    triangles: [] Triangle,
+    triangles: [] lane_Triangle,
     normals:   [] Normals,
     trees:     [] Tree_Node,
     models:    [] RenderModel,
@@ -388,7 +394,7 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
 }
 
 /// target_fps = 30
-/// ns_per_ray = 100
+/// ns_per_ray = 40
 /// width  = 1920 / 4
 /// height = 1080 / 4
 ///  width
@@ -444,7 +450,7 @@ transform_mul_0 :: proc (m: $Transform, v: $V) -> V {
 
 ////////////////////////////////////////////////
 
-hit_tree :: proc (triangles: [] Triangle, tree: Tree, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32) -> (lane_u32, lane_f32, lane_u32, lane_v2, Test_Info) {
+hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32) -> (lane_u32, lane_f32, lane_u32, lane_v2, Test_Info) {
     spall_proc()
     
     inv_d     := 1 / ray_d
@@ -468,22 +474,20 @@ hit_tree :: proc (triangles: [] Triangle, tree: Tree, ray_o, ray_d: lane_v3, min
     }
     ////////////////////////////////////////////////
     
-    triangles := to_lane(triangles)
     tree_lane := to_lane(tree)
-    triangles  = lane_index_offset(triangles, lane_offset)
     tree_lane  = lane_index_offset(tree_lane, lane_offset)
     
     backing: [Tree_Max_Depth] Node_Index
     stack := backing[:]
     
-    model_hit_mask: lane_u32
     model_hit_t := max_t
+    model_hit_mask:     lane_u32
     model_hit_triangle: lane_u32
-    model_hit_uv: lane_v2
+    model_hit_uv:       lane_v2
     for lane in 0..<LaneWidth {
         if extract(total_hit_mask, lane) == 0 do continue
         
-        closest_t_hit := extract(model_hit_t, lane)
+        closest_t := extract(model_hit_t, lane)
         did_hit: bool
         triangle_hit: u32
         hit_uv: v2
@@ -511,7 +515,7 @@ hit_tree :: proc (triangles: [] Triangle, tree: Tree, ray_o, ray_d: lane_v3, min
                 min := lane_gather_v(node_min)
                 max := lane_gather_v(node_max)
                 
-                bounds_hit_mask := hit_rectangle(min, max, lane_neg_inv_o, lane_inv_d, min_t, closest_t_hit)
+                bounds_hit_mask := hit_rectangle(min, max, lane_neg_inv_o, lane_inv_d, min_t, closest_t)
                 when Collect_Stats {
                     info.rectangles += Subnodes_Per_Node
                 }
@@ -526,40 +530,25 @@ hit_tree :: proc (triangles: [] Triangle, tree: Tree, ray_o, ray_d: lane_v3, min
                 spall_scope("triangles")
                 end := cast(u32) node.first.value + node.value_count
                 remaining := node.value_count % LaneWidth
-                wide_end  := end - remaining
+                assert(remaining == 0)
                 
-                for value_index := cast(u32) node.first.value; value_index < wide_end; value_index += LaneWidth {
-                    triangle_index := cast(lane_u32) value_index
-                    triangle := lane_index(triangles, triangle_index)
+                for value_index := cast(u32) node.first.value; value_index < end; value_index += LaneWidth {
+                    triangle_index := value_index / LaneWidth
+                    triangle := &triangles[triangle_index]
                     
-                    triangle_hit_mask, triangle_t, triangle_uv := hit_triangle(triangle, lane_ray_o, lane_ray_d, min_t, closest_t_hit)
+                    triangle_hit_mask, triangle_t, triangle_uv := hit_triangle(triangle, lane_ray_o, lane_ray_d, min_t, closest_t)
                     
                     did_hit ||= triangle_hit_mask != lane_false
                     if triangle_hit_mask != lane_false {
                         conditional_assign(~triangle_hit_mask, &triangle_t, +Infinity)
-                        closest_lane: u32
-                        closest_t_hit, closest_lane = get_closest_lane(triangle_t)
-                        triangle_hit  = value_index + closest_lane
-                        hit_uv        = extract(triangle_uv, closest_lane)
-                    }
-                }
-                
-                if value_index := wide_end; remaining != 0 {
-                    triangle_index := cast(lane_u32) value_index
-                    triangle := lane_index(triangles, triangle_index)
-                    
-                    triangle_hit_mask, triangle_t, triangle_uv := hit_triangle(triangle, lane_ray_o, lane_ray_d, min_t, closest_t_hit)
-                    
-                    index_mask := less_than(triangle_index + lane_offset, cast(lane_u32) end)
-                    triangle_hit_mask &= index_mask
-                    
-                    did_hit ||= triangle_hit_mask != lane_false
-                    if triangle_hit_mask != lane_false {
-                        conditional_assign(~triangle_hit_mask, &triangle_t, +Infinity)
-                        closest_lane: u32
-                        closest_t_hit, closest_lane = get_closest_lane(triangle_t)
-                        triangle_hit  = value_index + closest_lane
-                        hit_uv        = extract(triangle_uv, closest_lane)
+                        
+                        closest_t   = simd.reduce_min(triangle_t)
+                        is_closest := equal(triangle_t, cast(lane_f32) closest_t)
+                        high_bits  := cast(u32) transmute(u8) simd.extract_msbs(is_closest)
+                        closest_lane := simd.count_trailing_zeros(high_bits)
+                        
+                        triangle_hit = value_index + closest_lane
+                        hit_uv       = extract(triangle_uv, closest_lane)
                     }
                 }
                 
@@ -567,13 +556,14 @@ hit_tree :: proc (triangles: [] Triangle, tree: Tree, ray_o, ray_d: lane_v3, min
                     info.triangles += cast(u64) node.value_count
                     
                     info.empty_lanes[0] += (node.value_count / LaneWidth) * LaneWidth
+                    // @todo(viktor): how do we know how many are empty padding triangles?
                     if remaining != 0 do info.empty_lanes[LaneWidth - remaining] += 1
                 }
             }
         }
         
         if did_hit {
-            replace(&model_hit_t,        lane, closest_t_hit)
+            replace(&model_hit_t,        lane, closest_t)
             replace(&model_hit_mask,     lane, 0xffff_ffff)
             replace(&model_hit_triangle, lane, triangle_hit)
             replace(&model_hit_uv,       lane, hit_uv)
@@ -581,15 +571,6 @@ hit_tree :: proc (triangles: [] Triangle, tree: Tree, ray_o, ray_d: lane_v3, min
     }
     
     return model_hit_mask, model_hit_t, model_hit_triangle, model_hit_uv, info
-}
-
-get_closest_lane :: proc (triangle_t: lane_f32) -> (f32, u32) {
-    closest_t  := simd.reduce_min(triangle_t)
-    is_closest := equal(triangle_t, cast(lane_f32) closest_t)
-    high_bits  := cast(u32) transmute(u8) simd.extract_msbs(is_closest)
-    closest_lane := simd.count_trailing_zeros(high_bits)
-    
-    return closest_t, closest_lane
 }
 
 ////////////////////////////////////////////////
@@ -614,10 +595,10 @@ hit_rectangle :: proc (min, max: lane_v3, neg_inv_o, inv_d: lane_v3, t_min_init,
     return result
 }
 
-hit_triangle :: proc (triangle: Lane(Triangle), ray_o, ray_d: lane_v3, min_t: lane_f32, max_t: lane_f32) -> (lane_u32, lane_f32, lane_v2) {
-    a  := lane_gather_v(lane_member(triangle, "a",  v3))
-    ab := lane_gather_v(lane_member(triangle, "ab", v3))
-    ac := lane_gather_v(lane_member(triangle, "ac", v3))
+hit_triangle :: proc (triangle: ^lane_Triangle, ray_o, ray_d: lane_v3, min_t: lane_f32, max_t: lane_f32) -> (lane_u32, lane_f32, lane_v2) {
+    a  := triangle.a
+    ab := triangle.ab
+    ac := triangle.ac
     
     ray_cross_ac := cross(ray_d, ac)
     determinant  := dot(ab, ray_cross_ac)

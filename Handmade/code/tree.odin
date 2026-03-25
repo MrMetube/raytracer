@@ -51,7 +51,7 @@ Split_Node :: struct {
 
 // @important @volatile The triangles buffer is sorted at the end.
 // You need to pass all per vertex data along, so that it can be sorted alongside the vertices.
-tree_build :: proc (triangles: [] Triangle, normals: [] Normals, tree_allocator := context.allocator) -> [] Tree_Node {
+tree_build :: proc (triangles: ^[] Triangle, normals: ^[] Normals, tree_allocator := context.allocator) -> [] Tree_Node {
     allocator := context.temp_allocator
     
     // @note(viktor): 
@@ -167,17 +167,28 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, tree_allocator 
     tree  := make([] Tree_Node, count, tree_allocator)
     copy(tree, work_tree)
     
-    buffer_t := make_shallow_copy(triangles, allocator)
-    buffer_n := make_shallow_copy(normals, allocator)
-    zero_slice(triangles[:])
-    zero_slice(normals[:])
+    aligned_size: u32
+    for &node, node_index in tree {
+        indices := final_indices[cast(Node_Index) node_index] or_continue
+        aligned_size += align(LaneWidth, cast(u32) len(indices))
+    }
+    
+    // @cleanup call site
+    buffer_t := make([] Triangle, aligned_size, allocator)
+    buffer_n := make([] Normals,  aligned_size, allocator)
+    copy(buffer_t, triangles^)
+    copy(buffer_n, normals^)
+    delete(triangles^)
+    delete(normals^)
+    triangles^ = make([] Triangle, aligned_size, tree_allocator)
+    normals^   = make([] Normals,  aligned_size, tree_allocator)
     
     next_free_value_index: Value_Index
     
     for &node, node_index in tree {
         indices := final_indices[cast(Node_Index) node_index] or_continue
         
-        node.value_count = cast(u32) len(indices)
+        node.value_count = align(LaneWidth, cast(u32) len(indices))
         if node.value_count != 0 {
             node.first.value       = next_free_value_index
             next_free_value_index += cast(Value_Index) node.value_count
