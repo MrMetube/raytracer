@@ -20,17 +20,17 @@ State :: struct {
     renderer: Render,
     quality_render: Render_Settings,
     fast_render:    Render_Settings,
-    focus_render:   Render_Settings,
+    preview_render: Render_Settings,
     
     ////////////////////////////////////////////////
     
     ui: UI,
-    focused_object_index:  Object_Index,
-    selected_object_index: Object_Index,
-    selected_material_index: int,
-    ojects_is_open:         bool,
-    tree_info_is_open:      bool,
-    materials_is_open:      bool,
+    previewed_object_id:  Object_Id,
+    selected_object_id: Object_Id,
+    selected_material_id: Material_Id,
+    ojects_is_open:    bool,
+    tree_info_is_open: bool,
+    materials_is_open: bool,
     
     selected_model_build_time: time.Duration,
     selected_model_info: Tree_Info,
@@ -38,7 +38,7 @@ State :: struct {
     ////////////////////////////////////////////////
     
     camera: Camera,
-    world: World,
+    world:  World,
     
     is_controlling_camera: bool,
     ddp: v3,
@@ -46,13 +46,14 @@ State :: struct {
     
     ////////////////////////////////////////////////
     
-    focus_render_p: v2,
-    focus_render_drag_size: f32,
-    focus_camera: Camera,
-    focus_camera_offset: v3,
-    focus_camera_orbit: f32,
-    focus_camera_pitch: f32,
-    focus_camera_dolly: f32,
+    preview_render_p: v2,
+    preview_render_drag_size: f32,
+    
+    preview_camera: Camera,
+    preview_camera_offset: v3,
+    preview_camera_orbit:  f32,
+    preview_camera_pitch:  f32,
+    preview_camera_dolly:  f32,
 }
 
 init_state :: proc (state: ^State) {
@@ -60,11 +61,11 @@ init_state :: proc (state: ^State) {
     world_init(&state.world)
     default_scene(&state.world)
     
-    state.focus_render_p = .5 * vec_cast(f32, state.window_size - {state.focus_render.image.width, state.focus_render.image.height})
-    state.focus_render_drag_size = 12
-    state.focus_camera_offset = {0,0,-1}
-    state.focus_camera_pitch = 0.0125 * Tau
-    state.focus_camera_dolly = 3
+    state.preview_render_p = .5 * vec_cast(f32, state.window_size - {state.preview_render.image.width, state.preview_render.image.height})
+    state.preview_render_drag_size = 12
+    state.preview_camera_offset = {0,0,-1}
+    state.preview_camera_pitch = 0.0125 * Tau
+    state.preview_camera_dolly = 3
     
     state.fast_render.is_open = true
     state.fast_render.requested = true
@@ -73,7 +74,7 @@ init_state :: proc (state: ^State) {
     
     init_render_settings(&state.quality_render, 64, 16, state.window_size, 2)
     init_render_settings(&state.fast_render,    8,   4, state.window_size, 6)
-    init_render_settings(&state.focus_render,   32,  4, 128, 1)
+    init_render_settings(&state.preview_render,   32,  4, 128, 1)
 }
 
 main :: proc () {
@@ -121,8 +122,8 @@ main :: proc () {
         stat_init(&render.render_time)
         stat_init(&render.time_per_ray)
     }
-    stat_init(&state.focus_render.render_time)
-    stat_init(&state.focus_render.time_per_ray)
+    stat_init(&state.preview_render.render_time)
+    stat_init(&state.preview_render.time_per_ray)
     
     ////////////////////////////////////////////////
     
@@ -249,9 +250,9 @@ main :: proc () {
         ////////////////////////////////////////////////
         
         // @cleanup the request system, can we just render every frame?
-        if state.fast_render.requested && state.focused_object_index != 0 {
+        if state.fast_render.requested && state.previewed_object_id != 0 {
             state.fast_render.requested  = false
-            state.focus_render.requested = true
+            state.preview_render.requested = true
         }
         
         rl.EndDrawing()
@@ -277,18 +278,18 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
         }
     }
     
-    if state.focused_object_index != 0 {
-        focus_render_size := vec_cast(f32, state.focus_render.image.width, state.focus_render.image.height) * cast(f32) state.focus_render.image_size_factor
+    if state.previewed_object_id != 0 {
+        preview_render_size := vec_cast(f32, state.preview_render.image.width, state.preview_render.image.height) * cast(f32) state.preview_render.image_size_factor
         
-        p := state.focus_render_p
-        draw_rectangle_outline(rectangle_min_dimension(p, focus_render_size), 1, Black)
-        rl.DrawTextureEx(state.focus_render.texture, p, 0, cast(f32) state.focus_render.image_size_factor, rl.WHITE)
+        p := state.preview_render_p
+        draw_rectangle_outline(rect_min_dimension(p, preview_render_size), 1, Black)
+        rl.DrawTextureEx(state.preview_render.texture, p, 0, cast(f32) state.preview_render.image_size_factor, rl.WHITE)
         
         if rl.IsWindowFocused() {
             // @api how can one hot surface have multiple interactions?
-            interaction := Interaction { kind = .NOP, target = &state.focus_camera, right = true, middle = true }
-            rect := rectangle_min_dimension(state.focus_render_p, focus_render_size)
-            if rectangle_contains(rect, layout.ui.mouse_p) {
+            interaction := Interaction { kind = .NOP, target = &state.preview_camera, right = true, middle = true }
+            rect := rect_min_dimension(state.preview_render_p, preview_render_size)
+            if rect_contains(rect, layout.ui.mouse_p) {
                 layout.ui.next_hot_interaction = interaction
             }
             
@@ -297,35 +298,35 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
                 dmousep := rl.GetMouseDelta()
                 if rl.IsMouseButtonDown(.LEFT) {
                     rotation_speed :: 0.001 * Tau
-                    state.focus_camera_orbit += -dmousep.x * rotation_speed
-                    state.focus_camera_pitch += -dmousep.y * rotation_speed
+                    state.preview_camera_orbit += -dmousep.x * rotation_speed
+                    state.preview_camera_pitch += -dmousep.y * rotation_speed
                     changed_camera = true
                 } else if rl.IsMouseButtonDown(.RIGHT) {
-                    zoom_speed := 0.005 * (state.focus_camera_offset.z - state.focus_camera_dolly)
-                    state.focus_camera_dolly += -dmousep.y * zoom_speed
+                    zoom_speed := 0.005 * (state.preview_camera_offset.z - state.preview_camera_dolly)
+                    state.preview_camera_dolly += -dmousep.y * zoom_speed
                     changed_camera = true
                 } else if rl.IsMouseButtonDown(.MIDDLE) {
-                    state.focus_camera = state.camera
-                    state.focus_render.requested = true
+                    state.preview_camera = state.camera
+                    state.preview_render.requested = true
                 }
                 
                 if changed_camera {
-                    state.focus_render.requested = true
+                    state.preview_render.requested = true
                 }
                 
-                object := state.world.objects[state.focused_object_index]
-                state.focus_camera = camera_orbit(state.focus_camera_offset, state.focus_camera_orbit, state.focus_camera_dolly, state.focus_camera_pitch)
-                state.focus_camera.t += object.transform.t
+                object := state.world.objects[state.previewed_object_id]
+                state.preview_camera = camera_orbit(state.preview_camera_offset, state.preview_camera_orbit, state.preview_camera_dolly, state.preview_camera_pitch)
+                state.preview_camera.t += object.transform.t
             }
             
-            ui_mover(ui, &state.focus_render_p, state.focus_render_drag_size)
+            ui_mover(ui, &state.preview_render_p, state.preview_render_drag_size)
         }
         
-        settings := &state.focus_render
+        settings := &state.preview_render
         if render_begin(&state.renderer, settings) {
-            object := state.world.objects[state.focused_object_index]
+            object := state.world.objects[state.previewed_object_id]
             
-            set_camera(settings, state.focus_camera)
+            set_camera(settings, state.preview_camera)
             draw_model(settings, object.model, object.material, object.transform)
             
             render_end(&state.renderer, settings, state.world.brdf_data[:], state.world.materials[:])
@@ -372,7 +373,7 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
         state.fast_image_is_focussed = true
     }
     layout_advance(layout, 10)
-    draw_render_settings_ui(state, layout, &state.focus_render, "Focus", false, false, 256)
+    draw_render_settings_ui(state, layout, &state.preview_render, "Focus", false, false, 256)
     
     ////////////////////////////////////////////////
     
@@ -385,20 +386,20 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
             object := &state.world.objects[object_index]
             
             layout_advance(layout, 5)
-            if ui_button_highlighted(layout, set_value_interaction(&state.selected_object_index, object_index), state.selected_object_index == object_index, "Object %v", object_index) {
-                state.selected_object_index = object_index
+            if ui_button_highlighted(layout, set_value_interaction(&state.selected_object_id, object_index), state.selected_object_id == object_index, "Object %v", object_index) {
+                state.selected_object_id = object_index
             }
             
-            if state.selected_object_index == object_index {
+            if state.selected_object_id == object_index {
                 layout_indent_scope(layout)
                 
                 layout_advance(layout, 10)
-                if ui_button_highlighted(layout, set_value_interaction(&state.focused_object_index, object_index), state.focused_object_index == object_index, "Focus") {
-                    if state.focused_object_index == object_index {
-                        state.focused_object_index = 0
+                if ui_button_highlighted(layout, set_value_interaction(&state.previewed_object_id, object_index), state.previewed_object_id == object_index, "Focus") {
+                    if state.previewed_object_id == object_index {
+                        state.previewed_object_id = 0
                     } else {
-                        state.focused_object_index = object_index
-                        state.focus_render.requested = true
+                        state.previewed_object_id = object_index
+                        state.preview_render.requested = true
                     }
                 }
                 
@@ -440,7 +441,8 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
                 _, released  = ui_dragger(layout, &object.transform.t.z, 0.1, "translation z = %v", object.transform.t.z)
                 if released do state.fast_render.requested = true
                 
-                if display_slider(layout, 100, &object.material, 1, cast(u32) len(state.world.materials)-1, "material %v", object.material) {
+                max_material_id := cast(Material_Id) len(state.world.materials)-1
+                if display_slider_i(layout, 100, &object.material, 1, max_material_id, "material %v", object.material) {
                     state.fast_render.requested = true
                 }
             }
@@ -452,11 +454,12 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
         layout_indent_scope(layout)
         
         for &material, index in state.world.materials {
-            if ui_button_highlighted(layout, set_value_interaction(&state.selected_material_index, index), index == state.selected_material_index, "Material %v: material %v", index, state.world.material_names[index]) {
-                state.selected_material_index = index
+            id := cast(Material_Id) index
+            if ui_button_highlighted(layout, set_value_interaction(&state.selected_material_id, id), id == state.selected_material_id, "Material %v: material %v", id, state.world.material_names[id]) {
+                state.selected_material_id = id
             }
             
-            if index == state.selected_material_index {
+            if id == state.selected_material_id {
                 layout_indent_scope(layout)
                 
                 _, scatter_released := ui_dragger_clamp(layout, &material.scatter, 0.01,  0,   1, "Scatter %f", material.scatter)
@@ -475,7 +478,7 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
                     
                     color  := rl.ColorFromNormalized(V4(material.transmit, 1))
                     before := color
-                    size := rect_to_rl(rectangle_min_dimension(layout.at, color_size))
+                    size := rect_to_rl(rect_min_dimension(layout.at, color_size))
                     rl.GuiColorPicker(size, "", &color)
                     if color != before do state.fast_render.requested = true
                     material.transmit = rl.ColorNormalize(color).rgb
@@ -490,7 +493,7 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
                     
                     color  := rl.ColorFromNormalized(V4(material.emit, 1))
                     before := color
-                    size := rect_to_rl(rectangle_min_dimension(layout.at, color_size))
+                    size := rect_to_rl(rect_min_dimension(layout.at, color_size))
                     rl.GuiColorPicker(size, "", &color)
                     if color != before do state.fast_render.requested = true
                     material.emit = rl.ColorNormalize(color).rgb
@@ -506,7 +509,7 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
                     
                     color := rl.ColorFromNormalized(V4(material.reflect, 0))
                     before := color
-                    size := rect_to_rl(rectangle_min_dimension(layout.at, color_size))
+                    size := rect_to_rl(rect_min_dimension(layout.at, color_size))
                     rl.GuiColorPicker(size, "", &color)
                     if color != before do state.fast_render.requested = true
                     material.reflect = rl.ColorNormalize(color).rgb

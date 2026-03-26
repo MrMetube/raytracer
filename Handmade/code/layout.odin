@@ -147,7 +147,7 @@ display_slider_raw :: proc (layout: ^Layout, width: f32, value: ^f32, min: f32, 
     max := max
     
     size := v2{width, layout.font_size}
-    bounds := rectangle_min_dimension(layout.at, size)
+    bounds := rect_min_dimension(layout.at, size)
     layout_advance_2(layout, size)
     
     result: bool

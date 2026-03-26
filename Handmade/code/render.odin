@@ -73,7 +73,7 @@ Model :: struct {
 Draw_Model :: struct {
     using m: Model,
     transform: Transform,
-    material:  u32,
+    material:  Material_Id,
 }
 
 RenderModel :: struct {
@@ -82,7 +82,7 @@ RenderModel :: struct {
     tree_offset: u32,
     tree_count:  u32,
     
-    material:  u32,
+    material:  Material_Id,
     
     forward: Transform,
     inverse: Transform,
@@ -137,15 +137,15 @@ BrdfTable :: struct {
 
 ////////////////////////////////////////////////
 
-Model_Index :: distinct u32
+Model_Id :: distinct u32
 Models: [256] Model
-last_used_model_index: Model_Index
+last_used_model_id: Model_Id
 
-begin_model :: proc () -> (^Model, Model_Index) {
-    last_used_model_index += 1
-    result := &Models[last_used_model_index]
+begin_model :: proc () -> (^Model, Model_Id) {
+    last_used_model_id += 1
+    result := &Models[last_used_model_id]
     
-    return result, last_used_model_index
+    return result, last_used_model_id
 }
 
 end_model :: proc (model: ^Model, triangles: [] Triangle, normals: [] Normals) {
@@ -194,7 +194,7 @@ render_begin :: proc (render: ^Render, settings: ^Render_Settings) -> bool {
     return result
 }
 
-draw_model :: proc (settings: ^Render_Settings, model: Model_Index, material: u32, transform: Transform) {
+draw_model :: proc (settings: ^Render_Settings, model: Model_Id, material: Material_Id, transform: Transform) {
     assert(settings.requested)
     assert(!settings.active)
     
@@ -389,8 +389,8 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
     settings.start = time.now()
     for row in 0..<tile_rows {
         for col in 0..<tile_cols {
-            rect := rectangle_min_dimension(tile_size * {col, row}, tile_size)
-            rect  = rectangle_intersection(rect, rectangle_zero_dimension(settings.image.width, settings.image.height))
+            rect := rect_min_dimension(tile_size * {col, row}, tile_size)
+            rect  = rect_intersection(rect, rect_zero_dimension(settings.image.width, settings.image.height))
             
             entropy := seed_random_series(1842098778 + row * 984612097 + col * 237711 + cast(i32) len(works))
             

@@ -2,7 +2,7 @@ package main
 
 World :: struct {
     objects:                [1024] Object,
-    last_used_object_index: Object_Index,
+    last_used_object_index: Object_Id,
     
     materials: [dynamic] Material,
     brdf_data: [dynamic] v3,
@@ -10,12 +10,13 @@ World :: struct {
     material_names: [] string,
 }
 
-Object_Index :: distinct u32
+Object_Id   :: distinct u32
+Material_Id :: distinct u32
 
 Object :: struct {
-    model:     Model_Index,
+    model:     Model_Id,
     transform: Transform,
-    material:  u32,
+    material:  Material_Id,
 }
 
 ////////////////////////////////////////////////
@@ -42,9 +43,9 @@ world_init :: proc (world: ^World) {
     world_load_brdf(world, 7, "glass")
 }
 
-world_load_brdf :: proc (world: ^World, material_index: u32, name: string) {
-    load_brdf_merl(tprint("./BRDFDatabase/brdfs/%v.binary", name), &world.materials[material_index].brdf, &world.brdf_data)
-    world.material_names[material_index] = name
+world_load_brdf :: proc (world: ^World, material: Material_Id, name: string) {
+    load_brdf_merl(tprint("./BRDFDatabase/brdfs/%v.binary", name), &world.materials[material].brdf, &world.brdf_data)
+    world.material_names[material] = name
 }
 
 begin_object :: proc (world: ^World) -> ^Object {

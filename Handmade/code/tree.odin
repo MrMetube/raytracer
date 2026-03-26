@@ -70,7 +70,7 @@ tree_build :: proc (triangles: ^[] Triangle, normals: ^[] Normals, tree_allocato
     triangle_bounds  := make([] Rectangle3, len(triangles), allocator)
     
     root := &work_tree[Root_Index]
-    root.bounds = rectangle_inverted_infinity(Rectangle3)
+    root.bounds = rect_inverted_infinity(Rectangle3)
     
     root_values := make([] Value_Index, len(triangles), allocator)
     for value_index in 0 ..< cast(Value_Index) len(triangles) {
@@ -81,18 +81,18 @@ tree_build :: proc (triangles: ^[] Triangle, normals: ^[] Normals, tree_allocato
         center := triangle.a + (triangle.ab + triangle.ac) / 3
         triangle_centers[value_index] = center
         
-        bounds := rectangle_inverted_infinity(Rectangle3)
-        bounds = rectangle_union_point(bounds, triangle.a)
-        bounds = rectangle_union_point(bounds, triangle.a + triangle.ab)
-        bounds = rectangle_union_point(bounds, triangle.a + triangle.ac)
+        bounds := rect_inverted_infinity(Rectangle3)
+        bounds = rect_union_point(bounds, triangle.a)
+        bounds = rect_union_point(bounds, triangle.a + triangle.ab)
+        bounds = rect_union_point(bounds, triangle.a + triangle.ac)
         triangle_bounds[value_index] = bounds
         
-        root.bounds = rectangle_union(root.bounds, bounds)
+        root.bounds = rect_union(root.bounds, bounds)
     }
     
     root_area_half: f32
     {
-        dim := rectangle_get_dimension(root.bounds)
+        dim := rect_get_dimension(root.bounds)
         root_area_half = dim.y * dim.z + dim.x * (dim.z + dim.y)
     }
     root_cost := root_area_half * cast(f32) len(triangles)
@@ -207,10 +207,10 @@ tree_build :: proc (triangles: ^[] Triangle, normals: ^[] Normals, tree_allocato
     #reverse for &node in tree {
         // @note(viktor): leaf nodes are already fitted
         if node.value_count == 0 {
-            bounds := rectangle_inverted_infinity(Rectangle3)
+            bounds := rect_inverted_infinity(Rectangle3)
             for subnode in cast(Node_Index) 0 ..< Subnodes_Per_Node {
                 sub := tree[node.first.subnode + subnode]
-                bounds = rectangle_union(bounds, sub.bounds)
+                bounds = rect_union(bounds, sub.bounds)
             }
             node.bounds = bounds
         }
@@ -249,16 +249,16 @@ split_node :: proc (tree: [] Tree_Node, it_cost: f32, it_indices: [] Value_Index
         a := &split_subs[0]
         b := &split_subs[1]
         
-        a.bounds = rectangle_inverted_infinity(Rectangle3)
-        b.bounds = rectangle_inverted_infinity(Rectangle3)
+        a.bounds = rect_inverted_infinity(Rectangle3)
+        b.bounds = rect_inverted_infinity(Rectangle3)
         
         // @leak
         suffix_bounds := make([] Rectangle3, len(it_indices), context.temp_allocator)
         {
-            bounds := rectangle_inverted_infinity(Rectangle3)
+            bounds := rect_inverted_infinity(Rectangle3)
             #reverse for value_index, it_index in it_indices {
                 value_bounds := triangle_bounds[value_index]
-                bounds = rectangle_union(bounds, value_bounds)
+                bounds = rect_union(bounds, value_bounds)
                 suffix_bounds[it_index] = bounds
             }
         }
@@ -273,14 +273,14 @@ split_node :: proc (tree: [] Tree_Node, it_cost: f32, it_indices: [] Value_Index
             // a now has node_index
             {
                 bounds := triangle_bounds[node_index]
-                a.bounds = rectangle_union(a.bounds, bounds)
+                a.bounds = rect_union(a.bounds, bounds)
             }
             
             // b now loses node_index
             b.bounds = suffix_bounds[a_count]
             
-            a_dim := rectangle_get_dimension(a.bounds)
-            b_dim := rectangle_get_dimension(b.bounds)
+            a_dim := rect_get_dimension(a.bounds)
+            b_dim := rect_get_dimension(b.bounds)
             a_area_half := fused_mul_add(a_dim.y, a_dim.z, a_dim.x * (a_dim.z + a_dim.y))
             b_area_half := fused_mul_add(b_dim.y, b_dim.z, b_dim.x * (b_dim.z + b_dim.y))
             

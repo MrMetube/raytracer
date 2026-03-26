@@ -26,7 +26,8 @@ Interaction :: struct {
         i32,
         f32,
         int,
-        Object_Index,
+        Object_Id,
+        Material_Id,
         Debug_View_Kind,
     },
 }
@@ -183,8 +184,8 @@ ui_button_highlighted :: proc (layout: ^Layout, interaction: Interaction, is_hig
     
     dim := measure_text(layout, text)
     text_p := layout.at
-    size := rectangle_min_dimension(text_p, dim)
-    size = rectangle_add_radius(size, v2{4, 1})
+    size := rect_min_dimension(text_p, dim)
+    size = rect_add_radius(size, v2{4, 1})
     
     // @theme
     outline      := DarkGreen
@@ -204,10 +205,10 @@ ui_button_highlighted :: proc (layout: ^Layout, interaction: Interaction, is_hig
     draw_rectangle_outline(size, 1, outline)
     draw_rectangle(size, background)
     draw_text(layout, text, text_p, text_color, shadow_color)
-    layout_advance_2(layout, rectangle_get_dimension(size)) // @api
+    layout_advance_2(layout, rect_get_dimension(size)) // @api
     
     result: bool
-    if rectangle_contains(size, layout.ui.mouse_p) {
+    if rect_contains(size, layout.ui.mouse_p) {
         layout.ui.next_hot_interaction = interaction
         result = is_ended(layout.ui, interaction)
     }
@@ -216,10 +217,10 @@ ui_button_highlighted :: proc (layout: ^Layout, interaction: Interaction, is_hig
 }
 
 ui_mover :: proc (ui: ^UI, drag: ^v2, size: v2) -> bool {
-    rect := rectangle_min_dimension(drag^, size)
+    rect := rect_min_dimension(drag^, size)
     
     interaction := Interaction { kind = .Move, target = drag }
-    if rectangle_contains(rect, ui.mouse_p) {
+    if rect_contains(rect, ui.mouse_p) {
         ui.next_hot_interaction = interaction
     }
     
@@ -230,7 +231,7 @@ ui_mover :: proc (ui: ^UI, drag: ^v2, size: v2) -> bool {
     }
     
     // @theme
-    handle := rectangle_min_dimension(drag^, size)
+    handle := rect_min_dimension(drag^, size)
     draw_rectangle_outline(handle, 1, Black)
     draw_rectangle(handle, Isabelline)
     
@@ -258,8 +259,8 @@ ui_dragger_clamp :: proc (layout: ^Layout, value: ^f32, speed, min, max: f32, fo
     draw_text(layout, text, text_p, text_color)
     layout_advance_2(layout, size)
     
-    rect := rectangle_min_dimension(text_p, size) 
-    if rectangle_contains(rect, layout.ui.mouse_p) {
+    rect := rect_min_dimension(text_p, size) 
+    if rect_contains(rect, layout.ui.mouse_p) {
         layout.ui.next_hot_interaction = interaction
     }
     
@@ -310,8 +311,8 @@ ui_dragger_base :: proc (layout: ^Layout, value: ^f32, speed: f32, format: strin
     draw_text(layout, text, text_p, text_color)
     layout_advance_2(layout, size)
     
-    rect := rectangle_min_dimension(text_p, size) 
-    if rectangle_contains(rect, layout.ui.mouse_p) {
+    rect := rect_min_dimension(text_p, size) 
+    if rect_contains(rect, layout.ui.mouse_p) {
         layout.ui.next_hot_interaction = interaction
     }
     
@@ -358,8 +359,8 @@ ui_text :: proc (layout: ^Layout, format: string, args: ..any) {
 ui_progress_bar :: proc (layout: ^Layout, percentage: f32, width: f32) {
     border_size :: 2
     size := v2{width, layout.font_size - border_size*2}
-    rect     := rectangle_min_dimension(layout.at+border_size, size)
-    progress := rectangle_min_dimension(layout.at+border_size, size * v2{percentage, 1}) 
+    rect     := rect_min_dimension(layout.at+border_size, size)
+    progress := rect_min_dimension(layout.at+border_size, size * v2{percentage, 1}) 
     
     // @theme
     draw_rectangle_outline(rect, border_size, DarkGreen)
@@ -391,14 +392,14 @@ draw_rectangle :: proc (rect: Rectangle2, color: v4) {
 }
 
 draw_rectangle_outline :: proc (rect: Rectangle2, thickness: f32, color: v4) {
-    dim    := rectangle_get_dimension(rect)
-    center := rectangle_get_center(rect)
+    dim    := rect_get_dimension(rect)
+    center := rect_get_center(rect)
     
-    top := rectangle_center_dimension(v2{center.x, rect.min.y-thickness/2}, v2{dim.x + 2*thickness, thickness})
-    bot := rectangle_center_dimension(v2{center.x, rect.max.y+thickness/2}, v2{dim.x + 2*thickness, thickness})
+    top := rect_center_dimension(v2{center.x, rect.min.y-thickness/2}, v2{dim.x + 2*thickness, thickness})
+    bot := rect_center_dimension(v2{center.x, rect.max.y+thickness/2}, v2{dim.x + 2*thickness, thickness})
     
-    lef := rectangle_center_dimension(v2{rect.min.x-thickness/2, center.y}, v2{thickness, dim.y})
-    rig := rectangle_center_dimension(v2{rect.max.x+thickness/2, center.y}, v2{thickness, dim.y})
+    lef := rect_center_dimension(v2{rect.min.x-thickness/2, center.y}, v2{thickness, dim.y})
+    rig := rect_center_dimension(v2{rect.max.x+thickness/2, center.y}, v2{thickness, dim.y})
     
     draw_rectangle(top, color)
     draw_rectangle(bot, color)
@@ -413,8 +414,8 @@ rect_to_rl :: proc (rect: Rectangle2) -> rl.Rectangle {
     
     result.x = rect.min.x
     result.y = rect.min.y
-    result.width  = rectangle_get_dimension(rect).x
-    result.height = rectangle_get_dimension(rect).y
+    result.width  = rect_get_dimension(rect).x
+    result.height = rect_get_dimension(rect).y
     
     return result
 }

@@ -66,7 +66,7 @@ Render_Tile_Info :: struct #all_or_none {
     film_center:       v3,
 }
 
-render_tile :: proc(render: ^Render, rect: Rectangle2i, entropy: ^RandomSeries, render_stats: ^Render_Stats, info: Render_Tile_Info) {
+render_tile :: proc(render: ^Render, rect: Rectangle2i, entropy: ^RandomSeries, stats: ^Render_Stats, info: Render_Tile_Info) {
     image             := info.image
     image_size_factor := info.image_size_factor
     
@@ -118,17 +118,17 @@ render_tile :: proc(render: ^Render, rect: Rectangle2i, entropy: ^RandomSeries, 
                     pixel_index := (image.height - 1 - py) * image.width + px
                     image.data[pixel_index] = pixel
                 }
-                atomic_add(&render_stats.pixels_done, auto_cast rectangle_get_dimension(rect).x / shift)
+                atomic_add(&stats.pixels_done, auto_cast rect_get_dimension(rect).x / shift)
             }
         }
     }
     
-    atomic_add(&render_stats.triangles,  total.triangles)
-    atomic_add(&render_stats.rectangles, total.rectangles)
+    atomic_add(&stats.triangles,  total.triangles)
+    atomic_add(&stats.rectangles, total.rectangles)
     
-    atomic_add(&render_stats.bounces_computed, bounces_computed)
-    atomic_add(&render_stats.loops_computed, loops_computed)
-    atomic_add(&render_stats.tiles_retired, 1)
+    atomic_add(&stats.bounces_computed, bounces_computed)
+    atomic_add(&stats.loops_computed, loops_computed)
+    atomic_add(&stats.tiles_retired, 1)
 }
 
 cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_Info) -> Cast_Result {
@@ -214,7 +214,8 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             spall_begin("ray color accumulation")
             
             model          := lane_index(to_lane(info.models), hit_model_index)
-            material_index := lane_gather(lane_member(model, "material", u32), hit_did_hit, cast(lane_u32) 0)
+            lane_Material_Id :: #simd [LaneWidth] Material_Id
+            material_index := lane_gather(lane_member(model, "material", Material_Id), hit_did_hit, cast(lane_Material_Id) 0)
             
             materials    := to_lane(info.materials)
             material     := lane_index(materials, material_index)
@@ -502,7 +503,7 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
             
             if node.value_count == 0 {
                 spall_scope("subnodes")
-                subnodes := lane_index(tree_lane, cast(lane_u32) node.first.subnode)
+                subnodes := lane_index(tree_lane, node.first.subnode)
                 
                 node_min := lane_member(subnodes, "bounds", "min", v3)
                 node_max := lane_member(subnodes, "bounds", "max", v3)
