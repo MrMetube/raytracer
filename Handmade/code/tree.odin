@@ -43,7 +43,7 @@ Split_Node :: struct {
 
 // @important @volatile The triangles buffer is sorted at the end.
 // You need to pass all per vertex data along, so that it can be sorted alongside the vertices.
-tree_build :: proc (triangles: ^[] Triangle, normals: ^[] Normals, tree_allocator := context.allocator) -> ([] Tree_Node, [] lane_Triangle) {
+tree_build :: proc (triangles: [] Triangle, normals: [] Normals, tree_allocator := context.allocator) -> ([] Tree_Node, [] lane_Triangle, [] Normals) {
     assert(len(triangles) != 0)
     
     allocator := context.temp_allocator
@@ -88,48 +88,122 @@ tree_build :: proc (triangles: ^[] Triangle, normals: ^[] Normals, tree_allocato
         root_cost = half_area * cast(f32) len(root_values)
     }
     
-    final_indices: map[u32] [] u32
-    final_indices.allocator = allocator
+    final_indices := make(map[u32] [] u32, allocator)
     
     stack := make([dynamic] Node_Info, 0, Tree_Max_Depth, allocator)
-    
     append(&stack, Node_Info { Root_Index, 0, root_cost, root_values })
     
-    temp_indices := make_slice([] u32, len(triangles), allocator)
-    
+    // @note(viktor): used by split_node, allocate only once
+    temp_indices := make([] u32,        len(triangles), allocator)
+    temp_prefix  := make([] Split_Node, len(triangles), allocator)
+    temp_suffix  := make([] Split_Node, len(triangles), allocator)
     for len(&stack) > 0 {
         it := pop(&stack)
         
         node := &work_tree[it.index]
         
-        all_better := false
+        better: bool
         subs: [Subnodes_Per_Node] Split_Node
         
-        if len(it.indices) > Values_Per_Node {
+        split: if len(it.indices) > Values_Per_Node {
             subs[0].cost    = it.cost
             subs[0].indices = it.indices
-            all_better = true
             
-            counts :: [] int {1, 2, 4}
-            split: for count in counts {
+            for count := 1; count < Subnodes_Per_Node; count *= 2 {
                 for i in 0..<count {
-                    a, b, ok := split_node(work_tree[:], subs[i].cost, subs[i].indices, triangle_centers, triangle_bounds, temp_indices, allocator)
-                    if ok {
-                        subs[i+0]     = a
-                        subs[i+count] = b
-                    } else {
-                        all_better = false
-                        break split
+                    best_a, best_b: Split_Node
+                    
+                    ////////////////////////////////////////////////
+                    it_indices := subs[i].indices
+                    min_cost   := subs[i].cost
+                    
+                    node_count := cast(u32) len(it_indices)
+                    best_a_count: u32
+                    best_indices := temp_indices[:node_count]
+                    suffix       := temp_suffix[:node_count]
+                    prefix       := temp_prefix[:node_count]
+                    
+                    for split_axis in 0..<3 {
+                        Data :: struct {
+                            split_axis: int,
+                            triangle_centers: [] v3,
+                        }
+                        
+                        data := Data { split_axis, triangle_centers }
+                        slice.sort_by_with_data(it_indices, proc (a, b: u32, data_p: pmm) -> bool {
+                            data := cast(^Data) data_p
+                            a_center := data.triangle_centers[a]
+                            b_center := data.triangle_centers[b]
+                            axis := data.split_axis
+                            
+                            return a_center[axis] < b_center[axis]
+                        }, &data)
+                        
+                        get_half_area :: proc (bounds: Rectangle3) -> f32 {
+                            dim := rect_get_dimension(bounds)
+                            result := fused_mul_add(dim.y, dim.z, dim.x * (dim.z + dim.y))
+                            return result
+                        }
+                        
+                        s_bounds := rect_inverted_infinity(Rectangle3)
+                        #reverse for value_index, a_count in it_indices {
+                            s_bounds = rect_union(s_bounds, triangle_bounds[value_index])
+                            
+                            b_count := node_count - cast(u32) a_count
+                            suffix[a_count].cost   = get_half_area(s_bounds) * cast(f32) b_count
+                            suffix[a_count].bounds = s_bounds
+                        }
+                        
+                        p_bounds := rect_inverted_infinity(Rectangle3)
+                        for value_index, a_count in it_indices {
+                            p_bounds = rect_union(p_bounds, triangle_bounds[value_index])
+                            
+                            prefix[a_count].cost   = get_half_area(p_bounds) * cast(f32) a_count
+                            prefix[a_count].bounds = p_bounds
+                        }
+                        
+                        for i in 0..<node_count-1 {
+                            node_index := it_indices[i]
+                            
+                            a_count := i + 1
+                            
+                            split_a := prefix[a_count]
+                            split_b := suffix[a_count]
+                            
+                            cost := split_a.cost + split_b.cost
+                            if min_cost > cost {
+                                min_cost = cost
+                                
+                                best_a_count = a_count
+                                best_a = split_a
+                                best_b = split_b
+                                
+                                copy(best_indices, it_indices)
+                            }
+                        }
                     }
+                    
+                    // @note(viktor): only accept splits that are better
+                    if min_cost == subs[i].cost do break split
+                    
+                    copy(it_indices, best_indices)
+                    best_a.indices = it_indices[:best_a_count]
+                    best_b.indices = it_indices[best_a_count:]
+                    
+                    ////////////////////////////////////////////////
+                    
+                    subs[i+0]     = best_a
+                    subs[i+count] = best_b
                 }
             }
-        }
-        
-        if all_better {
+            
+            better = true
             node.first = cast(u32) len(work_tree)
             
+            node.bounds = rect_inverted_infinity(Rectangle3)
             for sub in subs {
                 append(&work_tree, Tree_Node { bounds = sub.bounds })
+                node.bounds = rect_union(node.bounds, sub.bounds)
             }
             
             if it.depth+1 < Tree_Max_Depth {
@@ -143,7 +217,9 @@ tree_build :: proc (triangles: ^[] Triangle, normals: ^[] Normals, tree_allocato
                     final_indices[sub_index] = sub.indices
                 }
             }
-        } else {
+        }
+        
+        if !better {
             final_indices[it.index] = it.indices
         }
     }
@@ -164,12 +240,11 @@ tree_build :: proc (triangles: ^[] Triangle, normals: ^[] Normals, tree_allocato
     
     ////////////////////////////////////////////////
     
+    // @cleanup this cannot be called multiple times, because we add a bunch of padding 
+    // triangles into the middle and those are then part of the tree in the next call.
+    
     lane_triangles := make([] lane_Triangle, aligned_size / LaneWidth, tree_allocator)
-    // @cleanup call site
-    buffer_n := make([] Normals, aligned_size, allocator)
-    copy(buffer_n, normals^)
-    delete(normals^)
-    normals^ = make([] Normals, aligned_size, tree_allocator)
+    padded_normals := make([] Normals, aligned_size, tree_allocator)
     
     next_free_value_index: u32
     for &node, node_index in tree {
@@ -182,8 +257,8 @@ tree_build :: proc (triangles: ^[] Triangle, normals: ^[] Normals, tree_allocato
         
         for buffer_index, offset in indices {
             value_index := node.first + cast(u32) offset
-            assert(normals[value_index] == {})
-            normals[value_index] = buffer_n[buffer_index]
+            
+            padded_normals[value_index] = normals[buffer_index]
             
             lane_index  := value_index / LaneWidth
             lane_offset := value_index % LaneWidth
@@ -194,105 +269,7 @@ tree_build :: proc (triangles: ^[] Triangle, normals: ^[] Normals, tree_allocato
     }
     assert(next_free_value_index == aligned_size)
     
-    ////////////////////////////////////////////////
-    
-    #reverse for &node in tree {
-        // @note(viktor): leaf nodes are already fitted
-        if node.count == 0 {
-            bounds := rect_inverted_infinity(Rectangle3)
-            for subnode in cast(u32) 0 ..< Subnodes_Per_Node {
-                sub := tree[node.first + subnode]
-                bounds = rect_union(bounds, sub.bounds)
-            }
-            node.bounds = bounds
-        }
-    }
-    
-    return tree, lane_triangles
-}
-
-split_node :: proc (tree: [] Tree_Node, it_cost: f32, it_indices: [] u32, triangle_centers: [] v3, triangle_bounds: [] Rectangle3, temp_indices: [] u32, allocator: Allocator) -> (Split_Node, Split_Node, bool) {
-    min_cost := +Infinity
-    best_a_count: u32
-    
-    best_indices := temp_indices[:len(it_indices)]
-    
-    best_subs: [2] Split_Node
-    best_a := &best_subs[0]
-    best_b := &best_subs[1]
-    
-    for split_axis in 0..<3 {
-        Data :: struct {
-            split_axis: int,
-            triangle_centers: [] v3,
-        }
-        
-        data := Data { split_axis, triangle_centers }
-        slice.sort_by_with_data(it_indices, proc (a, b: u32, data_p: pmm) -> bool {
-            data := cast(^Data) data_p
-            a_center := data.triangle_centers[a]
-            b_center := data.triangle_centers[b]
-            axis := data.split_axis
-            
-            return a_center[axis] < b_center[axis]
-        }, &data)
-        
-        split_subs: [2] Split_Node
-        a := &split_subs[0]
-        b := &split_subs[1]
-        
-        a.bounds = rect_inverted_infinity(Rectangle3)
-        b.bounds = rect_inverted_infinity(Rectangle3)
-        
-        suffix_bounds := make([] Rectangle3, len(it_indices), allocator)
-        bounds := rect_inverted_infinity(Rectangle3)
-        #reverse for value_index, it_index in it_indices {
-            bounds = rect_union(bounds, triangle_bounds[value_index])
-            suffix_bounds[it_index] = bounds
-        }
-        
-        node_count := cast(u32) len(it_indices)
-        for i in 0..<node_count-1 {
-            node_index := it_indices[i]
-            
-            a_count := i + 1
-            b_count := node_count - a_count
-            
-            // a now has node_index
-            a.bounds = rect_union(a.bounds, triangle_bounds[node_index])
-            // b now loses node_index
-            b.bounds = suffix_bounds[a_count]
-            
-            a_dim := rect_get_dimension(a.bounds)
-            b_dim := rect_get_dimension(b.bounds)
-            a_area_half := fused_mul_add(a_dim.y, a_dim.z, a_dim.x * (a_dim.z + a_dim.y))
-            b_area_half := fused_mul_add(b_dim.y, b_dim.z, b_dim.x * (b_dim.z + b_dim.y))
-            
-            a.cost = a_area_half * cast(f32) a_count
-            b.cost = b_area_half * cast(f32) b_count
-            
-            cost := a.cost + b.cost
-            
-            if min_cost > cost {
-                min_cost = cost
-                
-                best_a_count = a_count
-                best_subs    = split_subs
-                
-                copy(best_indices, it_indices)
-            }
-        }
-    }
-    
-    better := min_cost < it_cost
-    if better {
-        copy(it_indices, best_indices)
-        
-        best_a.indices = it_indices[:best_a_count]
-        best_b.indices = it_indices[best_a_count:]
-    }
-    
-    return best_subs[0], best_subs[1], better
+    return tree, lane_triangles, padded_normals
 }
 
 ////////////////////////////////////////////////

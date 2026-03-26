@@ -416,8 +416,11 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
                     if ui_button(layout, { kind = .Select, target = &m.tree },  "Rebuild") {
                         start := time.now()
                         
-                        delete(m.tree, context.allocator)
-                        m.tree, m.lane_triangles = tree_build(&m.triangles, &m.normals, context.allocator)
+                        // @api
+                        delete(m.tree,           context.allocator)
+                        delete(m.lane_triangles, context.allocator)
+                        delete(m.padded_normals, context.allocator)
+                        m.tree, m.lane_triangles, m.padded_normals = tree_build(m.raw_triangles, m.raw_normals, context.allocator)
                         
                         state.selected_model_build_time = time.since(start)
                         print("building tree took %v\n", state.selected_model_build_time)

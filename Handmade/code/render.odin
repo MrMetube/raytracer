@@ -65,11 +65,12 @@ Render :: struct {
 Normals :: [3] v3
 
 Model :: struct {
-    triangles: [] Triangle,
-    normals:   [] Normals,
+    raw_triangles: [] Triangle,
+    raw_normals:   [] Normals,
     
     tree:           Tree,
     lane_triangles: [] lane_Triangle,
+    padded_normals: [] Normals,
 }
 
 Draw_Model :: struct {
@@ -153,10 +154,10 @@ begin_model :: proc () -> (^Model, Model_Id) {
 }
 
 end_model :: proc (model: ^Model, triangles: [] Triangle, normals: [] Normals) {
-    model.triangles = make_shallow_copy(triangles, context.allocator)
-    model.normals   = make_shallow_copy(normals,   context.allocator)
+    model.raw_triangles = make_shallow_copy(triangles, context.allocator)
+    model.raw_normals   = make_shallow_copy(normals,   context.allocator)
     
-    model.tree, model.lane_triangles = tree_build(&model.triangles, &model.normals, context.allocator)
+    model.tree, model.lane_triangles, model.padded_normals = tree_build(model.raw_triangles, model.raw_normals, context.allocator)
 }
 
 ////////////////////////////////////////////////
@@ -269,7 +270,7 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
     total_tree_count: u32
     for model in models {
         total_triangle_count += cast(u32) len(model.lane_triangles)
-        total_normals_count  += cast(u32) len(model.normals)
+        total_normals_count  += cast(u32) len(model.padded_normals)
         total_tree_count     += cast(u32) len(model.tree)
     }
     next_free_triangle_offset: u32
@@ -314,10 +315,10 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
             copy(triangles, model.lane_triangles)
             
             rm.normals_offset = next_free_normals_offset
-            rm.normals_count  = cast(u32) len(model.normals)
+            rm.normals_count  = cast(u32) len(model.padded_normals)
             next_free_normals_offset += rm.normals_count
             normals := render.normals[rm.normals_offset : rm.normals_offset + rm.normals_count]
-            copy(normals, model.normals)
+            copy(normals, model.padded_normals)
             
             rm.tree_offset = next_free_tree_offset
             rm.tree_count  = cast(u32) len(model.tree)
