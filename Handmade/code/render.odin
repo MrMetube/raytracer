@@ -67,7 +67,9 @@ Normals :: [3] v3
 Model :: struct {
     triangles: [] Triangle,
     normals:   [] Normals,
-    tree:      Tree,
+    
+    tree:           Tree,
+    lane_triangles: [] lane_Triangle,
 }
 
 Draw_Model :: struct {
@@ -79,6 +81,8 @@ Draw_Model :: struct {
 RenderModel :: struct {
     triangle_offset: u32,
     triangle_count:  u32,
+    normals_offset: u32,
+    normals_count:  u32,
     tree_offset: u32,
     tree_count:  u32,
     
@@ -151,7 +155,8 @@ begin_model :: proc () -> (^Model, Model_Id) {
 end_model :: proc (model: ^Model, triangles: [] Triangle, normals: [] Normals) {
     model.triangles = make_shallow_copy(triangles, context.allocator)
     model.normals   = make_shallow_copy(normals,   context.allocator)
-    model.tree      = tree_build(&model.triangles, &model.normals, context.allocator)
+    
+    model.tree, model.lane_triangles = tree_build(&model.triangles, &model.normals, context.allocator)
 }
 
 ////////////////////////////////////////////////
@@ -260,16 +265,19 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
     settings.stats = {}
     
     total_triangle_count: u32
+    total_normals_count: u32
     total_tree_count: u32
     for model in models {
-        total_triangle_count += cast(u32) align(LaneWidth, len(model.triangles))
+        total_triangle_count += cast(u32) len(model.lane_triangles)
+        total_normals_count  += cast(u32) len(model.normals)
         total_tree_count     += cast(u32) len(model.tree)
     }
     next_free_triangle_offset: u32
+    next_free_normals_offset: u32
     next_free_tree_offset: u32
     
     render.triangles = make([] lane_Triangle, total_triangle_count, settings.allocator)
-    render.normals   = make([] Normals,       total_triangle_count, settings.allocator)
+    render.normals   = make([] Normals,       total_normals_count,  settings.allocator)
     render.trees     = make([] Tree_Node ,    total_tree_count,     settings.allocator)
     
     render.models = make([] RenderModel, len(models), settings.allocator)
@@ -300,26 +308,17 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
         
         {
             rm.triangle_offset = next_free_triangle_offset
-            rm.triangle_count  = cast(u32) align(LaneWidth, len(model.triangles))
+            rm.triangle_count  = cast(u32) len(model.lane_triangles)
             next_free_triangle_offset += rm.triangle_count
-            
             triangles := render.triangles[rm.triangle_offset : rm.triangle_offset + rm.triangle_count]
-            for &triangle, triangle_index in triangles {
-                index := triangle_index * LaneWidth
-                for lane in 0..<LaneWidth {
-                    if index + lane < len(model.triangles) {
-                        replace(&triangle.a,  lane, model.triangles[index + lane].a)
-                        replace(&triangle.ab, lane, model.triangles[index + lane].ab)
-                        replace(&triangle.ac, lane, model.triangles[index + lane].ac)
-                    }
-                }
-            }
+            copy(triangles, model.lane_triangles)
             
-            normals := render.normals[rm.triangle_offset : rm.triangle_offset + rm.triangle_count]
+            rm.normals_offset = next_free_normals_offset
+            rm.normals_count  = cast(u32) len(model.normals)
+            next_free_normals_offset += rm.normals_count
+            normals := render.normals[rm.normals_offset : rm.normals_offset + rm.normals_count]
             copy(normals, model.normals)
-        }
-        
-        {
+            
             rm.tree_offset = next_free_tree_offset
             rm.tree_count  = cast(u32) len(model.tree)
             next_free_tree_offset += rm.tree_count
@@ -327,6 +326,10 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
             copy(tree, model.tree)
         }
     }
+    
+    assert(next_free_tree_offset == total_tree_count)
+    assert(next_free_triangle_offset == total_triangle_count)
+    assert(next_free_normals_offset == total_normals_count)
     
     render.brdf_data = brdf_data
     render.materials = make_shallow_copy(materials, settings.allocator)

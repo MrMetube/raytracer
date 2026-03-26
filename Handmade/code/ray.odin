@@ -242,8 +242,8 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             hit_tangent:  lane_v3
             hit_binormal: lane_v3
             {
-                triangle_offset  := lane_gather(lane_member(model, "triangle_offset", u32))
-                triangle_normals := lane_index(to_lane(info.normals), triangle_offset + hit_triangle_index)
+                normals_offset   := lane_gather(lane_member(model, "normals_offset", u32))
+                triangle_normals := lane_index(to_lane(info.normals), normals_offset + hit_triangle_index)
                 
                 n0 := lane_gather_v(lane_index(triangle_normals, 0))
                 n1 := lane_gather_v(lane_index(triangle_normals, 1))
@@ -472,8 +472,7 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
     tree_lane := to_lane(tree)
     tree_lane  = lane_index_offset(tree_lane, lane_offset)
     
-    backing: [256] Node_Index
-    stack := backing[:]
+    stack: [32] u32
     
     model_hit_t := max_t
     model_hit_mask:     lane_u32
@@ -500,9 +499,9 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
             it_index := stack[stack_count]
             node     := &tree[it_index]
             
-            if node.value_count == 0 {
+            if node.count == 0 {
                 spall_scope("subnodes")
-                subnodes := lane_index(tree_lane, node.first.subnode)
+                subnodes := lane_index(tree_lane, node.first)
                 
                 node_min := lane_member(subnodes, "bounds", "min", v3)
                 node_max := lane_member(subnodes, "bounds", "max", v3)
@@ -517,15 +516,15 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
                 if bounds_hit_mask == lane_false do continue traversal
                 
                 // @note(viktor): the last tests showed that the sorting overhead was not worth the gains it should have provided
-                subnode_indices := cast(lane_u32) node.first.subnode + lane_offset
+                subnode_indices := node.first + lane_offset
                 
                 // @note(viktor): this will be a loop unless AVX-512 is available, where it is one instruction with a few cycles of latency
                 simd.masked_compress_store(&stack[stack_count], subnode_indices, bounds_hit_mask)
                 stack_count += horizontal_add(1 & bounds_hit_mask)
             } else {
                 spall_scope("triangles")
-                start := cast(u32) node.first.value / LaneWidth
-                end   := start   + node.value_count / LaneWidth
+                start :=         node.first / LaneWidth
+                end   := start + node.count / LaneWidth
                 
                 // @note(viktor): a "for i in start..<end" seems to be minutely slower
                 for triangle_index := start; triangle_index < end; triangle_index += 1 {
@@ -549,7 +548,7 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
                 }
                 
                 when Collect_Stats_For_Debug_View {
-                    info.triangles += cast(u64) node.value_count
+                    info.triangles += cast(u64) node.count
                 }
             }
         }

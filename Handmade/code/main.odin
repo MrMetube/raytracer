@@ -417,7 +417,7 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
                         start := time.now()
                         
                         delete(m.tree, context.allocator)
-                        m.tree = tree_build(&m.triangles, &m.normals, context.allocator)
+                        m.tree, m.lane_triangles = tree_build(&m.triangles, &m.normals, context.allocator)
                         
                         state.selected_model_build_time = time.since(start)
                         print("building tree took %v\n", state.selected_model_build_time)
