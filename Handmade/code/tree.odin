@@ -114,34 +114,36 @@ tree_build :: proc (triangles: ^[] Triangle, normals: ^[] Normals, tree_allocato
         
         all_better := false
         subs: [Subnodes_Per_Node] Split_Node
+        
         split: if len(it.indices) > Values_Per_Node {
-            s0, s1 := split_node(work_tree, it.cost, it.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
+            for &sub in subs { sub.bounds = rect_inverted_infinity(Rectangle3) }
             
-            s00, s10 := split_node(work_tree, s0.cost, s0.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
-            s01, s11 := split_node(work_tree, s1.cost, s1.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
-            
-            s0, s1  = split_node(work_tree, s00.cost, s00.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
-            s2, s3 := split_node(work_tree, s01.cost, s01.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
-            s4, s5 := split_node(work_tree, s10.cost, s10.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
-            s6, s7 := split_node(work_tree, s11.cost, s11.indices, triangle_centers, triangle_bounds, temp_indices) or_break split
-            
-            subs[0] = s0
-            subs[1] = s1 
-            subs[2] = s2
-            subs[3] = s3
-            subs[4] = s4
-            subs[5] = s5
-            subs[6] = s6
-            subs[7] = s7
+            can_split: [Subnodes_Per_Node] bool = true
+            subs[0].cost    = it.cost
+            subs[0].indices = it.indices
             all_better = true
+            
+            counts :: [] int {1, 2, 4}
+            for count in counts {
+                for i in 0..<count {
+                    if a, b, ok0 := split_node(work_tree, subs[i].cost, subs[i].indices, triangle_centers, triangle_bounds, temp_indices); ok0 {
+                        subs[i+0]     = a
+                        subs[i+count] = b
+                    } else {
+                        can_split[i+0]     = false
+                        can_split[i+count] = false
+                    }
+                }
+            }
         }
         
         if all_better {
             node.first.subnode = next_free_tree_index
+            next_free_tree_index += Subnodes_Per_Node
             
-            for sub in subs {
-                work_tree[next_free_tree_index] = Tree_Node { bounds = sub.bounds }
-                next_free_tree_index += 1
+            for sub, index in subs {
+                sub_index := node.first.subnode + auto_cast index
+                work_tree[sub_index] = Tree_Node { bounds = sub.bounds }
             }
             
             if it.depth+1 < Tree_Max_Depth {
@@ -168,7 +170,7 @@ tree_build :: proc (triangles: ^[] Triangle, normals: ^[] Normals, tree_allocato
     copy(tree, work_tree)
     
     aligned_size: u32
-    for &node, node_index in tree {
+    for _, node_index in tree {
         indices := final_indices[cast(Node_Index) node_index] or_continue
         aligned_size += align(LaneWidth, cast(u32) len(indices))
     }

@@ -214,8 +214,7 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             spall_begin("ray color accumulation")
             
             model          := lane_index(to_lane(info.models), hit_model_index)
-            lane_Material_Id :: #simd [LaneWidth] Material_Id
-            material_index := lane_gather(lane_member(model, "material", Material_Id), hit_did_hit, cast(lane_Material_Id) 0)
+            material_index := lane_gather_mask(lane_member(model, "material", Material_Id), hit_did_hit, 0)
             
             materials    := to_lane(info.materials)
             material     := lane_index(materials, material_index)
@@ -473,7 +472,7 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
     tree_lane := to_lane(tree)
     tree_lane  = lane_index_offset(tree_lane, lane_offset)
     
-    backing: [Tree_Max_Depth] Node_Index
+    backing: [256] Node_Index
     stack := backing[:]
     
     model_hit_t := max_t
@@ -511,8 +510,6 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
                 min := lane_gather_v(node_min)
                 max := lane_gather_v(node_max)
                 
-                // @todo(viktor): @speed should we divide each node into even more subnodes, like 16?
-                #assert(false, "try this with more subnodes")
                 bounds_hit_mask := hit_rectangle(min, max, lane_neg_inv_o, lane_inv_d, min_t, closest_t)
                 when Collect_Stats_For_Debug_View {
                     info.rectangles += Subnodes_Per_Node
@@ -521,6 +518,7 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
                 
                 // @note(viktor): the last tests showed that the sorting overhead was not worth the gains it should have provided
                 subnode_indices := cast(lane_u32) node.first.subnode + lane_offset
+                
                 // @note(viktor): this will be a loop unless AVX-512 is available, where it is one instruction with a few cycles of latency
                 simd.masked_compress_store(&stack[stack_count], subnode_indices, bounds_hit_mask)
                 stack_count += horizontal_add(1 & bounds_hit_mask)
