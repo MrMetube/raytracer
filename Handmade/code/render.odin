@@ -453,6 +453,7 @@ get_time_per_ray_and_print_stats :: proc (stats: ^Render_Stats, total_time: time
     print("Hit tests:\n")
     print("  total tests = %v\n",      view_magnitude(total_tests))
     print("  triangles   = %v (%v)\n", view_magnitude(stats.triangles),  view_percentage(stats.triangles, total_tests))
+    print("    hits      = %v (%v)\n", view_magnitude(stats.triangle_hits),  view_percentage(stats.triangle_hits, stats.triangles))
     print("  rectangles  = %v (%v)\n", view_magnitude(stats.rectangles), view_percentage(stats.rectangles, total_tests))
     
     print("\n")

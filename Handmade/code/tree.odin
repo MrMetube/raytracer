@@ -278,10 +278,11 @@ Tree_Info :: struct {
     values_per_node: Stat(u32),
     depth: Stat(u32),
     
-    node_count: u32,
+    node_count:  u32,
+    value_count: u32,
 }
 
-inspect :: proc (nodes: [] Tree_Node, it_index: u32 = Root_Index, depth : u32 = 0) -> Tree_Info {
+inspect :: proc (nodes: [] Tree_Node, it_index: u32 = Root_Index, depth : u32 = 1) -> Tree_Info {
     it := nodes[it_index]
     value_count := it.count
     
@@ -290,13 +291,14 @@ inspect :: proc (nodes: [] Tree_Node, it_index: u32 = Root_Index, depth : u32 = 
     result.depth = stat_make(depth)
     result.values_per_node = stat_make(value_count)
     result.node_count = 1
+    result.value_count = it.count
     
     if it.count == 0 && it.first != Root_Index {
         for sub_index in it.first..< it.first + Subnodes_Per_Node {
             sub_info := inspect(nodes, sub_index, depth + 1)
             
-            result.node_count += sub_info.node_count
-            
+            result.node_count  += sub_info.node_count
+            result.value_count += sub_info.value_count
             if sub_info.values_per_node.count != 0 {
                 stat_update(&result.values_per_node, sub_info.values_per_node)
             }

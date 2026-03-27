@@ -25,6 +25,7 @@ Cast_Result :: struct {
 Test_Info :: struct {
     rectangles: u64,
     triangles:  u64,
+    triangle_hits: u64,
 }
 
 ////////////////////////////////////////////////
@@ -89,8 +90,9 @@ render_tile :: proc(render: ^Render, rect: Rectangle2i, entropy: ^RandomSeries, 
                     cast_result := cast_rays(film_p, entropy, info)
                     
                     when Collect_Stats_For_Debug_View {
-                        total.triangles   += cast_result.triangles
-                        total.rectangles  += cast_result.rectangles
+                        total.triangles     += cast_result.triangles
+                        total.triangle_hits += cast_result.triangle_hits
+                        total.rectangles    += cast_result.rectangles
                     }
                     
                     bounces_computed += cast_result.bounces_computed
@@ -100,7 +102,7 @@ render_tile :: proc(render: ^Render, rect: Rectangle2i, entropy: ^RandomSeries, 
                     triangle_color  := (cast(f32) cast_result.triangles  / LaneWidth) / Triangle_Threshold
                     rectangle_color := (cast(f32) cast_result.rectangles / LaneWidth) / Rectangle_Threshold
                     color = linear_to_srgb(color)
-                    if Debug_View == .Triangle_Tests {
+                    if Debug_View == Debug_View_Kind.Triangle_Tests {
                         color = triangle_color
                         if triangle_color > 1 do color = v3{1, 0, 0}
                     } else if Debug_View == .Rectangle_Tests {
@@ -123,8 +125,9 @@ render_tile :: proc(render: ^Render, rect: Rectangle2i, entropy: ^RandomSeries, 
         }
     }
     
-    atomic_add(&stats.triangles,  total.triangles)
-    atomic_add(&stats.rectangles, total.rectangles)
+    atomic_add(&stats.triangle_hits, total.triangle_hits)
+    atomic_add(&stats.triangles,     total.triangles)
+    atomic_add(&stats.rectangles,    total.rectangles)
     
     atomic_add(&stats.bounces_computed, bounces_computed)
     atomic_add(&stats.loops_computed, loops_computed)
@@ -173,6 +176,19 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
         
         bounces: for _ in 0..<max_bounce_count {
             spall_scope("ray bounce")
+            
+            
+            
+            // @speed @waste can be ~30% and increases with higher max bounce count. 
+            // How can we still make use of the lanes, that already did not hit anything?
+            // Can they be used for direct light sampling instead? How do we ensure correct
+            // weighting of this additional light, so the scene is not too bright?
+            // @correctness Rework the material model to ensure correct weighting in general.
+            // Minor changes to scatter from .99 to 1.0 give very different images. I would
+            // expect it to be a linear relation.
+            
+            
+            
             bounces_computed_lanes += 1 & lane_mask
             loops_computed_lanes   += 1
             
@@ -202,8 +218,9 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 conditional_assign(hit_mask, &hit_model_index,    cast(lane_u32) index)
                 
                 when Collect_Stats_For_Debug_View {
-                    result.triangles   += tests.triangles
-                    result.rectangles  += tests.rectangles
+                    result.triangles     += tests.triangles
+                    result.triangle_hits += tests.triangle_hits
+                    result.rectangles    += tests.rectangles
                 }
             }
             spall_end()
@@ -469,6 +486,7 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
     }
     ////////////////////////////////////////////////
     
+    spall_scope("traverse tree")
     tree_lane := to_lane(tree)
     tree_lane  = lane_index_offset(tree_lane, lane_offset)
     
@@ -526,7 +544,8 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
                 start :=         node.first / LaneWidth
                 end   := start + node.count / LaneWidth
                 
-                // @note(viktor): a "for i in start..<end" seems to be minutely slower
+                hits_count: lane_u32
+                
                 for triangle_index := start; triangle_index < end; triangle_index += 1 {
                     #no_bounds_check triangle := &triangles[triangle_index]
                     
@@ -544,11 +563,16 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
                         did_hit      = true
                         triangle_hit = triangle_index * LaneWidth + closest_lane
                         hit_uv       = extract(triangle_uv, closest_lane)
+                        
+                        when Collect_Stats_For_Debug_View {
+                            hits_count += 1 & triangle_hit_mask
+                        }
                     }
                 }
                 
                 when Collect_Stats_For_Debug_View {
                     info.triangles += cast(u64) node.count
+                    info.triangle_hits += cast(u64) horizontal_add(hits_count)
                 }
             }
         }

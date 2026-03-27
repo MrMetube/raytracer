@@ -407,6 +407,7 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
                     layout_indent_scope(layout)
                     
                     ui_text(layout, "build took %v", state.selected_model_build_time)
+                    ui_text(layout, "triangle count %v", state.selected_model_info.value_count)
                     ui_text(layout, "node count %v", state.selected_model_info.node_count)
                     ui_text(layout, "depth: max = %v, avg = %.2f", state.selected_model_info.depth.max, state.selected_model_info.depth.avg)
                     ui_text(layout, "values per node: max = %v, avg = %.2f", state.selected_model_info.values_per_node.max, state.selected_model_info.values_per_node.avg)
