@@ -51,7 +51,7 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, tree_allocator 
     // @note(viktor): 
     // S = Subnodes_Per_Node
     // N = len(triangles)
-    // leaves = atmost N
+    // leaves   = atmost N
     // branches = N/S parents + N/S² grandparents + ...
     // -> N leaves + branches <= 2N nodes
     work_tree := make([dynamic] Tree_Node, 0, len(triangles)*2, allocator)
@@ -88,15 +88,16 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, tree_allocator 
         root_cost = half_area * cast(f32) len(root_values)
     }
     
+    ////////////////////////////////////////////////
     final_indices := make(map[u32] [] u32, allocator)
     
     stack := make([dynamic] Node_Info, 0, Tree_Max_Depth, allocator)
     append(&stack, Node_Info { Root_Index, 0, root_cost, root_values })
     
     // @note(viktor): used by split_node, allocate only once
-    temp_indices := make([] u32,        len(triangles), allocator)
-    temp_prefix  := make([] Split_Node, len(triangles), allocator)
-    temp_suffix  := make([] Split_Node, len(triangles), allocator)
+    temp_prefix := make([] Split_Node, len(triangles), allocator)
+    temp_suffix := make([] Split_Node, len(triangles), allocator)
+    
     for len(&stack) > 0 {
         it := pop(&stack)
         
@@ -111,74 +112,78 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, tree_allocator 
             
             for count := 1; count < Subnodes_Per_Node; count *= 2 {
                 for i in 0..<count {
+                    Sort_Data :: struct {
+                        split_axis: int,
+                        triangle_centers: [] v3,
+                    }
+                    
+                    sort_along_axis :: proc (a, b: u32, data_p: pmm) -> bool {
+                        data := cast(^Sort_Data) data_p
+                        
+                        a_center := data.triangle_centers[a]
+                        b_center := data.triangle_centers[b]
+                        axis := data.split_axis
+                        
+                        return a_center[axis] < b_center[axis]
+                    }
+                    
+                    get_half_area :: proc (bounds: Rectangle3) -> f32 {
+                        dim := rect_get_dimension(bounds)
+                        result := fused_mul_add(dim.y, dim.z, dim.x * (dim.z + dim.y))
+                        return result
+                    }
+                    
                     best_a, best_b: Split_Node
+                    best_split_axis: int
                     
                     ////////////////////////////////////////////////
-                    it_indices := subs[i].indices
-                    min_cost   := subs[i].cost
                     
-                    node_count := cast(u32) len(it_indices)
+                    indices  := subs[i].indices
+                    min_cost := subs[i].cost
+                    
+                    node_count := cast(u32) len(indices)
                     best_a_count: u32
-                    best_indices := temp_indices[:node_count]
-                    suffix       := temp_suffix[:node_count]
-                    prefix       := temp_prefix[:node_count]
+                    suffix := temp_suffix[:node_count]
+                    prefix := temp_prefix[:node_count]
                     
                     for split_axis in 0..<3 {
-                        Data :: struct {
-                            split_axis: int,
-                            triangle_centers: [] v3,
-                        }
-                        
-                        data := Data { split_axis, triangle_centers }
-                        slice.sort_by_with_data(it_indices, proc (a, b: u32, data_p: pmm) -> bool {
-                            data := cast(^Data) data_p
-                            a_center := data.triangle_centers[a]
-                            b_center := data.triangle_centers[b]
-                            axis := data.split_axis
-                            
-                            return a_center[axis] < b_center[axis]
-                        }, &data)
-                        
-                        get_half_area :: proc (bounds: Rectangle3) -> f32 {
-                            dim := rect_get_dimension(bounds)
-                            result := fused_mul_add(dim.y, dim.z, dim.x * (dim.z + dim.y))
-                            return result
-                        }
+                        data := Sort_Data { split_axis, triangle_centers }
+                        slice.sort_by_with_data(indices, sort_along_axis, &data)
                         
                         s_bounds := rect_inverted_infinity(Rectangle3)
-                        #reverse for value_index, a_count in it_indices {
-                            s_bounds = rect_union(s_bounds, triangle_bounds[value_index])
-                            
-                            b_count := node_count - cast(u32) a_count
-                            suffix[a_count].cost   = get_half_area(s_bounds) * cast(f32) b_count
-                            suffix[a_count].bounds = s_bounds
-                        }
-                        
                         p_bounds := rect_inverted_infinity(Rectangle3)
-                        for value_index, a_count in it_indices {
-                            p_bounds = rect_union(p_bounds, triangle_bounds[value_index])
+                        for p_index in 0..<len(indices) {
+                            s_index := len(indices) - 1 - p_index
+                            prefix_value := indices[p_index]
+                            suffix_value := indices[s_index]
                             
-                            prefix[a_count].cost   = get_half_area(p_bounds) * cast(f32) a_count
-                            prefix[a_count].bounds = p_bounds
+                            p_bounds = rect_union(p_bounds, triangle_bounds[prefix_value])
+                            s_bounds = rect_union(s_bounds, triangle_bounds[suffix_value])
+                            
+                            a_count := cast(f32) p_index
+                            b_count := cast(f32) p_index + 1
+                            
+                            prefix[p_index].cost   = get_half_area(p_bounds) * a_count
+                            suffix[s_index].cost   = get_half_area(s_bounds) * b_count
+                            prefix[p_index].bounds = p_bounds
+                            suffix[s_index].bounds = s_bounds
                         }
                         
                         for i in 0..<node_count-1 {
-                            node_index := it_indices[i]
+                            node_index := indices[i]
                             
                             a_count := i + 1
+                            a := prefix[a_count]
+                            b := suffix[a_count]
                             
-                            split_a := prefix[a_count]
-                            split_b := suffix[a_count]
-                            
-                            cost := split_a.cost + split_b.cost
+                            cost := a.cost + b.cost
                             if min_cost > cost {
                                 min_cost = cost
                                 
+                                best_split_axis = split_axis
                                 best_a_count = a_count
-                                best_a = split_a
-                                best_b = split_b
-                                
-                                copy(best_indices, it_indices)
+                                best_a = a
+                                best_b = b
                             }
                         }
                     }
@@ -186,9 +191,11 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, tree_allocator 
                     // @note(viktor): only accept splits that are better
                     if min_cost == subs[i].cost do break split
                     
-                    copy(it_indices, best_indices)
-                    best_a.indices = it_indices[:best_a_count]
-                    best_b.indices = it_indices[best_a_count:]
+                    data := Sort_Data { best_split_axis, triangle_centers }
+                    slice.sort_by_with_data(indices, sort_along_axis, &data)
+                    
+                    best_a.indices = indices[:best_a_count]
+                    best_b.indices = indices[best_a_count:]
                     
                     ////////////////////////////////////////////////
                     
