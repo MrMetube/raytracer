@@ -119,16 +119,13 @@ lane_Transform :: struct {
 Camera :: distinct Transform
 
 Material :: struct {
-    emit:    v3,
-    reflect: v3,
-    emission: f32,
-    // 0 = mirror like for dielectrics and metals
-    // 1 = chalk  like for lambertian
-    scatter: f32, 
+    emit:     v3,
+    reflect:  v3,
+    transmit: v3,
     
+    emission:            f32,
     index_of_refraction: f32,
     transmission:        f32,
-    transmit: v3,
     
     brdf: BrdfTable,
 }

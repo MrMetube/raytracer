@@ -294,105 +294,68 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             
             ////////////////////////////////////////////////
             
-            fresnel:   lane_f32
-            refract_d: lane_v3
-            {
-                spall_scope("refraction")
-                
-                refract :: proc (incident: $V/ [$N] $E, normal: V, eta_ratio: E) -> V {
-                    cos_angle := dot(-incident, normal)
-                    k := 1 - square(eta_ratio) * (1 - square(cos_angle))
-                    a := incident * eta_ratio
-                    b := normal * (eta_ratio * cos_angle + square_root(maximum(k, 0)))
-                    root_mask := greater_equal(k, 0)
-                    result := (a - b) * cast(lane_f32) (1 & root_mask)
-                    return result
-                }
-                
-                schlick_reflectance :: proc (cos_angle, eta_ratio: lane_f32) -> lane_f32 {
-                    r := square((1 - eta_ratio) / (1 + eta_ratio))
-                    x := 1 - cos_angle
-                    result := r + (1 - r) * (x * square(square(x)))
-                    return result
-                }
-                
-                hit_angle       := dot(-ray_d, hit_normal)
-                front_face_mask := greater_than(hit_angle, 0)
-                hit_normal *= ternary(front_face_mask, cast(lane_f32) 1, -1)
-                hit_angle   = dot(-ray_d, hit_normal)
-                
-                air_index_of_refraction :: 1
-                hit_index_of_refraction := lane_gather(lane_member(material, "index_of_refraction", f32))
-                ior_ratio := hit_index_of_refraction / air_index_of_refraction
-                conditional_assign(front_face_mask, &ior_ratio, 1 / ior_ratio)
-                
-                cos_theta := clamp_01(hit_angle)
-                sin_theta := square_root(maximum(1 - square(cos_theta), 0))
-                fresnel    = schlick_reflectance(cos_theta, ior_ratio)
-                
-                total_internal_reflection := greater_than(ior_ratio * sin_theta, 1)
-                conditional_assign(total_internal_reflection, &fresnel, 1)
-                
-                refract_d = refract(ray_d, hit_normal, ior_ratio)
+            refract :: proc (incident: $V/ [$N] $E, normal: V, eta_ratio: E) -> V {
+                cos_angle := dot(-incident, normal)
+                k := 1 - square(eta_ratio) * (1 - square(cos_angle))
+                a := incident * eta_ratio
+                b := normal * (eta_ratio * cos_angle + square_root(maximum(k, 0)))
+                root_mask := greater_equal(k, 0)
+                result := (a - b) * cast(lane_f32) (1 & root_mask)
+                return result
             }
             
-            reflect_d := reflect(ray_d, hit_normal)
-            diffuse_d := normalize_or_zero(hit_normal + random_bilateral(entropy, lane_v3))
+            schlick_reflectance :: proc (cos_angle, eta_ratio: lane_f32) -> lane_f32 {
+                r := square((1 - eta_ratio) / (1 + eta_ratio))
+                x := 1 - cos_angle
+                result := r + (1 - r) * (x * square(square(x)))
+                return result
+            }
+            
+            hit_angle       := dot(-ray_d, hit_normal)
+            front_face_mask := greater_than(hit_angle, 0)
+            hit_normal *= ternary(front_face_mask, cast(lane_f32) 1, -1)
+            hit_angle   = dot(-ray_d, hit_normal)
+            
+            air_index_of_refraction :: 1
+            hit_index_of_refraction := lane_gather(lane_member(material, "index_of_refraction", f32))
+            ior_ratio := hit_index_of_refraction / air_index_of_refraction
+            conditional_assign(front_face_mask, &ior_ratio, 1 / ior_ratio)
+            
+            cos_theta := clamp_01(hit_angle)
+            sin_theta := square_root(maximum(1 - square(cos_theta), 0))
+            fresnel   := schlick_reflectance(cos_theta, ior_ratio)
+            
+            total_internal_reflection := greater_than(ior_ratio * sin_theta, 1)
+            conditional_assign(total_internal_reflection, &fresnel, 1)
+            
+            refract_d     := refract(ray_d, hit_normal, ior_ratio)
+            refract_value := lane_gather_v(lane_member(material, "transmit", v3))
+            refract_pdf   := ternary(~total_internal_reflection, 1 - fresnel, 0)
+            
+            conditional_assign(total_internal_reflection, &refract_value, 0)
             
             ////////////////////////////////////////////////
             
-            // @todo(viktor): i am not satisfied with this, can scatter just be lerped into reflection and refraction in the same way, and the other value just slides between relfection and refraction chance?
-            hit_scatter      := lane_gather(lane_member(material, "scatter", f32))
-            hit_transmission := lane_gather(lane_member(material, "transmission", f32))
-            
-            diffuse_weight      := clamp_01(hit_scatter)
-            transmission_weight := clamp_01(hit_transmission) * (1 - diffuse_weight)
-            specular_weight     := maximum(1 - diffuse_weight - transmission_weight, 0)
-            
-            reflect_weight := transmission_weight * fresnel + specular_weight
-            refract_weight := transmission_weight * (1 - fresnel)
+            reflect_d     := reflect(ray_d, hit_normal)
+            reflect_value := brdf_lookup(info.brdf_data, material, -ray_d, hit_normal, hit_tangent, hit_binormal, reflect_d)
+            reflect_pdf   := ternary(total_internal_reflection, cast(lane_f32) 1, fresnel)
             
             ////////////////////////////////////////////////
             
-            diffuse_pdf := maximum(diffuse_weight, 0.00001)
-            reflect_pdf := maximum(reflect_weight, 0.00001)
-            refract_pdf := maximum(refract_weight, 0.00001)
-            
-            choice := random_unilateral(entropy)
-            
-            choose_diffuse := less_than(choice, diffuse_weight)
-            choose_refract := less_than(choice, diffuse_weight + refract_weight) & ~choose_diffuse
-            choose_reflect := ~choose_diffuse & ~choose_refract
-            
-            ////////////////////////////////////////////////
-            
-            next_d := reflect_d
-            conditional_assign(choose_diffuse, &next_d, diffuse_d)
-            conditional_assign(choose_refract, &next_d, refract_d)
-            
-            hit_transmit := lane_gather_v(lane_member(material, "transmit", v3))
-            hit_reflect  := lane_gather_v(lane_member(material, "reflect", v3))
-            hit_diffuse  := hit_reflect
-            hit_reflect  *= brdf_lookup(info.brdf_data, material, -ray_d, hit_normal, hit_tangent, hit_binormal, reflect_d)
-            hit_diffuse  *= diffuse_weight / Pi
+            choose_refract := less_than(random_unilateral(entropy), 1 - fresnel) & ~total_internal_reflection
+            next_d         := ternary(choose_refract, refract_d, reflect_d)
             
             next_attenuation := attenuation
-            conditional_assign(hit_did_hit & choose_diffuse, &next_attenuation, attenuation * hit_diffuse  / diffuse_pdf)
-            conditional_assign(hit_did_hit & choose_refract, &next_attenuation, attenuation * hit_transmit / refract_pdf)
-            conditional_assign(hit_did_hit & choose_reflect, &next_attenuation, attenuation * hit_reflect  / reflect_pdf)
+            conditional_assign(hit_did_hit & ~choose_refract, &next_attenuation, attenuation * reflect_value / reflect_pdf)
+            conditional_assign(hit_did_hit &  choose_refract, &next_attenuation, attenuation * refract_value / refract_pdf)
             attenuation = next_attenuation
             
-            ////////////////////////////////////////////////
-            
+            // update ray origin with lane-safe offset
             next_o := fused_mul_add(ray_d, hit_closest_t, ray_o)
-            next_o += ternary(choose_refract, -hit_normal, hit_normal) * 0.001
+            next_o += ternary(choose_refract, -hit_normal, hit_normal) * 1e-3
             
             ray_o = next_o
             ray_d = next_d
-            
-            // --- optional absorption ---
-            // absorption   := lane_gather_v(lane_member(material, "absorption", v3))
-            // attenuation *= exp(-absorption * hit_t)
         }
         
         final_color_lanes = fused_mul_add(sample, sample_contribution_factor, final_color_lanes)

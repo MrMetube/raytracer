@@ -483,12 +483,11 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
             if id == state.selected_material_id {
                 layout_indent_scope(layout)
                 
-                _, scatter_released := ui_dragger(layout, &material.scatter, 0.01,  0,   1, "Scatter %f", material.scatter)
                 material.emission = max(0.000001, material.emission)
                 _, emittance_released := ui_dragger(layout, &material.emission, 1, 0.00001, 1000, "Emission %f", material.emission, flags = SliderFlags{.logarithmic})
                 _, transmission_released := ui_dragger(layout, &material.transmission, 0.01, 0, 1, "Transmission %f", material.transmission)
                 _, ior_released := ui_dragger(layout, &material.index_of_refraction, 0.01, 0, 10, "Index of Refraction %f", material.index_of_refraction)
-                if scatter_released || emittance_released || transmission_released || ior_released do state.fast_render.requested = true
+                if emittance_released || transmission_released || ior_released do state.fast_render.requested = true
                 
                 layout_advance(layout, 10)
                 layout_begin_horizontal(layout)

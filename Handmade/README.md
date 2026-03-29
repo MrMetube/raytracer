@@ -8,6 +8,10 @@ BRDFs (Bidirectional Reflectance Distribution Function) are used for reflections
 ## Screenshots
 (anti-chronological order)
 
+![Render 19](data/render_19.png)
+![Render 18](data/render_18.png)
+![Render 17](data/render_17.png)
+~300k triangles in one model.
 ![Render 16](data/render_16.png)
 The camera is inside a glass like sphere.
 ![Render 15](data/render_15.png)
