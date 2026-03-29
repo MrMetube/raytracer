@@ -20,7 +20,7 @@ Tree_Node :: struct #align(32) {
 Root_Index  :: 0
 
 Subnodes_Per_Node :: 8
-Values_Per_Node   :: 128 // determined through experimentation, higher is better, after this point there were no more gains, this may be because the most complex model is then reduced to a depth 1 tree
+Values_Per_Node   := 128 // determined through experimentation, higher is better, after this point there were no more gains, this may be because the most complex model is then reduced to a depth 1 tree
 
 Tree_Max_Depth :: 32
 
@@ -54,7 +54,8 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, tree_allocator 
     // leaves   = atmost N
     // branches = N/S parents + N/S² grandparents + ...
     // -> N leaves + branches <= 2N nodes
-    work_tree := make([dynamic] Tree_Node, 0, len(triangles)*2, allocator)
+    // @todo(viktor): why is this not enough for large models(>100k triangles)
+    work_tree := make([dynamic] Tree_Node, 0, len(triangles)*8, allocator)
     
     ////////////////////////////////////////////////
     triangle_centers := make([] v3,         len(triangles), allocator)
@@ -170,8 +171,6 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, tree_allocator 
                         }
                         
                         for i in 0..<node_count-1 {
-                            node_index := indices[i]
-                            
                             a_count := i + 1
                             a := prefix[a_count]
                             b := suffix[a_count]

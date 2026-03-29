@@ -40,9 +40,11 @@ Debug_View_Kind :: enum {
     Binormals,
 }
 
+Sort_Subnodes := false
+
 Debug_View: Debug_View_Kind
-Triangle_Threshold  : f32 = 2500
-Rectangle_Threshold : f32 = 100
+Triangle_Threshold  := 2500
+Rectangle_Threshold := 100
 
 Collect_Stats_For_Debug_View :: true
 
@@ -99,8 +101,8 @@ render_tile :: proc(render: ^Render, rect: Rectangle2i, entropy: ^RandomSeries, 
                     loops_computed   += cast_result.loops_computed
                     
                     color := cast_result.final_color
-                    triangle_color  := (cast(f32) cast_result.triangles  / LaneWidth) / Triangle_Threshold
-                    rectangle_color := (cast(f32) cast_result.rectangles / LaneWidth) / Rectangle_Threshold
+                    triangle_color  := (cast(f32) cast_result.triangles  / LaneWidth) / cast(f32) Triangle_Threshold
+                    rectangle_color := (cast(f32) cast_result.rectangles / LaneWidth) / cast(f32) Rectangle_Threshold
                     color = linear_to_srgb(color)
                     if Debug_View == Debug_View_Kind.Triangle_Tests {
                         color = triangle_color
@@ -462,7 +464,7 @@ transform_mul_0 :: proc (m: $Transform, v: $V) -> V {
 
 ////////////////////////////////////////////////
 
-hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32) -> (lane_u32, lane_f32, lane_u32, lane_v2, Test_Info) {
+hit_tree :: #force_no_inline proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32) -> (lane_u32, lane_f32, lane_u32, lane_v2, Test_Info) {
     spall_proc()
     
     inv_d     := 1 / ray_d
@@ -475,7 +477,7 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
         min := vec_cast(lane_f32, root.bounds.min)
         max := vec_cast(lane_f32, root.bounds.max)
         
-        total_hit_mask = hit_rectangle(min, max, neg_inv_o, inv_d, min_t, max_t)
+        total_hit_mask, _ = hit_rectangle(min, max, neg_inv_o, inv_d, min_t, max_t)
         when Collect_Stats_For_Debug_View {
             info.rectangles += LaneWidth
         }
@@ -490,7 +492,7 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
     tree_lane := to_lane(tree)
     tree_lane  = lane_index_offset(tree_lane, lane_offset)
     
-    stack: [32] u32
+    stack: [128] u32
     
     model_hit_t := max_t
     model_hit_mask:     lane_u32
@@ -527,18 +529,70 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
                 min := lane_gather_v(node_min)
                 max := lane_gather_v(node_max)
                 
-                bounds_hit_mask := hit_rectangle(min, max, lane_neg_inv_o, lane_inv_d, min_t, closest_t)
+                bounds_hit_mask, bounds_hit_t := hit_rectangle(min, max, lane_neg_inv_o, lane_inv_d, min_t, closest_t)
                 when Collect_Stats_For_Debug_View {
                     info.rectangles += Subnodes_Per_Node
                 }
                 if bounds_hit_mask == lane_false do continue traversal
                 
-                // @note(viktor): the last tests showed that the sorting overhead was not worth the gains it should have provided
-                subnode_indices := node.first + lane_offset
-                
-                // @note(viktor): this will be a loop unless AVX-512 is available, where it is one instruction with a few cycles of latency
-                simd.masked_compress_store(&stack[stack_count], subnode_indices, bounds_hit_mask)
-                stack_count += horizontal_add(1 & bounds_hit_mask)
+                // 121ns unsorted
+                // 131ns sorted
+                #no_bounds_check if Sort_Subnodes {
+                    spall_begin("sort subnodes")
+                    t := transmute([Subnodes_Per_Node] f32) bounds_hit_t
+                    index := transmute([Subnodes_Per_Node] u32) lane_offset
+                    
+                    // @note(viktor): sort from largest to smallest, so that the last appended node is the closest, which will be popped first
+                    swap_if :: #force_inline proc(index: ^[Subnodes_Per_Node] u32, t: ^[Subnodes_Per_Node] f32, i, j: int) {
+                        if t[i] < t[j] { swap(&t[i], &t[j]); swap(&index[i], &index[j]) }
+                    }
+                    
+                    swap_if(&index, &t, 0, 1)
+                    swap_if(&index, &t, 2, 3)
+                    swap_if(&index, &t, 4, 5)
+                    swap_if(&index, &t, 6, 7)
+                    
+                    swap_if(&index, &t, 0, 2)
+                    swap_if(&index, &t, 1, 3)
+                    swap_if(&index, &t, 4, 6)
+                    swap_if(&index, &t, 5, 7)
+                    
+                    swap_if(&index, &t, 1, 2)
+                    swap_if(&index, &t, 5, 6)
+                    swap_if(&index, &t, 0, 4)
+                    swap_if(&index, &t, 1, 5)
+                    swap_if(&index, &t, 2, 6)
+                    swap_if(&index, &t, 3, 7)
+                    
+                    swap_if(&index, &t, 2, 4)
+                    swap_if(&index, &t, 3, 5)
+                    
+                    swap_if(&index, &t, 1, 2)
+                    swap_if(&index, &t, 3, 4)
+                    swap_if(&index, &t, 5, 6)
+                    
+                    swap_if(&index, &t, 2, 3)
+                    swap_if(&index, &t, 4, 5)
+                    
+                    swap_if(&index, &t, 1, 2)
+                    swap_if(&index, &t, 3, 4)
+                    swap_if(&index, &t, 5, 6)
+                    spall_end()
+                    spall_scope("append subnodes")
+                    for sub in 0..<Subnodes_Per_Node {
+                        if extract(bounds_hit_mask, index[sub]) != 0 {
+                            stack[stack_count] = index[sub] + node.first
+                            stack_count += 1
+                        }
+                    }
+                } else {
+                    spall_scope("append subnodes")
+                    // @note(viktor): the last tests showed that the sorting overhead was not worth the gains it should have provided
+                    subnode_indices := node.first + lane_offset
+                    // @note(viktor): this will be a loop unless AVX-512 is available, where it is one instruction with a few cycles of latency
+                    simd.masked_compress_store(&stack[stack_count], subnode_indices, bounds_hit_mask)
+                    stack_count += horizontal_add(1 & bounds_hit_mask)
+                }
             } else {
                 spall_scope("triangles")
                 start :=         node.first / LaneWidth
@@ -590,7 +644,7 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
 
 ////////////////////////////////////////////////
 
-hit_rectangle :: proc (min, max: lane_v3, neg_inv_o, inv_d: lane_v3, t_min_init, t_max_init: lane_f32) -> lane_u32 {
+hit_rectangle :: proc (min, max: lane_v3, neg_inv_o, inv_d: lane_v3, t_min_init, t_max_init: lane_f32) -> (lane_u32, lane_f32) {
     t1x := fused_mul_add(min.x, inv_d.x, neg_inv_o.x)
     t2x := fused_mul_add(max.x, inv_d.x, neg_inv_o.x)
     
@@ -607,7 +661,7 @@ hit_rectangle :: proc (min, max: lane_v3, neg_inv_o, inv_d: lane_v3, t_min_init,
     tmax := minimum(minimum(t_max_init, tax.x), minimum(tax.y, tax.z))
     
     result := less_equal(tmin, tmax)
-    return result
+    return result, ternary(result, tmin, +Infinity)
 }
 
 hit_triangle :: proc (triangle: ^lane_Triangle, ray_o, ray_d: lane_v3, min_t: lane_f32, max_t: lane_f32) -> (lane_u32, lane_f32, lane_v2) {

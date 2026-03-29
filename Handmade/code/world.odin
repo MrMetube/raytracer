@@ -61,6 +61,52 @@ begin_object :: proc (world: ^World) -> ^Object {
 
 ////////////////////////////////////////////////
 
+benchmark_scene :: proc (world: ^World) {
+    // @cleanup make the model setup less fragile
+    triangles := make([dynamic] Triangle, context.temp_allocator)
+    normals   := make([dynamic] Normals, context.temp_allocator)
+    
+    {
+        // load_obj("./models/stanford/bunny.obj", &triangles, &normals)
+        load_obj("./models/stanford/lucy_280k.obj", &triangles, &normals)
+        
+        
+        object := begin_object(world)
+        model, index := begin_model()
+        object.model = index
+        object.transform.t = {0,0,0}
+        object.material = 2
+        end_model(model, triangles[:], normals[:])
+    }
+    
+    { // light
+        load_obj("./models/sphere.obj", &triangles, &normals)
+        
+        object := begin_object(world)
+        model, index := begin_model()
+        object.model = index
+        object.material = 3
+        object.transform.x = {.5,0,0}
+        object.transform.y = {0,.5,0}
+        object.transform.z = {0,0,.5}
+        object.transform.t = {0,0,5}
+        end_model(model, triangles[:], normals[:])
+    }
+    
+    { // ground
+        load_obj("./models/plane.obj", &triangles, &normals)
+        
+        
+        object := begin_object(world)
+        model, index := begin_model()
+        object.model = index
+        object.material = 1
+        object.transform.x = {50,0,0}
+        object.transform.y = {0,50,0}
+        end_model(model, triangles[:], normals[:])
+    }
+}
+
 default_scene :: proc (world: ^World) {
     // @cleanup make the model setup less fragile
     triangles := make([dynamic] Triangle, context.temp_allocator)

@@ -1,5 +1,6 @@
 package main
 
+import "base:intrinsics"
 import "core:math"
 import rl "vendor:raylib"
 
@@ -238,52 +239,69 @@ ui_mover :: proc (ui: ^UI, drag: ^v2, size: v2) -> bool {
     return result
 }
 
-ui_dragger :: proc { ui_dragger_base, ui_dragger_clamp }
-// @copypasta
-ui_dragger_clamp :: proc (layout: ^Layout, value: ^f32, speed, min, max: f32, format: string, args: ..any, flags := SliderFlags{}) -> (changed: bool, released: bool) {
+ui_dragger :: proc { ui_dragger_float, ui_dragger_int, ui_dragger_clamp_float, ui_dragger_clamp_int }
+// @copypasta clamps
+ui_dragger_clamp_float :: proc (layout: ^Layout, value: ^f32, speed, min, max: f32, format: string, args: ..any, flags := SliderFlags{}) -> (changed: bool, released: bool) {
     interaction := Interaction{ kind = .Drag, target = value }
-    before := value^
     
-    // @theme
-    text_color := Jasmine
-    if is_hot(layout.ui, interaction) {
-        text_color = Isabelline
-    } else if is_active(layout.ui, interaction) {
-        text_color = Isabelline
+    changed, released = ui_dragger_base(layout, value, speed, interaction, flags, format, ..args)
+    if changed {
+        value^ = clamp(value^, min, max)
     }
     
-    text := tprint(format, ..args)
-    size := measure_text(layout, text)
-    
-    text_p := layout.at
-    draw_text(layout, text, text_p, text_color)
-    layout_advance_2(layout, size)
-    
-    rect := rect_min_dimension(text_p, size) 
-    if rect_contains(rect, layout.ui.mouse_p) {
-        layout.ui.next_hot_interaction = interaction
+    return changed, released
+}
+ui_dragger_clamp_int :: proc (layout: ^Layout, value: ^$I, speed: f32, min, max: I, format: string, args: ..any, flags := SliderFlags{}) -> (changed: bool, released: bool) where intrinsics.type_is_integer(I) {
+    changed, released = ui_dragger_int(layout, value, speed, format, ..args, flags = flags)
+    if changed {
+        value^ = clamp(value^, min, max)
     }
+    
+    return changed, released
+}
+ui_dragger_int :: proc (layout: ^Layout, value: ^$I, speed: f32, format: string, args: ..any, flags := SliderFlags{}) -> (changed: bool, released: bool) where intrinsics.type_is_integer(I) {
+    interaction := Interaction{ kind = .Drag, target = value }
+    
+    temp := cast(f32) value^
+    changed, released = ui_dragger_base(layout, &temp, speed, interaction, flags, format, ..args)
+    
+    if changed {
+        next := round(I, temp)
+        changed = next != value^
+        value^  = next
+    }
+    
+    released = is_ended(layout.ui, interaction)
+    
+    return changed, released
+}
+ui_dragger_float :: proc (layout: ^Layout, value: ^f32, speed: f32, format: string, args: ..any) -> (changed: bool, released: bool) {
+    interaction := Interaction{ kind = .Drag, target = value }
+    changed, released = ui_dragger_base(layout, value, speed, interaction, {}, format, ..args)
+    
+    return changed, released
+}
+
+ui_dragger_base :: proc (layout: ^Layout, value: ^f32, speed: f32, interaction: Interaction, flags: SliderFlags, format: string, args: ..any) -> (changed: bool, released: bool) {
+    __ui_dragger_raw(layout, interaction, format, ..args)
     
     if is_active(layout.ui, interaction) {
-        min := min
-        max := max
-        val := value^
+        before := value^
+        val    := value^
         
+        speed := speed
         if .logarithmic in flags {
-            log_min := math.ln(min)
-            log_max := math.ln(max)
-            log_val := math.ln(val)
-            
-            log_val += speed/1000 * layout.ui.mouse_dp.x
-            log_val = clamp(log_val, log_min, log_max)
-            
-            val = math.exp(log_val)
-        } else {
-            val += speed * layout.ui.mouse_dp.x
-            val = clamp(val, min, max)
+            val = math.ln(val)
+            speed /= 1000
         }
         
-        value^ = val
+        val += speed * layout.ui.mouse_dp.x
+        
+        if .logarithmic in flags {
+            val = math.exp(val)
+        }
+        
+        value^  = val
         changed = val != before
     }
     
@@ -291,11 +309,8 @@ ui_dragger_clamp :: proc (layout: ^Layout, value: ^f32, speed, min, max: f32, fo
     
     return changed, released
 }
-ui_dragger_base :: proc (layout: ^Layout, value: ^f32, speed: f32, format: string, args: ..any) -> (changed: bool, released: bool) {
-    interaction := Interaction{ kind = .Drag, target = value }
-    
-    before := value^
-    
+
+__ui_dragger_raw :: proc (layout: ^Layout, interaction: Interaction, format: string, args: ..any) {
     // @theme
     text_color := Jasmine
     if is_hot(layout.ui, interaction) {
@@ -315,28 +330,17 @@ ui_dragger_base :: proc (layout: ^Layout, value: ^f32, speed: f32, format: strin
     if rect_contains(rect, layout.ui.mouse_p) {
         layout.ui.next_hot_interaction = interaction
     }
-    
-    if is_active(layout.ui, interaction) {
-        val := value^
-        val += speed * layout.ui.mouse_dp.x
-        
-        value^ = val
-        changed = val != before
-    }
-    
-    released = is_ended(layout.ui, interaction)
-    
-    return changed, released
 }
 
 ////////////////////////////////////////////////
 
-ui_toggle :: proc (layout: ^Layout, condition: ^bool, text: string) {
+ui_toggle :: proc (layout: ^Layout, condition: ^bool, text: string) -> bool {
     interaction := set_value_interaction(condition, !condition^)
     pressed := ui_button_highlighted(layout, interaction, condition^, text)
     if pressed {
         condition^ = !condition^
     }
+    return pressed
 }
 
 ui_collapser :: proc (layout: ^Layout, is_open: ^bool, text: string) -> bool {

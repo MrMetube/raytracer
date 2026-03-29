@@ -32,7 +32,6 @@ State :: struct {
     tree_info_is_open: bool,
     materials_is_open: bool,
     
-    selected_model_build_time: time.Duration,
     selected_model_info: Tree_Info,
     
     ////////////////////////////////////////////////
@@ -59,7 +58,9 @@ State :: struct {
 init_state :: proc (state: ^State) {
     state.camera = camera_look_at({0, -7, 3}, {0, 0, 1})
     world_init(&state.world)
-    default_scene(&state.world)
+    
+    benchmark_scene(&state.world)
+    // default_scene(&state.world)
     
     state.preview_render_p = .5 * vec_cast(f32, state.window_size - {state.preview_render.image.width, state.preview_render.image.height})
     state.preview_render_drag_size = 12
@@ -344,6 +345,8 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
                 state.fast_render.requested = true
             }
         }
+        layout_advance(layout, 10)
+        if ui_toggle(layout, &Sort_Subnodes, "Sort Subnodes") { state.fast_render.requested = true }
     layout_end_horizontal(layout)
     layout_advance(layout, 10)
     
@@ -351,13 +354,13 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
     if Debug_View in (bit_set[Debug_View_Kind]{ .Triangle_Tests, .Rectangle_Tests, .Both_Tests }) {
         // @cleanup
         view := view_magnitude(Triangle_Threshold, precision = 1)
-        _, released := ui_dragger(layout, &Triangle_Threshold, 10, 10, 10000, "Triangle Threshold %v", view, flags = { .logarithmic })
+        _, released := ui_dragger(layout, &Triangle_Threshold, 10, 10, 10000, "Triangle Threshold %v", view, flags = SliderFlags{ .logarithmic })
         if released {
             state.fast_render.requested = true
         }
         
         view = view_magnitude(Rectangle_Threshold, precision = 1)
-        _, released = ui_dragger(layout, &Rectangle_Threshold, 10, 10, 10000, "Rectangle Threshold %v", view, flags = { .logarithmic })
+        _, released = ui_dragger(layout, &Rectangle_Threshold, 10, 10, 10000, "Rectangle Threshold %v", view, flags = SliderFlags{ .logarithmic })
         if released {
             state.fast_render.requested = true
         }
@@ -381,6 +384,36 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
     if ui_collapser(layout, &state.ojects_is_open, "Objects") {
         layout_indent_scope(layout)
         
+        // @api, can this just be a source_location for unique ui elements(no loop, no function used in loop)
+        layout_begin_horizontal(layout)
+            rebuild_all: bool
+            if ui_button(layout, set_value_interaction(&rebuild_all, true), "Rebuild all Trees") {
+                rebuild_all = true
+            }
+            layout_advance(layout, 10)
+            // @api allow integer values
+            _, v_released := ui_dragger(layout, &Values_Per_Node, 1, 8, 1024, "Values per Node %v", Values_Per_Node, flags = SliderFlags{ .logarithmic })
+            if v_released do rebuild_all = true
+            
+            if rebuild_all {
+                start := time.now()
+                for object_index in 1..=state.world.last_used_object_index {
+                    object := &state.world.objects[object_index]
+                        
+                    m := &Models[object.model]
+                    // @api
+                    delete(m.tree,           context.allocator)
+                    delete(m.lane_triangles, context.allocator)
+                    delete(m.padded_normals, context.allocator)
+                    m.tree, m.lane_triangles, m.padded_normals = tree_build(m.raw_triangles, m.raw_normals, context.allocator)
+                }
+                    
+                print("building trees took %v\n", time.since(start))
+                
+                state.fast_render.requested = true
+            }
+        layout_end_horizontal(layout)
+        
         // @api maybe make an iterator?
         for object_index in 1..=state.world.last_used_object_index {
             object := &state.world.objects[object_index]
@@ -403,32 +436,15 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
                     }
                 }
                 
-                if ui_collapser(layout, &state.tree_info_is_open, "Tree") {
-                    layout_indent_scope(layout)
+                if ui_collapser(layout, &state.tree_info_is_open, "Inspect Tree") {
+                    m := &Models[object.model]
+                    state.selected_model_info = inspect(m.tree)
                     
-                    ui_text(layout, "build took %v", state.selected_model_build_time)
+                    layout_indent_scope(layout)
                     ui_text(layout, "triangle count %v", state.selected_model_info.value_count)
                     ui_text(layout, "node count %v", state.selected_model_info.node_count)
                     ui_text(layout, "depth: max = %v, avg = %.2f", state.selected_model_info.depth.max, state.selected_model_info.depth.avg)
                     ui_text(layout, "values per node: max = %v, avg = %.2f", state.selected_model_info.values_per_node.max, state.selected_model_info.values_per_node.avg)
-                    layout_advance(layout, 10)
-                    
-                    m := &Models[object.model]
-                    if ui_button(layout, { kind = .Select, target = &m.tree },  "Rebuild") {
-                        start := time.now()
-                        
-                        // @api
-                        delete(m.tree,           context.allocator)
-                        delete(m.lane_triangles, context.allocator)
-                        delete(m.padded_normals, context.allocator)
-                        m.tree, m.lane_triangles, m.padded_normals = tree_build(m.raw_triangles, m.raw_normals, context.allocator)
-                        
-                        state.selected_model_build_time = time.since(start)
-                        print("building tree took %v\n", state.selected_model_build_time)
-                        state.selected_model_info = inspect(m.tree)
-                        
-                        state.fast_render.requested = true
-                    }
                 }
                                 
                 // @cleanup @api make a background on the value and allow a view parameter for the text of the button/dragger
@@ -453,6 +469,7 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
         }
     }
     
+    
     layout_advance(layout, layout.font_size)
     if ui_collapser(layout, &state.materials_is_open, "Materials") {
         layout_indent_scope(layout)
@@ -466,11 +483,11 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
             if id == state.selected_material_id {
                 layout_indent_scope(layout)
                 
-                _, scatter_released := ui_dragger_clamp(layout, &material.scatter, 0.01,  0,   1, "Scatter %f", material.scatter)
+                _, scatter_released := ui_dragger(layout, &material.scatter, 0.01,  0,   1, "Scatter %f", material.scatter)
                 material.emission = max(0.000001, material.emission)
-                _, emittance_released := ui_dragger_clamp(layout, &material.emission, 1, 0.00001, 1000, "Emission %f", material.emission, flags = {.logarithmic})
-                _, transmission_released := ui_dragger_clamp(layout, &material.transmission, 0.01, 0, 1, "Transmission %f", material.transmission)
-                _, ior_released := ui_dragger_clamp(layout, &material.index_of_refraction, 0.01, 0, 10, "Index of Refraction %f", material.index_of_refraction)
+                _, emittance_released := ui_dragger(layout, &material.emission, 1, 0.00001, 1000, "Emission %f", material.emission, flags = SliderFlags{.logarithmic})
+                _, transmission_released := ui_dragger(layout, &material.transmission, 0.01, 0, 1, "Transmission %f", material.transmission)
+                _, ior_released := ui_dragger(layout, &material.index_of_refraction, 0.01, 0, 10, "Index of Refraction %f", material.index_of_refraction)
                 if scatter_released || emittance_released || transmission_released || ior_released do state.fast_render.requested = true
                 
                 layout_advance(layout, 10)

@@ -74,6 +74,8 @@ load_obj :: proc (path: string, triangles: ^[dynamic] Triangle, triangle_normals
         
         return v
     }
+    
+    print("Loaded model '%v' with %v triangles\n", path, len(triangles))
 }
 
 parse_f32 :: proc(str: string) -> f32 {
