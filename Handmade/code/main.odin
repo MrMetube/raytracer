@@ -59,8 +59,8 @@ init_state :: proc (state: ^State) {
     state.camera = camera_look_at({0, -7, 3}, {0, 0, 1})
     world_init(&state.world)
     
-    benchmark_scene(&state.world)
-    // default_scene(&state.world)
+    // benchmark_scene(&state.world)
+    default_scene(&state.world)
     
     state.preview_render_p = .5 * vec_cast(f32, state.window_size - {state.preview_render.image.width, state.preview_render.image.height})
     state.preview_render_drag_size = 12
@@ -74,8 +74,8 @@ init_state :: proc (state: ^State) {
     state.fast_image_is_focussed = true
     
     init_render_settings(&state.quality_render, 64, 16, state.window_size, 2)
-    init_render_settings(&state.fast_render,    8,   4, state.window_size, 6)
-    init_render_settings(&state.preview_render,   32,  4, 128, 1)
+    init_render_settings(&state.fast_render,     8,  8, state.window_size, 6)
+    init_render_settings(&state.preview_render, 32,  8, 128, 1)
 }
 
 main :: proc () {

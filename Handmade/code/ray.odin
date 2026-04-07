@@ -176,7 +176,7 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
         lane_mask   := lane_true
         sample: lane_v3
         
-        bounces: for _ in 0..<max_bounce_count {
+        bounces: for bounce_index in 0..<max_bounce_count {
             spall_scope("ray bounce")
             
             
@@ -287,9 +287,9 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             spall_end()
             
             #partial switch Debug_View {
-            case  .Normals:  sample = vec_abs(hit_normal);   break bounces
-            case .Tangents:  sample = vec_abs(hit_tangent);  break bounces
-            case .Binormals: sample = vec_abs(hit_binormal); break bounces
+                case  .Normals:  sample = vec_abs(hit_normal);   break bounces
+                case .Tangents:  sample = vec_abs(hit_tangent);  break bounces
+                case .Binormals: sample = vec_abs(hit_binormal); break bounces
             }
             
             ////////////////////////////////////////////////
@@ -342,6 +342,23 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             
             ////////////////////////////////////////////////
             
+            early_termination_start :: cast(u32) 4
+            if bounce_index < early_termination_start {
+                early_termination_min :: cast(lane_f32) 0.05
+                early_termination_max :: cast(lane_f32) 0.95
+                
+                max_component        := maximum(attenuation.x, maximum(attenuation.y, attenuation.z))
+                survival_probability := clamp(max_component, early_termination_min, early_termination_max)
+                
+                survive_mask := less_than(random_unilateral(entropy), survival_probability)
+                lane_mask &= survive_mask
+                if lane_mask == lane_false do break bounces
+                
+                attenuation = attenuation / survival_probability
+            }
+            
+            ////////////////////////////////////////////////
+            
             choose_refract := less_than(random_unilateral(entropy), 1 - fresnel) & ~total_internal_reflection
             next_d         := ternary(choose_refract, refract_d, reflect_d)
             
@@ -350,7 +367,6 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             conditional_assign(hit_did_hit &  choose_refract, &next_attenuation, attenuation * refract_value / refract_pdf)
             attenuation = next_attenuation
             
-            // update ray origin with lane-safe offset
             next_o := fused_mul_add(ray_d, hit_closest_t, ray_o)
             next_o += ternary(choose_refract, -hit_normal, hit_normal) * 1e-3
             
