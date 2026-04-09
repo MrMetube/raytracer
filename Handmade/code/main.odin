@@ -347,6 +347,7 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
         }
         layout_advance(layout, 10)
         if ui_toggle(layout, &Sort_Subnodes, "Sort Subnodes") { state.fast_render.requested = true }
+        if ui_toggle(layout, &Early_Elimination, "Early Elimination") { state.fast_render.requested = true }
     layout_end_horizontal(layout)
     layout_advance(layout, 10)
     
@@ -484,10 +485,11 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
                 layout_indent_scope(layout)
                 
                 material.emission = max(0.000001, material.emission)
+                _, roughness_released := ui_dragger(layout, &material.roughness, 0.001, 0, 1, "Roughness %f", material.roughness)
                 _, emittance_released := ui_dragger(layout, &material.emission, 1, 0.00001, 1000, "Emission %f", material.emission, flags = SliderFlags{.logarithmic})
-                _, transmission_released := ui_dragger(layout, &material.transmission, 0.01, 0, 1, "Transmission %f", material.transmission)
+                _, transmission_released := ui_dragger(layout, &material.transmission, 0.001, 0, 1, "Transmission %f", material.transmission)
                 _, ior_released := ui_dragger(layout, &material.index_of_refraction, 0.01, 0, 10, "Index of Refraction %f", material.index_of_refraction)
-                if emittance_released || transmission_released || ior_released do state.fast_render.requested = true
+                if roughness_released || emittance_released || transmission_released || ior_released do state.fast_render.requested = true
                 
                 layout_advance(layout, 10)
                 layout_begin_horizontal(layout)
@@ -609,16 +611,18 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Layout, settings: ^Rend
         layout_end_horizontal(layout)
         
         layout_begin_horizontal(layout)
+            // @todo(viktor): just a dragger?
             if ui_button(layout, set_value_interaction(&settings.max_bounce_count, settings.max_bounce_count - 1), "-") do settings.max_bounce_count -= settings.max_bounce_count <= 8 ? 1 : 2
             layout_advance(layout, 5)
             if ui_button(layout, set_value_interaction(&settings.max_bounce_count, settings.max_bounce_count + 1), "+") do settings.max_bounce_count += settings.max_bounce_count  < 8 ? 1 : 2
-            settings.max_bounce_count = clamp(settings.max_bounce_count, 1, 16)
+            settings.max_bounce_count = clamp(settings.max_bounce_count, 1, 32)
             layout_advance(layout, 5)
             ui_text(layout, "bounces %v", settings.max_bounce_count)
         layout_end_horizontal(layout)
         
         layout_begin_horizontal(layout)
             if !settings.active {
+                // @todo(viktor): this generally sucks to use and should just allow the user to set a resolution maybe from a small selection of reasonable ones
                 before := settings.image_size_factor
                 if ui_button(layout, set_value_interaction(&settings.image_size_factor, settings.image_size_factor + 1), "-") do settings.image_size_factor += 1
                 layout_advance(layout, 5)

@@ -123,7 +123,8 @@ Material :: struct {
     reflect:  v3,
     transmit: v3,
     
-    emission:            f32,
+    emission: f32,
+    roughness:  f32,
     index_of_refraction: f32,
     transmission:        f32,
     
