@@ -52,6 +52,7 @@ Collect_Stats_For_Debug_View :: true
 Render_Tile_Info :: struct #all_or_none {
     triangles: [] lane_Triangle,
     normals:   [] Normals,
+    uvs:       [] UVs,
     trees:     [] Tree_Node,
     models:    [] RenderModel,
     materials: [] Material,
@@ -261,9 +262,17 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             hit_normal:   lane_v3
             hit_tangent:  lane_v3
             hit_binormal: lane_v3
+            hit_texture_uv: lane_v2
             {
                 normals_offset   := lane_gather(lane_member(model, "normals_offset", u32))
+                uvs_offset   := lane_gather(lane_member(model, "uvs_offset", u32))
                 triangle_normals := lane_index(to_lane(info.normals), normals_offset + hit_triangle_index)
+                triangle_uvs := lane_index(to_lane(info.uvs), uvs_offset + hit_triangle_index)
+                
+                t0 := lane_gather_v(lane_index(triangle_uvs, 0))
+                t1 := lane_gather_v(lane_index(triangle_uvs, 1))
+                t2 := lane_gather_v(lane_index(triangle_uvs, 2))
+                hit_texture_uv = barycentric_blend(t0, t1, t2, hit_triangle_uv)
                 
                 n0 := lane_gather_v(lane_index(triangle_normals, 0))
                 n1 := lane_gather_v(lane_index(triangle_normals, 1))
@@ -314,7 +323,30 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 reflect_d := linear_blend(reflect_bounce, random_bounce, roughness)
                 
                 reflectance := brdf_lookup(info.brdf_data, material, -ray_d, hit_normal, hit_tangent, hit_binormal, reflect_d)
-                reflectance *= lane_gather_v(lane_member(material, "reflect", v3))
+                reflect_color := lane_gather_v(lane_member(material, "reflect", v3))
+                for lane in 0..<LaneWidth {
+                    model := lane_extract(model, lane)
+                    // @todo(viktor): bilinear blend
+                    uv := extract(hit_texture_uv, lane)
+                    i := uv * vec_cast(f32, model.texture.width, model.texture.height)
+                    s := floor_v(i32, i)
+                    f := i - vec_cast(f32, s)
+                    s00 := clamp(s + {0, 0}, v2i{0,0}, v2i{model.texture.width, model.texture.height}-1)
+                    s01 := clamp(s + {0, 1}, v2i{0,0}, v2i{model.texture.width, model.texture.height}-1)
+                    s10 := clamp(s + {1, 0}, v2i{0,0}, v2i{model.texture.width, model.texture.height}-1)
+                    s11 := clamp(s + {1, 1}, v2i{0,0}, v2i{model.texture.width, model.texture.height}-1)
+                    c00 := model.texture.data[s00.y * model.texture.width + s00.x]
+                    c01 := model.texture.data[s01.y * model.texture.width + s01.x]
+                    c10 := model.texture.data[s10.y * model.texture.width + s10.x]
+                    c11 := model.texture.data[s11.y * model.texture.width + s11.x]
+                    v00 := color_from_u8(c00)
+                    v01 := color_from_u8(c01)
+                    v10 := color_from_u8(c10)
+                    v11 := color_from_u8(c11)
+                    v := bilinear_blend_v(v00, v01, v10, v11, f)
+                    replace(&reflect_color, lane, v.rgb)
+                }
+                reflectance *= reflect_color
                 // reflectance *= maximum(dot(hit_normal, reflect_d), 0)
                 
                 conditional_assign(hit_did_hit, &attenuation, attenuation * reflectance)
@@ -474,9 +506,24 @@ transform_mul_0 :: proc (m: $Transform, v: $V) -> V {
     return result
 }
 
+invert :: proc (m: $Transform) -> Transform {
+    // @todo(viktor): check that the determinant is ok
+    determinant := dot(m.x, cross(m.y, m.z))
+    inv_x := cross(m.y, m.z) / determinant
+    inv_y := cross(m.z, m.x) / determinant
+    inv_z := cross(m.x, m.y) / determinant
+    
+    result: Transform
+    result.x = inv_x
+    result.y = inv_y
+    result.z = inv_z
+    result.t = transform_mul_0(result, -m.t)
+    return result
+}
+
 ////////////////////////////////////////////////
 
-hit_tree :: #force_no_inline proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32) -> (lane_u32, lane_f32, lane_u32, lane_v2, Test_Info) {
+hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32) -> (lane_u32, lane_f32, lane_u32, lane_v2, Test_Info) {
     spall_proc()
     
     inv_d     := 1 / ray_d

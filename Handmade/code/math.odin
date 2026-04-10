@@ -420,6 +420,12 @@ color_to_u8_4 :: proc (color: v4) -> Color {
     return result
 }
 
+color_from_u8 :: proc (color: Color) -> v4 {
+    result := vec_cast(f32, color)
+    result /= 255
+    return result
+}
+
 ////////////////////////////////////////////////
 // Simd operations
 

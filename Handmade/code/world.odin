@@ -64,23 +64,25 @@ begin_object :: proc (world: ^World) -> ^Object {
 benchmark_scene :: proc (world: ^World) {
     // @cleanup make the model setup less fragile
     triangles := make([dynamic] Triangle, context.temp_allocator)
-    normals   := make([dynamic] Normals, context.temp_allocator)
+    normals   := make([dynamic] Normals,  context.temp_allocator)
+    uvs       := make([dynamic] UVs,      context.temp_allocator)
+    textures := make(map[string] Image, context.temp_allocator)
+    texture: Image
     
     {
-        // load_obj("./models/stanford/bunny.obj", &triangles, &normals)
-        load_obj("./models/stanford/lucy_280k.obj", &triangles, &normals)
-        
+        // load_obj(&textures, "./models", "stanford/bunny.obj", &triangles, &normals, &uvs, &texture)
+        load_obj(&textures, "./models", "stanford/lucy_280k.obj", &triangles, &normals, &uvs, &texture)
         
         object := begin_object(world)
         model, index := begin_model()
         object.model = index
         object.transform.t = {0,0,0}
         object.material = 2
-        end_model(model, triangles[:], normals[:])
+        end_model(model, triangles[:], normals[:], uvs[:], texture)
     }
     
     { // light
-        load_obj("./models/sphere.obj", &triangles, &normals)
+        load_obj(&textures, "./models", "sphere.obj", &triangles, &normals, &uvs, &texture)
         
         object := begin_object(world)
         model, index := begin_model()
@@ -90,11 +92,11 @@ benchmark_scene :: proc (world: ^World) {
         object.transform.y = {0,.5,0}
         object.transform.z = {0,0,.5}
         object.transform.t = {0,0,16}
-        end_model(model, triangles[:], normals[:])
+        end_model(model, triangles[:], normals[:], uvs[:], texture)
     }
     
     { // ground
-        load_obj("./models/plane.obj", &triangles, &normals)
+        load_obj(&textures, "./models", "plane.obj", &triangles, &normals, &uvs, &texture)
         
         
         object := begin_object(world)
@@ -103,32 +105,55 @@ benchmark_scene :: proc (world: ^World) {
         object.material = 1
         object.transform.x = {50,0,0}
         object.transform.y = {0,50,0}
-        end_model(model, triangles[:], normals[:])
+        end_model(model, triangles[:], normals[:], uvs[:], texture)
+    }
+}
+
+kenney_scene :: proc (world: ^World) {
+    // @cleanup make the model setup less fragile
+    triangles := make([dynamic] Triangle, context.temp_allocator)
+    normals   := make([dynamic] Normals,  context.temp_allocator)
+    uvs       := make([dynamic] UVs,      context.temp_allocator)
+    textures := make(map[string] Image, context.temp_allocator)
+    texture: Image
+    
+    {
+        load_obj(&textures, "./models/kenney_graveyard-kit/Models/OBJ format", "pine-crooked.obj", &triangles, &normals, &uvs, &texture, flip_yz = true)
+        
+        object := begin_object(world)
+        model, index := begin_model()
+        object.model = index
+        object.material = 1
+        object.transform.t = {0,0,.1}
+        object.transform.x = {3,0,0}
+        object.transform.y = {0,3,0}
+        object.transform.z = {0,0,3}
+        end_model(model, triangles[:], normals[:], uvs[:], texture)
+    }
+    { // ground
+        load_obj(&textures, "./models", "plane.obj", &triangles, &normals, &uvs, &texture)
+        
+        
+        object := begin_object(world)
+        model, index := begin_model()
+        object.model = index
+        object.material = 4
+        object.transform.x = {50,0,0}
+        object.transform.y = {0,50,0}
+        end_model(model, triangles[:], normals[:], uvs[:], texture)
     }
 }
 
 default_scene :: proc (world: ^World) {
     // @cleanup make the model setup less fragile
     triangles := make([dynamic] Triangle, context.temp_allocator)
-    normals   := make([dynamic] Normals, context.temp_allocator)
+    normals   := make([dynamic] Normals,  context.temp_allocator)
+    uvs       := make([dynamic] UVs,      context.temp_allocator)
+    textures := make(map[string] Image, context.temp_allocator)
+    texture: Image
     
     {
-        // 0 =   3488 triangles
-        // 1 =  19480 triangles, 5.5x 0
-        // 2 = 145620 triangles, 7.5x 1
-        
-        load_obj("./models/teapot0.obj", &triangles, &normals)
-        
-        object := begin_object(world)
-        model, index := begin_model()
-        object.model = index
-        object.material = 7
-        object.transform.t = {-3,0,1.5}
-        end_model(model, triangles[:], normals[:])
-    }
-    
-    {
-        load_obj("./models/suzanne.obj", &triangles, &normals)
+        load_obj(&textures, "./models", "suzanne.obj", &triangles, &normals, &uvs, &texture)
         
         
         object := begin_object(world)
@@ -136,11 +161,11 @@ default_scene :: proc (world: ^World) {
         object.model = index
         object.transform.t = {2.5,0,1}
         object.material = 4
-        end_model(model, triangles[:], normals[:])
+        end_model(model, triangles[:], normals[:], uvs[:], texture)
     }
     
     { // light
-        load_obj("./models/sphere.obj", &triangles, &normals)
+        load_obj(&textures, "./models", "sphere.obj", &triangles, &normals, &uvs, &texture)
         
         object := begin_object(world)
         model, index := begin_model()
@@ -150,24 +175,24 @@ default_scene :: proc (world: ^World) {
         object.transform.y = {0,.5,0}
         object.transform.z = {0,0,.5}
         object.transform.t = {0,0,3}
-        end_model(model, triangles[:], normals[:])
+        end_model(model, triangles[:], normals[:], uvs[:], texture)
     }
     
     {
-        // load_obj("./models/uvsphere.obj", &triangles, &normals)
-        load_obj("./models/cube_smooth.obj", &triangles, &normals)
+        // load_obj(&textures, "./models", "uvsphere.obj", &triangles, &normals, &uvs, &texture)
+        load_obj(&textures, "./models", "cube_smooth.obj", &triangles, &normals, &uvs, &texture)
      
         
         object := begin_object(world)
         model, index := begin_model()
         object.model = index
         object.material = 5
-        object.transform.t = {0,0,1}
-        end_model(model, triangles[:], normals[:])
+        object.transform.t = {-1,0,1}
+        end_model(model, triangles[:], normals[:], uvs[:], texture)
     }
     
     { // ground
-        load_obj("./models/plane.obj", &triangles, &normals)
+        load_obj(&textures, "./models", "plane.obj", &triangles, &normals, &uvs, &texture)
         
         
         object := begin_object(world)
@@ -176,6 +201,6 @@ default_scene :: proc (world: ^World) {
         object.material = 1
         object.transform.x = {50,0,0}
         object.transform.y = {0,50,0}
-        end_model(model, triangles[:], normals[:])
+        end_model(model, triangles[:], normals[:], uvs[:], texture)
     }
 }

@@ -43,7 +43,7 @@ Split_Node :: struct {
 
 // @important @volatile The triangles buffer is sorted at the end.
 // You need to pass all per vertex data along, so that it can be sorted alongside the vertices.
-tree_build :: proc (triangles: [] Triangle, normals: [] Normals, tree_allocator := context.allocator) -> ([] Tree_Node, [] lane_Triangle, [] Normals) {
+tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tree_allocator := context.allocator) -> ([] Tree_Node, [] lane_Triangle, [] Normals, [] UVs) {
     assert(len(triangles) != 0)
     
     allocator := context.temp_allocator
@@ -251,6 +251,7 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, tree_allocator 
     
     lane_triangles := make([] lane_Triangle, aligned_size / LaneWidth, tree_allocator)
     padded_normals := make([] Normals, aligned_size, tree_allocator)
+    padded_uvs     := make([] UVs, aligned_size, tree_allocator)
     
     next_free_value_index: u32
     for &node, node_index in tree {
@@ -265,6 +266,7 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, tree_allocator 
             value_index := node.first + cast(u32) offset
             
             padded_normals[value_index] = normals[buffer_index]
+            padded_uvs[value_index]     = uvs[buffer_index]
             
             lane_index  := value_index / LaneWidth
             lane_offset := value_index % LaneWidth
@@ -275,7 +277,7 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, tree_allocator 
     }
     assert(next_free_value_index == aligned_size)
     
-    return tree, lane_triangles, padded_normals
+    return tree, lane_triangles, padded_normals, padded_uvs
 }
 
 ////////////////////////////////////////////////

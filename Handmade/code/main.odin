@@ -60,7 +60,8 @@ init_state :: proc (state: ^State) {
     world_init(&state.world)
     
     // benchmark_scene(&state.world)
-    default_scene(&state.world)
+    // default_scene(&state.world)
+    kenney_scene(&state.world)
     
     state.preview_render_p = .5 * vec_cast(f32, state.window_size - {state.preview_render.image.width, state.preview_render.image.height})
     state.preview_render_drag_size = 12
@@ -402,13 +403,9 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State) {
                     object := &state.world.objects[object_index]
                         
                     m := &Models[object.model]
-                    // @api
-                    delete(m.tree,           context.allocator)
-                    delete(m.lane_triangles, context.allocator)
-                    delete(m.padded_normals, context.allocator)
-                    m.tree, m.lane_triangles, m.padded_normals = tree_build(m.raw_triangles, m.raw_normals, context.allocator)
+                    model_rebuild_tree(m)
                 }
-                    
+                
                 print("building trees took %v\n", time.since(start))
                 
                 state.fast_render.requested = true

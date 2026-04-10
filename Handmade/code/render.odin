@@ -22,7 +22,7 @@ Render_Settings :: struct {
     display_progress: bool,
     
     start, end: time.Time,
-    render_time: Stat(time.Duration),
+    render_time:  Stat(time.Duration),
     time_per_ray: Stat(time.Duration),
     
     image:   Image,
@@ -40,7 +40,7 @@ Render_Settings :: struct {
     
     rays_per_pixel:   u32,
     max_bounce_count: u32,
- 
+    
     stats: Render_Stats,
 }
 
@@ -51,6 +51,7 @@ Render :: struct {
     
     triangles: [] lane_Triangle,
     normals:   [] Normals,
+    uvs:       [] UVs,
     trees:     [] Tree_Node,
     models:    [] RenderModel,
     materials: [] Material,
@@ -63,14 +64,18 @@ Render :: struct {
 }
 
 Normals :: [3] v3
+UVs     :: [3] v2
 
 Model :: struct {
     raw_triangles: [] Triangle,
     raw_normals:   [] Normals,
+    raw_uvs:       [] UVs,
+    base_color:    Image,
     
     tree:           Tree,
     lane_triangles: [] lane_Triangle,
     padded_normals: [] Normals,
+    padded_uvs:     [] UVs,
 }
 
 Draw_Model :: struct {
@@ -84,8 +89,12 @@ RenderModel :: struct {
     triangle_count:  u32,
     normals_offset: u32,
     normals_count:  u32,
+    uvs_offset: u32,
+    uvs_count:  u32,
     tree_offset: u32,
     tree_count:  u32,
+    
+    texture: Image,
     
     material:  Material_Id,
     
@@ -151,11 +160,28 @@ begin_model :: proc () -> (^Model, Model_Id) {
     return result, last_used_model_id
 }
 
-end_model :: proc (model: ^Model, triangles: [] Triangle, normals: [] Normals) {
+end_model :: proc (model: ^Model, triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, texture: Image) {
     model.raw_triangles = make_shallow_copy(triangles, context.allocator)
     model.raw_normals   = make_shallow_copy(normals,   context.allocator)
+    model.raw_uvs       = make_shallow_copy(uvs,       context.allocator)
     
-    model.tree, model.lane_triangles, model.padded_normals = tree_build(model.raw_triangles, model.raw_normals, context.allocator)
+    texture := texture
+    if texture.data == nil {
+        pixel := make([] Color, 1, context.allocator)
+        pixel[0] = 255
+        texture = { pixel, 1, 1 }
+    }
+    model.base_color = texture
+    
+    model_rebuild_tree(model)
+}
+
+model_rebuild_tree :: proc (model: ^Model) {
+    // @api
+    delete(model.tree,           context.allocator)
+    delete(model.lane_triangles, context.allocator)
+    delete(model.padded_normals, context.allocator)
+    model.tree, model.lane_triangles, model.padded_normals, model.padded_uvs = tree_build(model.raw_triangles, model.raw_normals, model.raw_uvs, context.allocator)
 }
 
 ////////////////////////////////////////////////
@@ -263,72 +289,76 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
     
     settings.stats = {}
     
-    total_triangle_count: u32
-    total_normals_count: u32
-    total_tree_count: u32
+    total_count_triangle: u32
+    total_count_normals: u32
+    total_count_uvs: u32
+    total_count_tree: u32
     for model in models {
-        total_triangle_count += cast(u32) len(model.lane_triangles)
-        total_normals_count  += cast(u32) len(model.padded_normals)
-        total_tree_count     += cast(u32) len(model.tree)
+        total_count_triangle += cast(u32) len(model.lane_triangles)
+        total_count_normals  += cast(u32) len(model.padded_normals)
+        total_count_uvs      += cast(u32) len(model.padded_uvs)
+        total_count_tree     += cast(u32) len(model.tree)
     }
-    next_free_triangle_offset: u32
-    next_free_normals_offset: u32
-    next_free_tree_offset: u32
+    next_free_offset_triangle: u32
+    next_free_offset_normals: u32
+    next_free_offset_uvs: u32
+    next_free_offset_tree: u32
     
-    render.triangles = make([] lane_Triangle, total_triangle_count, settings.allocator)
-    render.normals   = make([] Normals,       total_normals_count,  settings.allocator)
-    render.trees     = make([] Tree_Node ,    total_tree_count,     settings.allocator)
+    render.triangles = make([] lane_Triangle, total_count_triangle, settings.allocator)
+    render.normals   = make([] Normals,       total_count_normals,  settings.allocator)
+    render.uvs       = make([] UVs,           total_count_normals,  settings.allocator)
+    render.trees     = make([] Tree_Node ,    total_count_tree,     settings.allocator)
     
     render.models = make([] RenderModel, len(models), settings.allocator)
     for model, model_index in models {
         rm := &render.models[model_index]
         
+        rm.texture  = model.base_color
         rm.material = model.material
         rm.forward  = model.transform
         
-        determinant := dot(model.transform.x, cross(model.transform.y, model.transform.z))
-        inv_x := cross(model.transform.y, model.transform.z) / determinant
-        inv_y := cross(model.transform.z, model.transform.x) / determinant
-        inv_z := cross(model.transform.x, model.transform.y) / determinant
-        rm.inverse.x = inv_x
-        rm.inverse.y = inv_y
-        rm.inverse.z = inv_z
-        rm.inverse.t = transform_mul_0(rm.inverse, -rm.forward.t)
+        rm.inverse = invert(model.transform)
+        
         rm.lane_inverse.x = vec_cast(lane_f32, rm.inverse.x)
         rm.lane_inverse.y = vec_cast(lane_f32, rm.inverse.y)
         rm.lane_inverse.z = vec_cast(lane_f32, rm.inverse.z)
         rm.lane_inverse.t = vec_cast(lane_f32, rm.inverse.t)
         
-        rm.normal.x = inv_x
-        rm.normal.y = inv_y
-        rm.normal.z = inv_z
-        rm.normal.t = {}
-        rm.normal = transform_transpose(rm.normal)
+        temp := rm.inverse
+        temp.t = {}
+        rm.normal = transform_transpose(temp)
         
         {
-            rm.triangle_offset = next_free_triangle_offset
+            rm.triangle_offset = next_free_offset_triangle
             rm.triangle_count  = cast(u32) len(model.lane_triangles)
-            next_free_triangle_offset += rm.triangle_count
-            triangles := render.triangles[rm.triangle_offset : rm.triangle_offset + rm.triangle_count]
+            next_free_offset_triangle += rm.triangle_count
+            triangles := render.triangles[rm.triangle_offset :][: rm.triangle_count]
             copy(triangles, model.lane_triangles)
             
-            rm.normals_offset = next_free_normals_offset
+            rm.normals_offset = next_free_offset_normals
             rm.normals_count  = cast(u32) len(model.padded_normals)
-            next_free_normals_offset += rm.normals_count
-            normals := render.normals[rm.normals_offset : rm.normals_offset + rm.normals_count]
+            next_free_offset_normals += rm.normals_count
+            normals := render.normals[rm.normals_offset :][: rm.normals_count]
             copy(normals, model.padded_normals)
             
-            rm.tree_offset = next_free_tree_offset
+            rm.uvs_offset = next_free_offset_uvs
+            rm.uvs_count  = cast(u32) len(model.padded_uvs)
+            next_free_offset_uvs += rm.uvs_count
+            uvs := render.uvs[rm.uvs_offset :][: rm.uvs_count]
+            copy(uvs, model.padded_uvs)
+            
+            rm.tree_offset = next_free_offset_tree
             rm.tree_count  = cast(u32) len(model.tree)
-            next_free_tree_offset += rm.tree_count
-            tree := render.trees[rm.tree_offset : rm.tree_offset + rm.tree_count]
+            next_free_offset_tree += rm.tree_count
+            tree := render.trees[rm.tree_offset :][: rm.tree_count]
             copy(tree, model.tree)
         }
     }
     
-    assert(next_free_tree_offset == total_tree_count)
-    assert(next_free_triangle_offset == total_triangle_count)
-    assert(next_free_normals_offset == total_normals_count)
+    assert(next_free_offset_tree     == total_count_tree)
+    assert(next_free_offset_triangle == total_count_triangle)
+    assert(next_free_offset_normals  == total_count_normals)
+    assert(next_free_offset_uvs      == total_count_uvs)
     
     render.brdf_data = brdf_data
     render.materials = make_shallow_copy(materials, settings.allocator)
@@ -378,6 +408,7 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
         max_bounce_count = settings.max_bounce_count,
         triangles = render.triangles,
         normals   = render.normals,
+        uvs       = render.uvs,
         trees     = render.trees,
         models    = render.models,
         materials = render.materials,
