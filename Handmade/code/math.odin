@@ -32,12 +32,15 @@ lane_v2 :: [2] lane_f32
 lane_v3 :: [3] lane_f32
 lane_v4 :: [4] lane_f32
 
+lane_iv2 :: [2] lane_i32
 lane_uv3 :: [3] lane_u32
 
 lane_pmm :: #simd [LaneWidth] pmm
 lane_umm :: #simd [LaneWidth] umm
 lane_f64 :: #simd [LaneWidth] f64
 lane_u64 :: #simd [LaneWidth] u64
+
+lane_u8  :: #simd [LaneWidth] u8
 
 lane_false :: cast(lane_u32) 0
 lane_true  :: cast(lane_u32) 0xffff_ffff
@@ -115,6 +118,7 @@ linear_remap :: proc (v: $T, old_from, old_to: T, new_from, new_to: T) -> T {
     return result
 }
 
+// t[0] blends a:b and c:d, t[1] blends ab:cd
 bilinear_blend :: proc { bilinear_blend_s, bilinear_blend_v }
 bilinear_blend_s :: proc (a: $T, b, c, d: T, t: [2] T) -> (result: T) {
     la := (1-t.y) * (1-t.x)
@@ -223,12 +227,10 @@ modulus_v :: proc(value: [$N]f32, divisor: [N]f32) -> (result: [N]f32) {
 
 // @cleanup these array to simd to array
 round :: proc { round_f, round_v }
-round_f :: proc($T: typeid, f: $F) -> T 
-where !intrinsics.type_is_array(F)
-{
+round_f :: proc($T: typeid, f: $F) -> T where !intrinsics.type_is_array(F) {
     return  cast(T) (f < 0 ? -math.round(-f) : math.round(f))
 }
-round_v :: proc($T: typeid, v: [$N]$F) -> (result: [N]T) {
+round_v :: proc($T: typeid, v: [$N] $F) -> (result: [N] T) {
     #no_bounds_check #unroll for i in 0..<N {
         result[i] = cast(T) math.round(v[i]) 
     }
@@ -236,22 +238,30 @@ round_v :: proc($T: typeid, v: [$N]$F) -> (result: [N]T) {
 }
 
 floor :: proc { floor_f, floor_v }
-floor_f :: proc($T: typeid, f: $F) -> (i: T) {
+floor_f :: proc($T: typeid, f: $F) -> T where !intrinsics.type_is_array(F) {
     when F == lane_f32 {
         return cast(T) simd.floor(f)
     } else {
         return cast(T) math.floor(f)
     }
 }
-floor_v :: proc($T: typeid, fs: [$N] f32) -> [N] T {
-    return vec_cast(T, simd.to_array(simd.floor(simd.from_array(fs))))
+floor_v :: proc($T: typeid, v: [$N] $F) -> [N] T {
+    when intrinsics.type_is_simd_vector(F) {
+        result: [N] T
+        #no_bounds_check #unroll for i in 0..<N {
+            result[i] = cast(T) simd.floor(v[i]) 
+        }
+        return result
+    } else {
+        return vec_cast(T, simd.to_array(simd.floor(simd.from_array(v))))
+    }
 }
 
 ceil :: proc { ceil_f, ceil_v }
 ceil_f :: proc($T: typeid, f: f32) -> (i: T) {
     return cast(T) math.ceil(f)
 }
-ceil_v :: proc($T: typeid, fs: [$N]f32) -> [N]T {
+ceil_v :: proc($T: typeid, fs: [$N] f32) -> [N] T {
     return vec_cast(T, simd.to_array(simd.ceil(simd.from_array(fs))))
 }
 
@@ -259,7 +269,7 @@ truncate :: proc { truncate_f, truncate_v }
 truncate_f :: proc($T: typeid, f: f32) -> T {
     return cast(T) f
 }
-truncate_v :: proc($T: typeid, fs: [$N]f32) -> [N]T where N > 1 {
+truncate_v :: proc($T: typeid, fs: [$N] f32) -> [N] T {
     return vec_cast(T, fs)
 }
 
@@ -420,8 +430,14 @@ color_to_u8_4 :: proc (color: v4) -> Color {
     return result
 }
 
-color_from_u8 :: proc (color: Color) -> v4 {
+color_from_u8 :: proc { color_from_u8_s, color_from_u8_v }
+color_from_u8_s :: proc (color: Color) -> v4 {
     result := vec_cast(f32, color)
+    result /= 255
+    return result
+}
+color_from_u8_v :: proc (color: [4] lane_u8) -> lane_v4 {
+    result := vec_cast(lane_f32, color)
     result /= 255
     return result
 }
@@ -526,16 +542,12 @@ min_max :: proc (a: $T, b: T) -> (min, max: T) {
     }
 }
 
-extract :: proc { extract_s, extract_v2, extract_v3 }
-extract_v3 :: proc (a: lane_v3, #any_int n: u32) -> (result: v3) {
-    result.x = extract(a.x, n)
-    result.y = extract(a.y, n)
-    result.z = extract(a.z, n)
-    return result
-}
-extract_v2 :: proc (a: lane_v2, #any_int n: u32) -> (result: v2) {
-    result.x = extract(a.x, n)
-    result.y = extract(a.y, n)
+extract :: proc { extract_s, extract_v }
+extract_v :: proc (a: [$N] #simd [LaneWidth] $T, #any_int n: u32) -> [N] T {
+    result: [N] T
+    #no_bounds_check #unroll for i in 0..<N {
+        result[i] = extract(a[i], n)
+    }
     return result
 }
 extract_s :: proc (a: $T/#simd[$N] $Element, #any_int n: u32) -> (result: Element) {
@@ -549,16 +561,11 @@ extract_s :: proc (a: $T/#simd[$N] $Element, #any_int n: u32) -> (result: Elemen
     return result
 }
 
-// @naming
-replace :: proc { replace_s, replace_v2, replace_v3 }
-replace_v3 :: proc (a: ^lane_v3, #any_int n: u32, value: v3) {
-    replace(&a.x, n, value.x)
-    replace(&a.y, n, value.y)
-    replace(&a.z, n, value.z)
-}
-replace_v2 :: proc (a: ^lane_v2, #any_int n: u32, value: v2) {
-    replace(&a.x, n, value.x)
-    replace(&a.y, n, value.y)
+replace :: proc { replace_s, replace_v }
+replace_v :: proc (a: ^[$N] #simd [LaneWidth] $T, #any_int n: u32, value: [N] T) {
+    #no_bounds_check #unroll for i in 0..<N {
+        replace(&a[i], n, value[i])
+    }
 }
 replace_s :: proc (a: ^$T/ #simd[$N] $Element, #any_int n: u32, value: Element) {
     when intrinsics.type_is_array(T) {

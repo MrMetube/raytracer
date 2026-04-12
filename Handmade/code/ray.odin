@@ -41,11 +41,11 @@ Debug_View_Kind :: enum {
 }
 
 Sort_Subnodes := true
-Early_Elimination := true
+Early_Elimination := false
 
 Debug_View: Debug_View_Kind
-Triangle_Threshold  := 2500
-Rectangle_Threshold := 100
+Triangle_Threshold  := 500
+Rectangle_Threshold := 20
 
 Collect_Stats_For_Debug_View :: true
 
@@ -103,8 +103,8 @@ render_tile :: proc(render: ^Render, rect: Rectangle2i, entropy: ^RandomSeries, 
                     loops_computed   += cast_result.loops_computed
                     
                     color := cast_result.final_color
-                    triangle_color  := (cast(f32) cast_result.triangles  / LaneWidth) / cast(f32) Triangle_Threshold
-                    rectangle_color := (cast(f32) cast_result.rectangles / LaneWidth) / cast(f32) Rectangle_Threshold
+                    triangle_color  := (cast(f32) cast_result.triangles  / LaneWidth) / (cast(f32) Triangle_Threshold  * cast(f32) info.rays_per_pixel)
+                    rectangle_color := (cast(f32) cast_result.rectangles / LaneWidth) / (cast(f32) Rectangle_Threshold * cast(f32) info.rays_per_pixel)
                     color = linear_to_srgb(color)
                     if Debug_View == Debug_View_Kind.Triangle_Tests {
                         color = triangle_color
@@ -124,6 +124,7 @@ render_tile :: proc(render: ^Render, rect: Rectangle2i, entropy: ^RandomSeries, 
                     pixel_index := (image.height - 1 - py) * image.width + px
                     image.data[pixel_index] = pixel
                 }
+                
                 atomic_add(&stats.pixels_done, auto_cast rect_get_dimension(rect).x / shift)
             }
         }
@@ -322,31 +323,12 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 roughness := lane_gather(lane_member(material, "roughness", f32))
                 reflect_d := linear_blend(reflect_bounce, random_bounce, roughness)
                 
-                reflectance := brdf_lookup(info.brdf_data, material, -ray_d, hit_normal, hit_tangent, hit_binormal, reflect_d)
-                reflect_color := lane_gather_v(lane_member(material, "reflect", v3))
-                for lane in 0..<LaneWidth {
-                    model := lane_extract(model, lane)
-                    // @todo(viktor): bilinear blend
-                    uv := extract(hit_texture_uv, lane)
-                    i := uv * vec_cast(f32, model.texture.width, model.texture.height)
-                    s := floor_v(i32, i)
-                    f := i - vec_cast(f32, s)
-                    s00 := clamp(s + {0, 0}, v2i{0,0}, v2i{model.texture.width, model.texture.height}-1)
-                    s01 := clamp(s + {0, 1}, v2i{0,0}, v2i{model.texture.width, model.texture.height}-1)
-                    s10 := clamp(s + {1, 0}, v2i{0,0}, v2i{model.texture.width, model.texture.height}-1)
-                    s11 := clamp(s + {1, 1}, v2i{0,0}, v2i{model.texture.width, model.texture.height}-1)
-                    c00 := model.texture.data[s00.y * model.texture.width + s00.x]
-                    c01 := model.texture.data[s01.y * model.texture.width + s01.x]
-                    c10 := model.texture.data[s10.y * model.texture.width + s10.x]
-                    c11 := model.texture.data[s11.y * model.texture.width + s11.x]
-                    v00 := color_from_u8(c00)
-                    v01 := color_from_u8(c01)
-                    v10 := color_from_u8(c10)
-                    v11 := color_from_u8(c11)
-                    v := bilinear_blend_v(v00, v01, v10, v11, f)
-                    replace(&reflect_color, lane, v.rgb)
-                }
-                reflectance *= reflect_color
+                reflectance   := brdf_lookup(info.brdf_data, material, -ray_d, hit_normal, hit_tangent, hit_binormal, reflect_d)
+                reflect_tint := lane_gather_v(lane_member(material, "reflect", v3))
+                
+                reflect_base := texture_sample(lane_member(model, "texture", Image), hit_texture_uv)
+                
+                reflectance *= reflect_base * reflect_tint
                 // reflectance *= maximum(dot(hit_normal, reflect_d), 0)
                 
                 conditional_assign(hit_did_hit, &attenuation, attenuation * reflectance)
@@ -448,6 +430,51 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
     
     result.bounces_computed  = cast(u64) horizontal_add(bounces_computed_lanes)
     result.loops_computed    = cast(u64) horizontal_add(loops_computed_lanes)
+    
+    return result
+}
+
+////////////////////////////////////////////////
+
+texture_sample :: proc (texture: Lane(Image), uv: lane_v2) -> lane_v3 {
+    width  := lane_gather(lane_member(texture, "width",  i32))
+    height := lane_gather(lane_member(texture, "height", i32))
+    // @cleanup
+    data: Lane_Slice(Color)
+    for lane in 0..<LaneWidth {
+        texture := lane_extract(texture, lane)
+        replace(&data.p, lane, cast(umm) raw_data(texture.data))
+    }
+    
+    i := uv * vec_cast(lane_f32, width, height)
+    s := floor(lane_i32, i)
+    f := i - vec_cast(lane_f32, s)
+    
+    min := lane_iv2{0,0}
+    max := lane_iv2{width, height} - 1
+    
+    sa := clamp(s + {0, 0}, min, max)
+    sb := clamp(s + {0, 1}, min, max)
+    sc := clamp(s + {1, 0}, min, max)
+    sd := clamp(s + {1, 1}, min, max)
+    
+    ia := sa.x + sa.y * width
+    ib := sb.x + sb.y * width
+    ic := sc.x + sc.y * width
+    id := sd.x + sd.y * width
+    
+    ca := lane_gather_v(lane_index(data, ia))
+    cb := lane_gather_v(lane_index(data, ib))
+    cc := lane_gather_v(lane_index(data, ic))
+    cd := lane_gather_v(lane_index(data, id))
+    
+    // @correctness how should alpha be used? should it be premuliplied into the sampled color?
+    va := color_from_u8(ca).rgb
+    vb := color_from_u8(cb).rgb
+    vc := color_from_u8(cc).rgb
+    vd := color_from_u8(cd).rgb
+    
+    result := bilinear_blend(va, vb, vc, vd, f)
     
     return result
 }

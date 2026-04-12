@@ -13,8 +13,7 @@
 
 ### renderer
 - texture sampling
-    - store per vertex texture uvs
-    - use textures for: color, normals, other surface properties, material?
+    - use textures for: normals, other surface properties, material?
     - how can these textures be used artistically? (blending materials)
 - instanced rendering
     - sort by model, keep caches hot in the model loop

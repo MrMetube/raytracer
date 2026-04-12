@@ -197,7 +197,7 @@ main :: proc () {
                 state.fast_render.requested = true
             }
             
-            if dddp != 0 {
+            if dddp != 0 || state.ddp != 0 {
                 dddp = normalize_or_zero(dddp)
                 dddp *= speed
                 state.ddp  += dddp
@@ -337,29 +337,28 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
     
     ////////////////////////////////////////////////
     
+    rerender := false
+    defer state.fast_render.requested = rerender
     layout_begin_horizontal(layout)
         for kind, kind_index in Debug_View_Kind {
             if ui_button(layout, set_value_interaction(&Debug_View, kind), "%v", kind, is_highlighted = Debug_View == kind) {
                 Debug_View = kind
-                state.fast_render.requested = true
+                rerender = true
             }
         }
-        if ui_toggle(layout, &Sort_Subnodes, "Sort Subnodes") { state.fast_render.requested = true }
-        if ui_toggle(layout, &Early_Elimination, "Early Elimination") { state.fast_render.requested = true }
+        if ui_toggle(layout, &Sort_Subnodes, "Sort Subnodes") do rerender = true
+        if ui_toggle(layout, &Early_Elimination, "Early Elimination") do rerender = true
     layout_end_horizontal(layout)
     
     
     layout_pad(layout)
     if Debug_View in (bit_set[Debug_View_Kind]{ .Triangle_Tests, .Rectangle_Tests, .Both_Tests }) {
-        // @cleanup
-        view := view_magnitude(Triangle_Threshold, precision = 1)
-        if ui_dragger(layout, &Triangle_Threshold, "Triangle Threshold %v", view, speed = 10, min = 10, max = 1000, logarithmic = true) {
-            state.fast_render.requested = true
+        if ui_dragger(layout, &Triangle_Threshold, "Triangle Threshold %v", view_magnitude(Triangle_Threshold, precision = 1), speed = 1, min = 1, max = 1000, logarithmic = true) {
+            rerender = true
         }
         
-        view = view_magnitude(Rectangle_Threshold, precision = 1)
-        if ui_dragger(layout, &Rectangle_Threshold, "Rectangle Threshold %v", view, speed = 10, min = 10, max = 1000, logarithmic = true) {
-            state.fast_render.requested = true
+        if ui_dragger(layout, &Rectangle_Threshold, "Rectangle Threshold %v", view_magnitude(Rectangle_Threshold, precision = 1), speed = 1, min = 1, max = 1000, logarithmic = true) {
+            rerender = true
         }
     }
     
@@ -374,8 +373,6 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
     
     ////////////////////////////////////////////////
     
-    rerender := false
-    defer state.fast_render.requested = rerender
     
     if ui_collapser(layout, &state.ojects_is_open, "Objects") {
         layout_indent_scope(layout)
