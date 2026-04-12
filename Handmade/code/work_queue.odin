@@ -3,20 +3,20 @@ package main
 
 import "base:runtime"
 import "core:thread"
+import "core:sync"
 import win "core:sys/windows"
 
 WorkQueueCallback :: #type proc(data: pmm)
 
 WorkQueue :: struct {
     name: string,
-    worker_count: u32,
     
-    semaphore_handle: win.HANDLE,
+    semaphore: sync.Sema,
     
-    completion_goal, 
+    completion_goal:  u32,
     completion_count: u32,
      
-    next_entry_to_write, 
+    next_entry_to_write: u32,
     next_entry_to_read:  u32,
     
     entries: [4096] WorkQueueEntry,
@@ -39,11 +39,11 @@ CreateThreadInfo :: struct {
 }
 
 @(private="file") created_thread_count: u32 = 1
-@(private="file") infos: [1024]CreateThreadInfo
+@(private="file") infos: [1024] CreateThreadInfo
 
 init_work_queue :: proc (queue: ^WorkQueue, name: string, count: u32) {
-    queue.semaphore_handle = win.CreateSemaphoreW(nil, 0, auto_cast count, nil)
-    queue.name = name
+    queue.name         = name
+    queue.thread_count = count
     
     for &info, index in infos[created_thread_count:][:count] {
         info.queue = queue
@@ -51,15 +51,8 @@ init_work_queue :: proc (queue: ^WorkQueue, name: string, count: u32) {
         info.name_index = 1 + auto_cast index
         created_thread_count += 1
         
-        // @note(viktor): When I use the windows call I can at most create 4 threads at once,
-        // any more calls to create thread in this call of the init function fail silently
-        // A further call for the low_priority_queue then is able to create 4 more threads.
-        //     result := win.CreateThread(nil, 0, thread_proc, info, thread_index, nil)
-        
         thread.create_and_start_with_data(&info, worker_thread)
     }
-    
-    queue.worker_count = count
 }
 
 close_work_queue_and_wait_for_threads :: proc (queue: ^WorkQueue) {
@@ -68,7 +61,7 @@ close_work_queue_and_wait_for_threads :: proc (queue: ^WorkQueue) {
     complete_previous_writes_before_future_writes()
     
     for queue.closed_thread_count != queue.opened_thread_count {
-        win.ReleaseSemaphore(queue.semaphore_handle, 1, nil)
+        sync.sema_post(&queue.semaphore, 1)
     }
 }
 
@@ -97,7 +90,7 @@ enqueue_work_any :: proc(queue: ^WorkQueue, callback: WorkQueueCallback, data: p
     atomic_compare_exchange_or_fail(&queue.completion_goal, queue.completion_goal, queue.completion_goal+1)
     atomic_compare_exchange_or_fail(&queue.next_entry_to_write, old_next_entry, new_next_entry)
     
-    win.ReleaseSemaphore(queue.semaphore_handle, 1, nil)
+    sync.sema_post(&queue.semaphore, 1)
 }
 
 complete_all_work :: proc(queue: ^WorkQueue) {
@@ -152,8 +145,7 @@ worker_thread :: proc (parameter: pmm) {
         should_sleep := do_next_work_queue_entry(queue)
         if queue.closed do break
         if should_sleep {
-            INFINITE :: transmute(win.DWORD) i32(-1)
-            win.WaitForSingleObjectEx(queue.semaphore_handle, INFINITE, false)
+            sync.sema_wait(&queue.semaphore)
         }
     }
     

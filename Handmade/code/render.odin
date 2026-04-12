@@ -5,6 +5,13 @@ import "core:time"
 import "core:mem"
 import rl "vendor:raylib"
 
+Render :: struct {
+    active:   bool,
+    canceled: bool,
+    
+    queue: WorkQueue,
+}
+
 Render_Stats :: struct {
     bounces_computed: u64,
     loops_computed:   u64,
@@ -43,25 +50,6 @@ Render_Settings :: struct {
     time_per_ray: Stat(time.Duration),
 }
 
-// @waste only use the render data structure if possible(skip lane_xx for now)
-Render :: struct {
-    active:   bool,
-    canceled: bool,
-    
-    queue:   WorkQueue,
-    thread_count: i32,
-    
-    ////////////////////////////////////////////////
-    
-    triangles: [] lane_Triangle,
-    normals:   [] Normals,
-    uvs:       [] UVs,
-    trees:     [] Tree_Node,
-    models:    [] Render_Model,
-    materials: [] Material,
-    brdf_data: [] v3,
-}
-
 Normals :: [3] v3
 UVs     :: [3] v2
 
@@ -70,11 +58,11 @@ Model :: struct {
     raw_normals:   [] Normals,
     raw_uvs:       [] UVs,
     
-    using x: Model_Data,
+    using data: Model_Data,
 }
 
 Draw_Model :: struct {
-    using x: Model_Data,
+    using data: Model_Data,
     
     forward: Transform,
     inverse: Transform,
@@ -223,7 +211,7 @@ draw_model :: proc (settings: ^Render_Settings, model_id: Model_Id, material: Ma
     model := &Models[model_id]
     
     dm: Draw_Model
-    dm.x = model.x
+    dm.data       = model.data
     dm.base_color = model.base_color
     
     dm.forward = transform
@@ -267,7 +255,6 @@ init_render_settings :: proc (settings: ^Render_Settings, rays_per_pixel: u32, m
 }
 
 init_render :: proc (render: ^Render, thread_count: u32) {
-    render.thread_count = cast(i32) thread_count
     init_work_queue(&render.queue, "Render", thread_count)
 }
 
@@ -303,19 +290,19 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
         total_count_tree     += cast(u32) len(model.tree)
     }
     
-    render.triangles = make([] lane_Triangle, total_count_triangle, settings.allocator)
-    render.normals   = make([] Normals,       total_count_normals,  settings.allocator)
-    render.uvs       = make([] UVs,           total_count_uvs,      settings.allocator)
-    render.trees     = make([] Tree_Node ,    total_count_tree,     settings.allocator)
+    render_triangles := make([] lane_Triangle, total_count_triangle, settings.allocator)
+    render_normals   := make([] Normals,       total_count_normals,  settings.allocator)
+    render_uvs       := make([] UVs,           total_count_uvs,      settings.allocator)
+    render_trees     := make([] Tree_Node ,    total_count_tree,     settings.allocator)
     
-    next_free_triangles := render.triangles
-    next_free_normals   := render.normals
-    next_free_uvs       := render.uvs
-    next_free_trees     := render.trees
+    next_free_triangles := render_triangles
+    next_free_normals   := render_normals
+    next_free_uvs       := render_uvs
+    next_free_trees     := render_trees
     
-    render.models = make([] Render_Model, len(models), settings.allocator)
+    render_models := make([] Render_Model, len(models), settings.allocator)
     for model, model_index in models {
-        rm := &render.models[model_index]
+        rm := &render_models[model_index]
         
         rm.base_color = model.base_color
         rm.material   = model.material
@@ -344,13 +331,12 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
     assert(len(next_free_normals)   == 0)
     assert(len(next_free_uvs)       == 0)
     
-    render.brdf_data = brdf_data
-    render.materials = make_shallow_copy(materials, settings.allocator)
+    render_materials := make_shallow_copy(materials, settings.allocator)
     
     // @todo(viktor): make this a copy and preserve the image until this is completed and so canceling isn't so bad
     zero_slice(settings.image.data)
     
-    tile_size := cast(v2i) max(settings.image.width, settings.image.height) / render.thread_count / 2
+    tile_size := cast(v2i) max(settings.image.width, settings.image.height) / cast(i32) render.queue.thread_count / 2
     tile_cols  := (settings.image.width  + tile_size.x - 1) / tile_size.x
     tile_rows  := (settings.image.height + tile_size.y - 1) / tile_size.y
     tile_count := tile_cols * tile_rows
@@ -390,13 +376,13 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
         rays_per_pixel    = settings.rays_per_pixel,
         max_bounce_count  = settings.max_bounce_count,
         
-        triangles = render.triangles,
-        normals   = render.normals,
-        uvs       = render.uvs,
-        trees     = render.trees,
-        models    = render.models,
-        materials = render.materials,
-        brdf_data = render.brdf_data,
+        triangles = render_triangles,
+        normals   = render_normals,
+        uvs       = render_uvs,
+        trees     = render_trees,
+        models    = render_models,
+        materials = render_materials,
+        brdf_data = brdf_data,
         
         camera_x = vec_cast(lane_f32, half_film_size.x * camera.x),
         camera_y = vec_cast(lane_f32, half_film_size.y * camera.y),

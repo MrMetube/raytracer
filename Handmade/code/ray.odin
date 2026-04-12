@@ -354,7 +354,7 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 reflectance  := brdf_lookup(info.brdf_data, material, -ray_d, hit_normal, hit_tangent, hit_binormal, reflect_d)
                 reflect_tint := lane_gather_v(lane_member(material, "reflect", v3))
                 
-                reflect_base := texture_sample(lane_member(model, "x", "base_color", Image), hit_texture_uv)
+                reflect_base := texture_sample(lane_member(model, "data", "base_color", Image), hit_texture_uv)
                 
                 reflectance *= reflect_base * reflect_tint
                 // reflectance *= maximum(dot(hit_normal, reflect_d), 0)
