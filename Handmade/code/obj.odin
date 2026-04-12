@@ -22,7 +22,6 @@ load_obj :: proc (textures: ^map[string] Image, dir, filename: string, triangles
     vertices := make([dynamic] v3, context.temp_allocator)
     normals  := make([dynamic] v3, context.temp_allocator)
     uvs      := make([dynamic] v2, context.temp_allocator)
-    mtl_files := make([dynamic] string, context.temp_allocator)
     
     for len(text) != 0 {
         line := chop(&text, "\n")

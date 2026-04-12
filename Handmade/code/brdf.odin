@@ -17,7 +17,11 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, brdf_data: ^[dynamic
         }
     }
     
-    dest.values_index = cast(u32) len(brdf_data)
+    dest.count = 1
+    
+    values_offset := cast(u32) len(brdf_data)
+    values_count : u32 = 1
+    
     if !invalid {
         dest.count, data = (cast(^uv3) &data[0])^, data[size_of(uv3):]
         
@@ -28,9 +32,9 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, brdf_data: ^[dynamic
         read_size := cast(umm) &temp_values[0] + auto_cast len(temp_values) * size_of(f64)
         assert(file_size == read_size)
         
-        dest.values_count = total_count
+        values_count = total_count
         
-        start := dest.values_index
+        start := values_offset
         reserve(brdf_data, start + total_count)
         
         for i in 0..<total_count {
@@ -56,11 +60,11 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, brdf_data: ^[dynamic
         assert(len(brdf_data) == auto_cast(start + total_count))
         assert(len(brdf_data) == cap(brdf_data))
     } else {
-        dest.values_count = 1
-        
-        dest.count = 1
         append(brdf_data, v3{1,1,1})
     }
+    
+    dest.value_count  = values_count
+    dest.value_offset = values_offset
 }
 
 ////////////////////////////////////////////////
@@ -128,9 +132,8 @@ brdf_lookup :: proc (brdf_data: [] v3, material: Lane(Material), view_direction,
     // @note(viktor): index of [] f32 -> index of [] v3
     indices = transmute(lane_u32) (transmute([LaneWidth] u32) indices / 3) 
     
-    // @cleanup
-    values_index := lane_gather(lane_member(brdf, "values_index", u32))
-    values_count := lane_gather(lane_member(brdf, "values_count", u32))
+    values_index := lane_gather(lane_member(brdf, "value_offset", u32))
+    values_count := lane_gather(lane_member(brdf, "value_count", u32))
     values := lane_slice(brdf_data, values_index, values_index+values_count)
     
     value  := lane_index(values, indices)

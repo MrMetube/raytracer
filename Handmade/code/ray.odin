@@ -50,24 +50,25 @@ Rectangle_Threshold := 20
 Collect_Stats_For_Debug_View :: true
 
 Render_Tile_Info :: struct #all_or_none {
+    // @cleanup
     triangles: [] lane_Triangle,
     normals:   [] Normals,
     uvs:       [] UVs,
     trees:     [] Tree_Node,
-    models:    [] RenderModel,
+    models:    [] Render_Model,
     materials: [] Material,
-    brdf_data: [] v3,
+    brdf_data: [] v3, 
     
     image: Image,
-    camera_x: lane_v3, // scale by film_size
-    camera_y: lane_v3, // scale by film_size
+    camera_x: lane_v3, // scaled by film_size
+    camera_y: lane_v3, // scaled by film_size
     camera_p: lane_v3,
     
     rays_per_pixel:   u32,
     max_bounce_count: u32,
     
     image_size_factor: v2,
-    pixel_size :       v2,
+    pixel_size:        v2,
     film_center:       v3,
 }
 
@@ -155,9 +156,9 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
     
     min_t :: cast(lane_f32) 0.0001
     
-    final_color_lanes:      lane_v3
-    bounces_computed_lanes: lane_u32
-    loops_computed_lanes:   lane_u32
+    final_color:      lane_v3
+    bounces_computed: lane_u32
+    loops_computed:   lane_u32
     
     result: Cast_Result
     for _ in 0..<lane_ray_count {
@@ -194,8 +195,8 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             
             
             
-            bounces_computed_lanes += 1 & lane_mask
-            loops_computed_lanes   += 1
+            bounces_computed += 1 & lane_mask
+            loops_computed   += 1
             
             ////////////////////////////////////////////////
             // Hit Detection
@@ -208,13 +209,26 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             
             spall_begin("hit models")
             for model, index in info.models {
-                model_triangles := info.triangles[model.triangle_offset : model.triangle_offset + model.triangle_count]
-                model_tree      :=     info.trees[model.tree_offset     : model.tree_offset     + model.tree_count]
+                Check :: !false
                 
-                model_ray_o := transform_mul_1(model.lane_inverse, ray_o)
-                model_ray_d := transform_mul_0(model.lane_inverse, ray_d)
+                when Check {
+                    within :: proc (inner: [] $T, outer: [] T) -> bool {
+                        a := cast(umm) &outer[0]
+                        b := cast(umm) &inner[0]
+                        c := cast(umm) &outer[len(outer)-1]
+                        d := cast(umm) &inner[len(inner)-1]
+                        return b >= a && d <= c
+                    }
+                    assert(within(model.triangles, info.triangles))
+                    assert(within(model.tree,      info.trees))
+                    assert(within(model.normals,   info.normals))
+                    assert(within(model.uvs,       info.uvs))
+                }
                 
-                hit_mask, hit_t, hit_triangle, hit_uv, tests := hit_tree(model_triangles, model_tree, model_ray_o, model_ray_d, min_t, hit_closest_t)
+                model_ray_o := transform_mul_1(model.inverse, ray_o)
+                model_ray_d := transform_mul_0(model.inverse, ray_d)
+                
+                hit_mask, hit_t, hit_triangle, hit_uv, tests := hit_tree(model.triangles, model.tree, model_ray_o, model_ray_d, min_t, hit_closest_t)
                 
                 hit_did_hit |= hit_mask
                 conditional_assign(hit_mask, &hit_closest_t,      hit_t)
@@ -265,19 +279,28 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             hit_binormal: lane_v3
             hit_texture_uv: lane_v2
             {
-                normals_offset   := lane_gather(lane_member(model, "normals_offset", u32))
-                uvs_offset   := lane_gather(lane_member(model, "uvs_offset", u32))
-                triangle_normals := lane_index(to_lane(info.normals), normals_offset + hit_triangle_index)
-                triangle_uvs := lane_index(to_lane(info.uvs), uvs_offset + hit_triangle_index)
+                // @cleanup
+                triangle_normals: Lane_Slice(Normals)
+                triangle_uvs:     Lane_Slice(UVs)
+                for lane in 0..<LaneWidth {
+                    model := lane_extract(model, lane)
+                    replace(&triangle_normals.p, lane, cast(umm) &model.normals[0])
+                    replace(&triangle_uvs.p,     lane, cast(umm) &model.uvs[0])
+                    replace(&triangle_normals.len, lane, cast(u32) len(model.normals))
+                    replace(&triangle_uvs.len,     lane, cast(u32) len(model.uvs))
+                }
                 
-                t0 := lane_gather_v(lane_index(triangle_uvs, 0))
-                t1 := lane_gather_v(lane_index(triangle_uvs, 1))
-                t2 := lane_gather_v(lane_index(triangle_uvs, 2))
+                triangle_normal := lane_index(triangle_normals, hit_triangle_index)
+                triangle_uv     := lane_index(triangle_uvs,     hit_triangle_index)
+                
+                t0 := lane_gather_v(lane_index(triangle_uv, 0))
+                t1 := lane_gather_v(lane_index(triangle_uv, 1))
+                t2 := lane_gather_v(lane_index(triangle_uv, 2))
                 hit_texture_uv = barycentric_blend(t0, t1, t2, hit_triangle_uv)
                 
-                n0 := lane_gather_v(lane_index(triangle_normals, 0))
-                n1 := lane_gather_v(lane_index(triangle_normals, 1))
-                n2 := lane_gather_v(lane_index(triangle_normals, 2))
+                n0 := lane_gather_v(lane_index(triangle_normal, 0))
+                n1 := lane_gather_v(lane_index(triangle_normal, 1))
+                n2 := lane_gather_v(lane_index(triangle_normal, 2))
                 
                 ix := lane_gather_v(lane_member(model, "normal", "x", v3))
                 iy := lane_gather_v(lane_member(model, "normal", "y", v3))
@@ -296,6 +319,11 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 hit_binormal = normalize_or_zero(cross(hit_normal, hit_tangent))
             }
             spall_end()
+            
+            hit_angle       := dot(-ray_d, hit_normal)
+            front_face_mask := greater_than(hit_angle, 0)
+            hit_normal *= ternary(front_face_mask, cast(lane_f32) 1, -1)
+            hit_angle   = dot(-ray_d, hit_normal)
             
             #partial switch Debug_View {
                 case  .Normals:  sample = vec_abs(hit_normal);   break bounces
@@ -323,10 +351,10 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 roughness := lane_gather(lane_member(material, "roughness", f32))
                 reflect_d := linear_blend(reflect_bounce, random_bounce, roughness)
                 
-                reflectance   := brdf_lookup(info.brdf_data, material, -ray_d, hit_normal, hit_tangent, hit_binormal, reflect_d)
+                reflectance  := brdf_lookup(info.brdf_data, material, -ray_d, hit_normal, hit_tangent, hit_binormal, reflect_d)
                 reflect_tint := lane_gather_v(lane_member(material, "reflect", v3))
                 
-                reflect_base := texture_sample(lane_member(model, "texture", Image), hit_texture_uv)
+                reflect_base := texture_sample(lane_member(model, "x", "base_color", Image), hit_texture_uv)
                 
                 reflectance *= reflect_base * reflect_tint
                 // reflectance *= maximum(dot(hit_normal, reflect_d), 0)
@@ -352,11 +380,6 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                     result := r + (1 - r) * (x * square(square(x)))
                     return result
                 }
-                
-                hit_angle       := dot(-ray_d, hit_normal)
-                front_face_mask := greater_than(hit_angle, 0)
-                hit_normal *= ternary(front_face_mask, cast(lane_f32) 1, -1)
-                hit_angle   = dot(-ray_d, hit_normal)
                 
                 air_index_of_refraction :: 1
                 hit_index_of_refraction := lane_gather(lane_member(material, "index_of_refraction", f32))
@@ -394,9 +417,9 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 conditional_assign(hit_did_hit &  choose_refract, &next_attenuation, attenuation * refract_value / refract_pdf)
                 attenuation = next_attenuation
             }
+            
             next_o := fused_mul_add(ray_d, hit_closest_t, ray_o)
             next_o += ternary(choose_refract, -hit_normal, hit_normal) * 1e-3
-            
             ray_o = next_o
             ray_d = normalize_or_zero(next_d)
             
@@ -406,8 +429,9 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 // @todo(viktor): retest this
                 early_termination_start :: cast(u32) 4
                 if bounce_index < early_termination_start {
-                    early_termination_min :: cast(lane_f32) 0.05
-                    early_termination_max :: cast(lane_f32) 0.95
+                    early_termination_epsilon :: 0.05
+                    early_termination_min :: cast(lane_f32)      early_termination_epsilon
+                    early_termination_max :: cast(lane_f32) (1 - early_termination_epsilon)
                     
                     max_component        := maximum(attenuation.x, maximum(attenuation.y, attenuation.z))
                     survival_probability := clamp(max_component, early_termination_min, early_termination_max)
@@ -421,15 +445,15 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             }
         }
         
-        final_color_lanes = fused_mul_add(sample, sample_contribution_factor, final_color_lanes)
+        final_color = fused_mul_add(sample, sample_contribution_factor, final_color)
     }
     
-    result.final_color.r = horizontal_add(final_color_lanes.r)
-    result.final_color.g = horizontal_add(final_color_lanes.g)
-    result.final_color.b = horizontal_add(final_color_lanes.b)
+    result.final_color.r = horizontal_add(final_color.r)
+    result.final_color.g = horizontal_add(final_color.g)
+    result.final_color.b = horizontal_add(final_color.b)
     
-    result.bounces_computed  = cast(u64) horizontal_add(bounces_computed_lanes)
-    result.loops_computed    = cast(u64) horizontal_add(loops_computed_lanes)
+    result.bounces_computed  = cast(u64) horizontal_add(bounces_computed)
+    result.loops_computed    = cast(u64) horizontal_add(loops_computed)
     
     return result
 }
@@ -444,6 +468,7 @@ texture_sample :: proc (texture: Lane(Image), uv: lane_v2) -> lane_v3 {
     for lane in 0..<LaneWidth {
         texture := lane_extract(texture, lane)
         replace(&data.p, lane, cast(umm) raw_data(texture.data))
+        replace(&data.len, lane, cast(u32) len(texture.data))
     }
     
     i := uv * vec_cast(lane_f32, width, height)
@@ -516,19 +541,25 @@ transform_transpose :: proc (m: $Transform) -> Transform {
     return result
 }
 
-transform_mul_1 :: proc (m: $Transform, v: $V) -> V {
-    result := m.t
-    result  = fused_mul_add(m.x, v.x, result)
-    result  = fused_mul_add(m.y, v.y, result)
-    result  = fused_mul_add(m.z, v.z, result)
+transform_mul_1 :: proc (m: $Transform, v: $V/ [$N] $E) -> V {
+    result := vec_cast(E, m.t)
+    result  = fused_mul_add(vec_cast(E, m.x), v.x, result)
+    result  = fused_mul_add(vec_cast(E, m.y), v.y, result)
+    result  = fused_mul_add(vec_cast(E, m.z), v.z, result)
     
     return result
 }
 
-transform_mul_0 :: proc (m: $Transform, v: $V) -> V {
-    result := m.x * v.x
-    result  = fused_mul_add(m.y, v.y, result)
-    result  = fused_mul_add(m.z, v.z, result)
+transform_mul_0 :: proc (m: $Transform, v: $V/ [$N] $E) -> V {
+    when type_of(m.x.x) != E {
+        result := vec_cast(E, m.x) * v.x
+        result  = fused_mul_add(vec_cast(E, m.y), v.y, result)
+        result  = fused_mul_add(vec_cast(E, m.z), v.z, result)
+    } else {
+        result := m.x * v.x
+        result  = fused_mul_add(m.y, v.y, result)
+        result  = fused_mul_add(m.z, v.z, result)
+    }
     
     return result
 }

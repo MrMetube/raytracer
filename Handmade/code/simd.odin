@@ -5,7 +5,7 @@ package main
 import "base:intrinsics"
 import "core:simd"
 
-Lane_Slice_Checked :: false
+Lane_Slice_Checked :: !false
 
 ////////////////////////////////////////////////
 // @note(viktor): A typed wrapper on wide pointers and slices
@@ -58,7 +58,7 @@ lane_index_offset :: proc (slice: Lane_Slice($T), offset: lane_u32, caller_locat
 lane_index :: proc { lane_index_scalar, lane_index_array }
 lane_index_scalar :: proc (slice: Lane_Slice($T), index: $I, caller_location := #caller_location) -> Lane(T) {
     when Lane_Slice_Checked {
-        assert(less_than(index, slice.len) == lane_true, loc = caller_location)
+        assert(less_than(cast(lane_u32) index, slice.len) == lane_true, loc = caller_location)
     }
     result: Lane(T)
     result.p = slice.p + cast(lane_umm) index * size_of(T)
@@ -66,7 +66,7 @@ lane_index_scalar :: proc (slice: Lane_Slice($T), index: $I, caller_location := 
 }
 lane_index_array :: proc (array: Lane([$N] $T), index: $I, caller_location := #caller_location) -> Lane(T) {
     when Lane_Slice_Checked {
-        assert(less_than(index, N) == lane_true, loc = caller_location)
+        assert(less_than(cast(lane_u32) index, N) == lane_true, loc = caller_location)
     }
     base   := array.p
     offset := cast(lane_umm) index * size_of(T)

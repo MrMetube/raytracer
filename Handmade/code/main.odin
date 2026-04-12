@@ -340,13 +340,13 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
     rerender := false
     defer state.fast_render.requested = rerender
     layout_begin_horizontal(layout)
-        for kind, kind_index in Debug_View_Kind {
+        for kind in Debug_View_Kind {
             if ui_button(layout, set_value_interaction(&Debug_View, kind), "%v", kind, is_highlighted = Debug_View == kind) {
                 Debug_View = kind
                 rerender = true
             }
         }
-        if ui_toggle(layout, &Sort_Subnodes, "Sort Subnodes") do rerender = true
+        if ui_toggle(layout, &Sort_Subnodes,     "Sort Subnodes")     do rerender = true
         if ui_toggle(layout, &Early_Elimination, "Early Elimination") do rerender = true
     layout_end_horizontal(layout)
     
