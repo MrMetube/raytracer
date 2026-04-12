@@ -1,6 +1,7 @@
 package main
 
 import "base:intrinsics"
+import "base:builtin"
 import "core:math"
 import rl "vendor:raylib"
 
@@ -42,6 +43,13 @@ Interaction_Kind :: enum {
     Select,
 }
 
+DraggerFlag :: enum {
+    logarithmic,
+}
+DraggerFlags :: bit_set[DraggerFlag]
+
+////////////////////////////////////////////////
+
 begin_ui :: proc (ui: ^UI) {
     ui.mouse_p  = rl.GetMousePosition()
     ui.mouse_dp = rl.GetMouseDelta()
@@ -49,6 +57,8 @@ begin_ui :: proc (ui: ^UI) {
 
 
 interact :: proc (ui: ^UI) {
+    // @todo(viktor): set cursor based on active.interaction
+    // if none are active based on hot_interaction
     ui.ended_interaction = {}
     
     if ui.active_interaction.kind != .None {
@@ -174,19 +184,14 @@ set_value_interaction :: proc (target: ^$T, value: T) -> Interaction {
 ////////////////////////////////////////////////
 
 // @todo(viktor): @api collapse into begin ui_element set_interaction(used for color) set_outline, set_text, end_ui_element
-ui_button :: proc (layout: ^Layout, interaction: Interaction, format: string, args: ..any) -> bool {
-    result := ui_button_highlighted(layout, interaction, false, format, ..args)
-    return result
-}
-
 // @cleanup what is an interaction in this once we have drags and sliders and moves
-ui_button_highlighted :: proc (layout: ^Layout, interaction: Interaction, is_highlighted: bool, format: string, args: ..any) -> bool {
+ui_button :: proc (layout: ^Layout, interaction: Interaction, format: string, args: ..any, is_highlighted := false) -> bool {
     text := tprint(format, ..args)
     
-    dim := measure_text(layout, text)
+    size := measure_text(layout, text)
     text_p := layout.at
-    size := rect_min_dimension(text_p, dim)
-    size = rect_add_radius(size, v2{4, 1})
+    rect := rect_min_dimension(text_p, size)
+    rect = rect_add_radius(rect, v2{4, 1})
     
     // @theme
     outline      := DarkGreen
@@ -203,19 +208,23 @@ ui_button_highlighted :: proc (layout: ^Layout, interaction: Interaction, is_hig
         text_color = Isabelline
     }
     
-    draw_rectangle_outline(size, 1, outline)
-    draw_rectangle(size, background)
+    draw_rectangle_outline(rect, 1, outline)
+    draw_rectangle(rect, background)
     draw_text(layout, text, text_p, text_color, shadow_color)
-    layout_advance_2(layout, rect_get_dimension(size)) // @api
+    layout_advance_2(layout, rect_get_dimension(rect)) // @api
     
     result: bool
-    if rect_contains(size, layout.ui.mouse_p) {
+    if rect_contains(rect, layout.ui.mouse_p) {
         layout.ui.next_hot_interaction = interaction
         result = is_ended(layout.ui, interaction)
     }
     
+    layout_pad(layout)
+    
     return result
 }
+
+////////////////////////////////////////////////
 
 ui_mover :: proc (ui: ^UI, drag: ^v2, size: v2) -> bool {
     rect := rect_min_dimension(drag^, size)
@@ -239,31 +248,44 @@ ui_mover :: proc (ui: ^UI, drag: ^v2, size: v2) -> bool {
     return result
 }
 
-ui_dragger :: proc { ui_dragger_float, ui_dragger_int, ui_dragger_clamp_float, ui_dragger_clamp_int }
+// @todo(viktor): dragger should be only for unclamped values, for clamped values there should just be a slider that shows the user the range and where the current value lies within that range
+ui_dragger :: proc { ui_dragger_float, ui_dragger_int, ui_dragger_clamp_float, ui_dragger_clamp_int, ui_dragger_clamp_uint }
 // @copypasta clamps
-ui_dragger_clamp_float :: proc (layout: ^Layout, value: ^f32, speed, min, max: f32, format: string, args: ..any, flags := SliderFlags{}) -> (changed: bool, released: bool) {
+ui_dragger_clamp_float :: proc (layout: ^Layout, value: ^f32, speed, min, max: f32, format: string, args: ..any, flags := DraggerFlags{}) -> bool {
     interaction := Interaction{ kind = .Drag, target = value }
     
-    changed, released = ui_dragger_base(layout, value, speed, interaction, flags, format, ..args)
+    changed, released := ui_dragger_base(layout, value, speed, interaction, flags, format, ..args)
     if changed {
         value^ = clamp(value^, min, max)
     }
     
-    return changed, released
+    return released
 }
-ui_dragger_clamp_int :: proc (layout: ^Layout, value: ^$I, speed: f32, min, max: I, format: string, args: ..any, flags := SliderFlags{}) -> (changed: bool, released: bool) where intrinsics.type_is_integer(I) {
-    changed, released = ui_dragger_int(layout, value, speed, format, ..args, flags = flags)
-    if changed {
-        value^ = clamp(value^, min, max)
+ui_dragger_clamp_int :: proc (layout: ^Layout, value: ^$I, format: string, args: ..any, speed: f32 = 1, min: int = min(int), max: int = max(int), logarithmic := false) -> bool where !intrinsics.type_is_unsigned(I), intrinsics.type_is_integer(I) {
+    before := value^
+    released := ui_dragger_int(layout, value, format, ..args, speed = speed, logarithmic = logarithmic)
+    if value^ != before {
+        value^ = clamp(value^, cast(I) min, cast(I) max)
     }
     
-    return changed, released
+    return released
 }
-ui_dragger_int :: proc (layout: ^Layout, value: ^$I, speed: f32, format: string, args: ..any, flags := SliderFlags{}) -> (changed: bool, released: bool) where intrinsics.type_is_integer(I) {
+ui_dragger_clamp_uint :: proc (layout: ^Layout, value: ^$T, format: string, args: ..any, speed: f32 = 1, #any_int min: u64 = min(u64), #any_int max: u64 = max(u64), logarithmic := false) -> bool where intrinsics.type_is_unsigned(T), intrinsics.type_is_integer(T) {
+    before := value^
+    released := ui_dragger_int(layout, value, format, ..args, speed = speed, logarithmic = logarithmic)
+    if value^ != before {
+        value^ = clamp(value^, cast(T) min, cast(T) max)
+    }
+    
+    return released
+}
+ui_dragger_int :: proc (layout: ^Layout, value: ^$I, format: string, args: ..any, speed: f32 = 1, logarithmic := false) -> bool where intrinsics.type_is_integer(I) {
     interaction := Interaction{ kind = .Drag, target = value }
     
     temp := cast(f32) value^
-    changed, released = ui_dragger_base(layout, &temp, speed, interaction, flags, format, ..args)
+    flags : DraggerFlags
+    if logarithmic do flags += { .logarithmic }
+    changed, released := ui_dragger_base(layout, &temp, speed, interaction, flags, format, ..args)
     
     if changed {
         next := round(I, temp)
@@ -273,16 +295,22 @@ ui_dragger_int :: proc (layout: ^Layout, value: ^$I, speed: f32, format: string,
     
     released = is_ended(layout.ui, interaction)
     
-    return changed, released
+    return released
 }
-ui_dragger_float :: proc (layout: ^Layout, value: ^f32, speed: f32, format: string, args: ..any) -> (changed: bool, released: bool) {
+ui_dragger_float :: proc (layout: ^Layout, value: ^f32, format: string, args: ..any, speed: f32 = 1, min := min(f32), max := max(f32), logarithmic := false) -> bool {
     interaction := Interaction{ kind = .Drag, target = value }
-    changed, released = ui_dragger_base(layout, value, speed, interaction, {}, format, ..args)
     
-    return changed, released
+    flags : DraggerFlags
+    if logarithmic do flags += { .logarithmic }
+    changed, released := ui_dragger_base(layout, value, speed, interaction, flags, format, ..args)
+    
+    if changed {
+        value^ = clamp(value^, min, max)
+    }
+    return released
 }
 
-ui_dragger_base :: proc (layout: ^Layout, value: ^f32, speed: f32, interaction: Interaction, flags: SliderFlags, format: string, args: ..any) -> (changed: bool, released: bool) {
+ui_dragger_base :: proc (layout: ^Layout, value: ^f32, speed: f32, interaction: Interaction, flags: DraggerFlags, format: string, args: ..any) -> (changed: bool, released: bool) {
     __ui_dragger_raw(layout, interaction, format, ..args)
     
     if is_active(layout.ui, interaction) {
@@ -334,9 +362,31 @@ __ui_dragger_raw :: proc (layout: ^Layout, interaction: Interaction, format: str
 
 ////////////////////////////////////////////////
 
+ui_color_picker :: proc (layout: ^Layout, rgb: ^v3, format: string) -> bool {
+    ui_text(layout, format)
+    layout_pad(layout)
+    
+    size :: 40
+    bounds := rect_min_dimension(layout.at, size)
+    layout_advance_2(layout, size + {40, 0})
+    layout_pad(layout)
+    
+    color := color_to_rl(rgb^)
+    before := color
+    
+    rl.GuiColorPicker(rect_to_rl(bounds), "", &color)
+    
+    result := color != before
+    rgb^ = color_from_rl(color).rgb
+    
+    return result
+}
+
+////////////////////////////////////////////////
+
 ui_toggle :: proc (layout: ^Layout, condition: ^bool, text: string) -> bool {
     interaction := set_value_interaction(condition, !condition^)
-    pressed := ui_button_highlighted(layout, interaction, condition^, text)
+    pressed := ui_button(layout, interaction, text, is_highlighted = condition^)
     if pressed {
         condition^ = !condition^
     }
@@ -372,6 +422,8 @@ ui_progress_bar :: proc (layout: ^Layout, percentage: f32, width: f32) {
     draw_rectangle(progress, Isabelline)
     
     layout_advance_2(layout, size)
+    
+    layout_pad(layout)
 }
 
 ////////////////////////////////////////////////
@@ -427,5 +479,11 @@ rect_to_rl :: proc (rect: Rectangle2) -> rl.Rectangle {
 color_to_rl :: proc (color: $V) -> rl.Color {
     bytes := color_to_u8(color)
     result := transmute(rl.Color) bytes
+    return result
+}
+
+color_from_rl :: proc (color: rl.Color) -> v4 {
+    bytes := cast(Color) color
+    result := color_from_u8(bytes)
     return result
 }

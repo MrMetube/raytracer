@@ -192,7 +192,7 @@ clamp :: proc(value: $T, min, max: T) -> (result: T) {
 }
 clamp_01 :: proc(value: $T) -> T { return clamp(value, 0, 1) }
 
-clamp_01_to_range :: proc(min: $T, t, max: T ) -> (result: T) {
+clamp_01_to_range :: proc(min: $T, t, max: T) -> (result: T) {
     range := max - min
     if range != 0 {
         percent := (t-min) / range
@@ -484,8 +484,13 @@ is_nan_s :: proc (x: $F) -> bool where !intrinsics.type_is_simd_vector(F) {
     return result
 }
 
-approximate_equal :: proc (a, b: lane_f32, epsilon : lane_f32 = 0.000001) -> lane_u32 {
+approximate_equal :: proc { approximate_equal_s, approximate_equal_v }
+approximate_equal_v :: proc (a, b: lane_f32, epsilon : lane_f32 = 0.000001) -> lane_u32 {
     result := less_than(absolute(a - b), epsilon)
+    return result
+}
+approximate_equal_s :: proc (a, b: $F, epsilon : F = cast(F) 0.000001) -> bool {
+    result := abs(a - b) < epsilon
     return result
 }
 
