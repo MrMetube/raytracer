@@ -407,7 +407,7 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                     max_component        := maximum(attenuation.x, maximum(attenuation.y, attenuation.z))
                     survival_probability := clamp(max_component, early_termination_min, early_termination_max)
                     
-                    survive_mask := less_than(random_unilateral(entropy), survival_probability)
+                    survive_mask := less_than(random_unilateral(entropy, lane_f32), survival_probability)
                     lane_mask &= survive_mask
                     if lane_mask == lane_false do break bounces
                     
@@ -529,7 +529,15 @@ transform_mul_0 :: proc (m: $Transform, v: $V/ [$N] $E) -> V {
     return result
 }
 
-invert :: proc (m: $Transform) -> Transform {
+transform_set_scale :: proc (m: Transform, v: $V) -> Transform {
+    result := m
+    result.x.x = v.x
+    result.y.y = v.y
+    result.z.z = v.z
+    return result
+}
+
+transform_invert :: proc (m: $Transform) -> Transform {
     // @todo(viktor): check that the determinant is ok
     determinant := dot(m.x, cross(m.y, m.z))
     inv_x := cross(m.y, m.z) / determinant

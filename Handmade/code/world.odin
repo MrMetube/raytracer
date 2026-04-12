@@ -52,9 +52,7 @@ begin_object :: proc (world: ^World) -> ^Object {
     world.last_used_object_index += 1
     result := &world.objects[world.last_used_object_index]
     
-    result.transform.x = {1,0,0}
-    result.transform.y = {0,1,0}
-    result.transform.z = {0,0,1}
+    result.transform = transform_set_scale(result.transform, v3{1,1,1})
     
     return result
 }
@@ -62,145 +60,116 @@ begin_object :: proc (world: ^World) -> ^Object {
 ////////////////////////////////////////////////
 
 benchmark_scene :: proc (world: ^World) {
-    // @cleanup make the model setup less fragile
-    triangles := make([dynamic] Triangle, context.temp_allocator)
-    normals   := make([dynamic] Normals,  context.temp_allocator)
-    uvs       := make([dynamic] UVs,      context.temp_allocator)
-    textures := make(map[string] Image, context.temp_allocator)
-    texture: Image
-    
     {
-        // load_obj(&textures, "./models", "stanford/bunny.obj", &triangles, &normals, &uvs, &texture)
-        load_obj(&textures, "./models", "stanford/lucy_280k.obj", &triangles, &normals, &uvs, &texture)
+        ctx := begin_model()
+        load_obj(ctx, "./models", "stanford/lucy_280k.obj")
+        end_model(ctx)
         
         object := begin_object(world)
-        model, index := begin_model()
-        object.model = index
-        object.transform.t = {0,0,0}
+        object.model = ctx.id
         object.material = 2
-        end_model(model, triangles[:], normals[:], uvs[:], texture)
     }
     
     { // light
-        load_obj(&textures, "./models", "sphere.obj", &triangles, &normals, &uvs, &texture)
+        ctx := begin_model()
+        load_obj(ctx, "./models", "sphere.obj")
+        end_model(ctx)
         
         object := begin_object(world)
-        model, index := begin_model()
-        object.model = index
+        object.model = ctx.id
         object.material = 3
-        object.transform.x = {.5,0,0}
-        object.transform.y = {0,.5,0}
-        object.transform.z = {0,0,.5}
-        object.transform.t = {0,0,16}
-        end_model(model, triangles[:], normals[:], uvs[:], texture)
+        object.transform = transform_set_scale(object.transform, v3{.5, .5, .5})
+        object.transform.t = {0, 0, 16}
     }
     
     { // ground
-        load_obj(&textures, "./models", "plane.obj", &triangles, &normals, &uvs, &texture)
-        
+        ctx := begin_model()
+        load_obj(ctx, "./models", "plane.obj")
+        end_model(ctx)
         
         object := begin_object(world)
-        model, index := begin_model()
-        object.model = index
+        object.model = ctx.id
         object.material = 1
-        object.transform.x = {50,0,0}
-        object.transform.y = {0,50,0}
-        end_model(model, triangles[:], normals[:], uvs[:], texture)
+        object.transform = transform_set_scale(object.transform, v3{50, 50, 1})
     }
 }
 
 kenney_scene :: proc (world: ^World) {
-    // @cleanup make the model setup less fragile
-    triangles := make([dynamic] Triangle, context.temp_allocator)
-    normals   := make([dynamic] Normals,  context.temp_allocator)
-    uvs       := make([dynamic] UVs,      context.temp_allocator)
-    textures := make(map[string] Image, context.temp_allocator)
-    texture: Image
-    
     {
-        load_obj(&textures, "./models/kenney_graveyard-kit/Models/OBJ format", "pine-crooked.obj", &triangles, &normals, &uvs, &texture, flip_yz = true)
+        ctx := begin_model()
+        Kenney ::"./models/kenney_graveyard-kit/Models/OBJ format" 
+        load_obj(ctx, Kenney, "pine-crooked.obj", flip_yz = true)
+        ctx.model.base_color = load_texture_from_png(Kenney+"/Textures/colormap.png")
+        end_model(ctx)
         
         object := begin_object(world)
-        model, index := begin_model()
-        object.model = index
+        object.model = ctx.id
         object.material = 1
         object.transform.t = {0,0,.1}
-        object.transform.x = {3,0,0}
-        object.transform.y = {0,3,0}
-        object.transform.z = {0,0,3}
-        end_model(model, triangles[:], normals[:], uvs[:], texture)
+        object.transform = transform_set_scale(object.transform, v3{3, 3, 3})
     }
     { // ground
-        load_obj(&textures, "./models", "plane.obj", &triangles, &normals, &uvs, &texture)
-        
+        ctx := begin_model()
+        load_obj(ctx, "./models", "plane.obj")
+        end_model(ctx)
         
         object := begin_object(world)
-        model, index := begin_model()
-        object.model = index
+        object.model = ctx.id
         object.material = 4
-        object.transform.x = {50,0,0}
-        object.transform.y = {0,50,0}
-        end_model(model, triangles[:], normals[:], uvs[:], texture)
+        object.transform = transform_set_scale(object.transform, v3{50, 50, 1})
     }
 }
 
 default_scene :: proc (world: ^World) {
-    // @cleanup make the model setup less fragile
-    triangles := make([dynamic] Triangle, context.temp_allocator)
-    normals   := make([dynamic] Normals,  context.temp_allocator)
-    uvs       := make([dynamic] UVs,      context.temp_allocator)
-    textures := make(map[string] Image, context.temp_allocator)
-    texture: Image
-    
     {
-        load_obj(&textures, "./models", "suzanne.obj", &triangles, &normals, &uvs, &texture)
-        
+        ctx := begin_model()
+        load_obj(ctx, "./models", "suzanne.obj")
+        end_model(ctx)
         
         object := begin_object(world)
-        model, index := begin_model()
-        object.model = index
-        object.transform.t = {2.5,0,1}
+        object.model = ctx.id
+        object.transform.t = {2.5, 0, 1}
         object.material = 4
-        end_model(model, triangles[:], normals[:], uvs[:], texture)
     }
     
     { // light
-        load_obj(&textures, "./models", "sphere.obj", &triangles, &normals, &uvs, &texture)
+        ctx := begin_model()
+        load_obj(ctx, "./models", "sphere.obj")
+        end_model(ctx)
         
         object := begin_object(world)
-        model, index := begin_model()
-        object.model = index
+        object.model = ctx.id
         object.material = 3
-        object.transform.x = {.5,0,0}
-        object.transform.y = {0,.5,0}
-        object.transform.z = {0,0,.5}
-        object.transform.t = {0,0,3}
-        end_model(model, triangles[:], normals[:], uvs[:], texture)
+        object.transform = transform_set_scale(object.transform, v3{.5, .5, .5})
+        object.transform.t = {0, 0, 3}
     }
     
     {
-        // load_obj(&textures, "./models", "uvsphere.obj", &triangles, &normals, &uvs, &texture)
-        load_obj(&textures, "./models", "cube_smooth.obj", &triangles, &normals, &uvs, &texture)
-     
+        ctx := begin_model()
+        load_obj(ctx, "./models", "cube_smooth.obj")
+        end_model(ctx)
         
-        object := begin_object(world)
-        model, index := begin_model()
-        object.model = index
-        object.material = 5
-        object.transform.t = {-1,0,1}
-        end_model(model, triangles[:], normals[:], uvs[:], texture)
+        entropy := seed_random_series(23)
+        for _ in 0..<5 {
+            object := begin_object(world)
+            object.model = ctx.id
+            object.material = cast(Material_Id) random_between_u32(&entropy, 4, 5)
+            
+            radius := random_unilateral(&entropy, f32) + .5
+            object.transform = transform_set_scale(object.transform, v3{radius, radius, radius})
+            object.transform.t.xy = random_bilateral(&entropy, v2) * 10
+            object.transform.t.z = radius
+        }
     }
     
     { // ground
-        load_obj(&textures, "./models", "plane.obj", &triangles, &normals, &uvs, &texture)
-        
+        ctx := begin_model()
+        load_obj(ctx, "./models", "plane.obj")
+        end_model(ctx)
         
         object := begin_object(world)
-        model, index := begin_model()
-        object.model = index
+        object.model = ctx.id
         object.material = 1
-        object.transform.x = {50,0,0}
-        object.transform.y = {0,50,0}
-        end_model(model, triangles[:], normals[:], uvs[:], texture)
+        object.transform = transform_set_scale(object.transform, v3{50, 50, 1})
     }
 }

@@ -132,34 +132,61 @@ Model_Id :: distinct u32
 Models: [256] Model
 last_used_model_id: Model_Id
 
-begin_model :: proc () -> (^Model, Model_Id) {
-    last_used_model_id += 1
-    result := &Models[last_used_model_id]
+the_model_loader: Model_Loader
+
+Model_Loader :: struct {
+    valid: bool,
     
-    return result, last_used_model_id
+    model: ^Model,
+    id:    Model_Id,
+    
+    triangles: [dynamic] Triangle,
+    normals:   [dynamic] Normals,
+    uvs:       [dynamic] UVs,
 }
 
-end_model :: proc (model: ^Model, triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, texture: Image) {
-    model.raw_triangles = make_shallow_copy(triangles, context.allocator)
-    model.raw_normals   = make_shallow_copy(normals,   context.allocator)
-    model.raw_uvs       = make_shallow_copy(uvs,       context.allocator)
+begin_model :: proc () -> (^Model_Loader) {
+    last_used_model_id += 1
+    model := &Models[last_used_model_id]
     
-    texture := texture
-    if texture.data == nil {
+    result := &the_model_loader
+    result.model = model
+    result.id    = last_used_model_id
+    
+    if !result.valid {
+        result.valid = true
+        result.triangles = make([dynamic] Triangle, context.temp_allocator)
+        result.normals   = make([dynamic] Normals,  context.temp_allocator)
+        result.uvs       = make([dynamic] UVs,      context.temp_allocator)
+    } else {
+        clear(&result.triangles)
+        clear(&result.normals)
+        clear(&result.uvs)
+    }
+    
+    return result
+}
+
+end_model :: proc (loader: ^Model_Loader) {
+    model := loader.model
+    model.raw_triangles = make_shallow_copy(loader.triangles[:], context.allocator)
+    model.raw_normals   = make_shallow_copy(loader.normals[:],   context.allocator)
+    model.raw_uvs       = make_shallow_copy(loader.uvs[:],       context.allocator)
+    
+    if model.base_color.data == nil {
         pixel := make([] Color, 1, context.allocator)
         pixel[0] = 255
-        texture = { pixel, 1, 1 }
+        model.base_color = { pixel, 1, 1 }
     }
-    model.base_color = texture
     
     model_rebuild_tree(model)
 }
 
 model_rebuild_tree :: proc (model: ^Model) {
     // @api
-    delete(model.tree,           context.allocator)
+    delete(model.tree,      context.allocator)
     delete(model.triangles, context.allocator)
-    delete(model.normals, context.allocator)
+    delete(model.normals,   context.allocator)
     model.tree, model.triangles, model.normals, model.uvs = tree_build(model.raw_triangles, model.raw_normals, model.raw_uvs, context.allocator)
 }
 
@@ -215,7 +242,7 @@ draw_model :: proc (settings: ^Render_Settings, model_id: Model_Id, material: Ma
     dm.base_color = model.base_color
     
     dm.forward = transform
-    dm.inverse = invert(dm.forward)
+    dm.inverse = transform_invert(dm.forward)
     dm.normal  = transform_transpose(Transform{ dm.inverse.x, dm.inverse.y, dm.inverse.z, 0 })
     
     dm.material = material
