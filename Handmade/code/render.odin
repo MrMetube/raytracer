@@ -376,10 +376,6 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
         rays_per_pixel    = settings.rays_per_pixel,
         max_bounce_count  = settings.max_bounce_count,
         
-        triangles = render_triangles,
-        normals   = render_normals,
-        uvs       = render_uvs,
-        trees     = render_trees,
         models    = render_models,
         materials = render_materials,
         brdf_data = brdf_data,

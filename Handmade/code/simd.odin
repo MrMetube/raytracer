@@ -119,6 +119,16 @@ where Has(T, first_member), Has(Field(T, first_member), member_of_first_member) 
     return result
 }
 
+lane_member_slice :: proc (lane: Lane($T), $member: string, $member_type: typeid / [] $E) -> Lane_Slice(E) {
+    slice := cast(Lane(RawSlice)) lane_member(lane, member, member_type)
+    
+    result: Lane_Slice(E)
+    result.p   = cast(lane_umm) lane_gather(lane_member(slice, "data", pmm))
+    result.len = cast(lane_u32) lane_gather(lane_member(slice, "len",  int))
+    
+    return result
+}
+
 ////////////////////////////////////////////////
 
 lane_gather       :: proc { lane_gather_no_mask,       lane_gather_mask       }

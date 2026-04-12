@@ -50,11 +50,6 @@ Rectangle_Threshold := 20
 Collect_Stats_For_Debug_View :: true
 
 Render_Tile_Info :: struct #all_or_none {
-    // @cleanup
-    triangles: [] lane_Triangle,
-    normals:   [] Normals,
-    uvs:       [] UVs,
-    trees:     [] Tree_Node,
     models:    [] Render_Model,
     materials: [] Material,
     brdf_data: [] v3, 
@@ -209,22 +204,6 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             
             spall_begin("hit models")
             for model, index in info.models {
-                Check :: !false
-                
-                when Check {
-                    within :: proc (inner: [] $T, outer: [] T) -> bool {
-                        a := cast(umm) &outer[0]
-                        b := cast(umm) &inner[0]
-                        c := cast(umm) &outer[len(outer)-1]
-                        d := cast(umm) &inner[len(inner)-1]
-                        return b >= a && d <= c
-                    }
-                    assert(within(model.triangles, info.triangles))
-                    assert(within(model.tree,      info.trees))
-                    assert(within(model.normals,   info.normals))
-                    assert(within(model.uvs,       info.uvs))
-                }
-                
                 model_ray_o := transform_mul_1(model.inverse, ray_o)
                 model_ray_d := transform_mul_0(model.inverse, ray_d)
                 
@@ -279,16 +258,8 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             hit_binormal: lane_v3
             hit_texture_uv: lane_v2
             {
-                // @cleanup
-                triangle_normals: Lane_Slice(Normals)
-                triangle_uvs:     Lane_Slice(UVs)
-                for lane in 0..<LaneWidth {
-                    model := lane_extract(model, lane)
-                    replace(&triangle_normals.p, lane, cast(umm) &model.normals[0])
-                    replace(&triangle_uvs.p,     lane, cast(umm) &model.uvs[0])
-                    replace(&triangle_normals.len, lane, cast(u32) len(model.normals))
-                    replace(&triangle_uvs.len,     lane, cast(u32) len(model.uvs))
-                }
+                triangle_normals := lane_member_slice(model, "normals", [] Normals)
+                triangle_uvs     := lane_member_slice(model, "uvs", [] UVs)
                 
                 triangle_normal := lane_index(triangle_normals, hit_triangle_index)
                 triangle_uv     := lane_index(triangle_uvs,     hit_triangle_index)
@@ -463,13 +434,7 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
 texture_sample :: proc (texture: Lane(Image), uv: lane_v2) -> lane_v3 {
     width  := lane_gather(lane_member(texture, "width",  i32))
     height := lane_gather(lane_member(texture, "height", i32))
-    // @cleanup
-    data: Lane_Slice(Color)
-    for lane in 0..<LaneWidth {
-        texture := lane_extract(texture, lane)
-        replace(&data.p, lane, cast(umm) raw_data(texture.data))
-        replace(&data.len, lane, cast(u32) len(texture.data))
-    }
+    data   := lane_member_slice(texture, "data", [] Color)
     
     i := uv * vec_cast(lane_f32, width, height)
     s := floor(lane_i32, i)
