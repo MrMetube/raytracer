@@ -14,7 +14,6 @@
 ### renderer
 - texture sampling
     - use textures for: normals, other surface properties, material?
-    - how can these textures be used artistically? (blending materials)
 - instanced rendering
     - sort by model, keep caches hot in the model loop
 - model bvh 
@@ -22,14 +21,14 @@
     
 ### engine
 - just load all brdfs
-- serialize the scene
-    - reflection and version(range) annotation
-    - save and load
-    - (hotreloading)
 - scene editing
     - models selection
     - transform manipulators
     - new objects
+- serialize the scene
+    - reflection and version(range) annotation
+    - save and load
+    - (hotreloading)
 - ui
     - hot_t, active_t, triggered_t interpolators
     - [smooth exponential lerp](https://lisyarus.github.io/blog/posts/exponential-smoothing.html)

@@ -48,11 +48,11 @@ world_load_brdf :: proc (world: ^World, material: Material_Id, name: string) {
     world.material_names[material] = name
 }
 
-begin_object :: proc (world: ^World) -> ^Object {
+make_object :: proc (world: ^World) -> ^Object {
     world.last_used_object_index += 1
     result := &world.objects[world.last_used_object_index]
     
-    result.transform = transform_set_scale(result.transform, v3{1,1,1})
+    result.transform = transform_set_scale(result.transform, v3{1, 1, 1})
     
     return result
 }
@@ -65,7 +65,7 @@ benchmark_scene :: proc (world: ^World) {
         load_obj(ctx, "./models", "stanford/lucy_280k.obj")
         end_model(ctx)
         
-        object := begin_object(world)
+        object := make_object(world)
         object.model = ctx.id
         object.material = 2
     }
@@ -75,7 +75,7 @@ benchmark_scene :: proc (world: ^World) {
         load_obj(ctx, "./models", "sphere.obj")
         end_model(ctx)
         
-        object := begin_object(world)
+        object := make_object(world)
         object.model = ctx.id
         object.material = 3
         object.transform = transform_set_scale(object.transform, v3{.5, .5, .5})
@@ -87,7 +87,7 @@ benchmark_scene :: proc (world: ^World) {
         load_obj(ctx, "./models", "plane.obj")
         end_model(ctx)
         
-        object := begin_object(world)
+        object := make_object(world)
         object.model = ctx.id
         object.material = 1
         object.transform = transform_set_scale(object.transform, v3{50, 50, 1})
@@ -102,7 +102,7 @@ kenney_scene :: proc (world: ^World) {
         ctx.model.base_color = load_texture_from_png(Kenney+"/Textures/colormap.png")
         end_model(ctx)
         
-        object := begin_object(world)
+        object := make_object(world)
         object.model = ctx.id
         object.material = 1
         object.transform.t = {0,0,.1}
@@ -113,7 +113,7 @@ kenney_scene :: proc (world: ^World) {
         load_obj(ctx, "./models", "plane.obj")
         end_model(ctx)
         
-        object := begin_object(world)
+        object := make_object(world)
         object.model = ctx.id
         object.material = 4
         object.transform = transform_set_scale(object.transform, v3{50, 50, 1})
@@ -126,7 +126,7 @@ default_scene :: proc (world: ^World) {
         load_obj(ctx, "./models", "suzanne.obj")
         end_model(ctx)
         
-        object := begin_object(world)
+        object := make_object(world)
         object.model = ctx.id
         object.transform.t = {2.5, 0, 1}
         object.material = 4
@@ -137,7 +137,7 @@ default_scene :: proc (world: ^World) {
         load_obj(ctx, "./models", "sphere.obj")
         end_model(ctx)
         
-        object := begin_object(world)
+        object := make_object(world)
         object.model = ctx.id
         object.material = 3
         object.transform = transform_set_scale(object.transform, v3{.5, .5, .5})
@@ -151,7 +151,7 @@ default_scene :: proc (world: ^World) {
         
         entropy := seed_random_series(23)
         for _ in 0..<5 {
-            object := begin_object(world)
+            object := make_object(world)
             object.model = ctx.id
             object.material = cast(Material_Id) random_between_u32(&entropy, 4, 5)
             
@@ -167,7 +167,7 @@ default_scene :: proc (world: ^World) {
         load_obj(ctx, "./models", "plane.obj")
         end_model(ctx)
         
-        object := begin_object(world)
+        object := make_object(world)
         object.model = ctx.id
         object.material = 1
         object.transform = transform_set_scale(object.transform, v3{50, 50, 1})

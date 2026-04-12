@@ -138,31 +138,32 @@ load_mtl :: proc (textures: ^map[string] Image, dir: string, file: string) {
     }
 }
 
-
 load_texture_from_png :: proc (path: string) -> Image {
     cpath := ctprint("%v", path)
     
-    x, y, channels: i32
-    stbi.info(cpath, &x, &y, &channels)
+    width, height, channels: i32
+    stbi.info(cpath, &width, &height, &channels)
     assert(channels == 4)
     
-    data := make([] Color, x * y, context.allocator)
+    data := make([] Color, width * height, context.allocator)
     
-    image_data := stbi.load(cpath, &x, &y, &channels, 4)
+    image_data := stbi.load(cpath, &width, &height, &channels, 4)
     defer stbi.image_free(image_data)
     
-    for py in 0..<y {
-        for px in 0..<x {
-            i := py * x + px
-            c := cast(^Color) &image_data[i*4]
-            j := (y-1-py) * x + px
+    // @note(viktor): flip the y-axis to be +y = up
+    for y in 0..<height {
+        for x in 0..<width {
+            i := y * width + x * channels
+            c := cast(^Color) &image_data[i]
+            
+            j := (height-1-y) * width + x
             data[j] = c^
         }
     }
     
     result: Image
-    result.width  = x
-    result.height = y
+    result.width  = width
+    result.height = height
     result.data   = data
     
     return result

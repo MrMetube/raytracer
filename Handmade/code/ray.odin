@@ -432,6 +432,7 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
 ////////////////////////////////////////////////
 
 texture_sample :: proc (texture: Lane(Image), uv: lane_v2) -> lane_v3 {
+    spall_proc()
     width  := lane_gather(lane_member(texture, "width",  i32))
     height := lane_gather(lane_member(texture, "height", i32))
     data   := lane_member_slice(texture, "data", [] Color)
@@ -507,6 +508,7 @@ transform_transpose :: proc (m: $Transform) -> Transform {
 }
 
 transform_mul_1 :: proc (m: $Transform, v: $V/ [$N] $E) -> V {
+    spall_proc()
     result := vec_cast(E, m.t)
     result  = fused_mul_add(vec_cast(E, m.x), v.x, result)
     result  = fused_mul_add(vec_cast(E, m.y), v.y, result)
@@ -516,6 +518,7 @@ transform_mul_1 :: proc (m: $Transform, v: $V/ [$N] $E) -> V {
 }
 
 transform_mul_0 :: proc (m: $Transform, v: $V/ [$N] $E) -> V {
+    spall_proc()
     when type_of(m.x.x) != E {
         result := vec_cast(E, m.x) * v.x
         result  = fused_mul_add(vec_cast(E, m.y), v.y, result)
