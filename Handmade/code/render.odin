@@ -78,8 +78,7 @@ Model_Data :: struct {
     triangles: [] lane_Triangle,
     normals:   [] Normals,
     uvs:       [] UVs,
-    tree:      Tree, // @cleanup remove this
-    tree_packed: [] lane_Tree_Node,
+    tree:      [] Tree_Node,
     
     base_color: Image,
 }
@@ -184,11 +183,15 @@ end_model :: proc (loader: ^Model_Loader) {
 }
 
 model_rebuild_tree :: proc (model: ^Model) {
+    allocator := context.allocator
+    
     // @api
-    delete(model.tree,      context.allocator)
-    delete(model.triangles, context.allocator)
-    delete(model.normals,   context.allocator)
-    model.tree, model.triangles, model.normals, model.uvs, model.tree_packed = tree_build(model.raw_triangles, model.raw_normals, model.raw_uvs, context.allocator)
+    delete(model.triangles,   allocator)
+    delete(model.normals,     allocator)
+    delete(model.uvs,         allocator)
+    delete(model.tree, allocator)
+    
+    model.triangles, model.normals, model.uvs, model.tree = tree_build(model.raw_triangles, model.raw_normals, model.raw_uvs, allocator)
 }
 
 ////////////////////////////////////////////////
@@ -313,26 +316,22 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
     total_count_normals:  u32
     total_count_uvs:      u32
     total_count_tree:     u32
-    total_count_tree_packed: u32
     for model in models {
         total_count_triangle += cast(u32) len(model.triangles)
         total_count_normals  += cast(u32) len(model.normals)
         total_count_uvs      += cast(u32) len(model.uvs)
         total_count_tree     += cast(u32) len(model.tree)
-        total_count_tree_packed += cast(u32) len(model.tree_packed)
     }
     
     render_triangles := make([] lane_Triangle, total_count_triangle, settings.allocator)
     render_normals   := make([] Normals,       total_count_normals,  settings.allocator)
     render_uvs       := make([] UVs,           total_count_uvs,      settings.allocator)
-    render_trees     := make([] Tree_Node ,    total_count_tree,     settings.allocator)
-    render_trees_packed := make([] lane_Tree_Node ,    total_count_tree_packed,     settings.allocator)
+    render_trees     := make([] Tree_Node,    total_count_tree,     settings.allocator)
     
     next_free_triangles := render_triangles
     next_free_normals   := render_normals
     next_free_uvs       := render_uvs
     next_free_trees     := render_trees
-    next_free_trees_packed     := render_trees_packed
     
     render_models := make([] Render_Model, len(models), settings.allocator)
     for model, model_index in models {
@@ -358,14 +357,12 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
         copy_over_slice(&rm.uvs,       &next_free_uvs,       model.uvs)
         copy_over_slice(&rm.triangles, &next_free_triangles, model.triangles)
         copy_over_slice(&rm.tree,      &next_free_trees,     model.tree)
-        copy_over_slice(&rm.tree_packed,      &next_free_trees_packed,     model.tree_packed)
     }
     
     assert(len(next_free_normals)   == 0)
     assert(len(next_free_uvs)       == 0)
-    assert(len(next_free_trees)     == 0)
     assert(len(next_free_triangles) == 0)
-    assert(len(next_free_trees_packed)     == 0)
+    assert(len(next_free_trees)     == 0)
     
     render_materials := make_shallow_copy(materials, settings.allocator)
     

@@ -225,7 +225,6 @@ modulus_v :: proc(value: [$N]f32, divisor: [N]f32) -> (result: [N]f32) {
     return result
 }
 
-// @cleanup these array to simd to array
 round :: proc { round_f, round_v }
 round_f :: proc($T: typeid, f: $F) -> T where !intrinsics.type_is_array(F) {
     return  cast(T) (f < 0 ? -math.round(-f) : math.round(f))
@@ -253,7 +252,10 @@ floor_v :: proc($T: typeid, v: [$N] $F) -> [N] T {
         }
         return result
     } else {
-        return vec_cast(T, simd.to_array(simd.floor(simd.from_array(v))))
+        s := transmute(#simd [N] F) v
+        s  = simd.floor(s)
+        result := transmute([N] F) s
+        return vec_cast(T, result)
     }
 }
 
@@ -262,7 +264,10 @@ ceil_f :: proc($T: typeid, f: f32) -> (i: T) {
     return cast(T) math.ceil(f)
 }
 ceil_v :: proc($T: typeid, fs: [$N] f32) -> [N] T {
-    return vec_cast(T, simd.to_array(simd.ceil(simd.from_array(fs))))
+    s := transmute(#simd [N] F) v
+    s  = simd.ceil(s)
+    result := transmute([N] F) s
+    return vec_cast(T, result)
 }
 
 truncate :: proc { truncate_f, truncate_v }

@@ -105,7 +105,7 @@ benchmark_scene :: proc (world: ^World) {
         
         object := make_object(world)
         object.model = ctx.id
-        object.material = 1
+        object.material = 5
         object.transform.t.y =  5
         object.transform.t.z = -10
     }

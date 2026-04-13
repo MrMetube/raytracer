@@ -32,8 +32,6 @@ State :: struct {
     tree_info_is_open: bool,
     materials_is_open: bool,
     
-    selected_model_info: Tree_Info,
-    
     ////////////////////////////////////////////////
     
     camera: Camera,
@@ -254,7 +252,7 @@ main :: proc () {
         
         // @cleanup the request system, can we just render every frame?
         if state.fast_render.requested && state.previewed_object_id != 0 {
-            state.fast_render.requested  = false
+        // @cleanup the request system, can we just render every frame?
             state.preview_render.requested = true
         }
         
@@ -397,17 +395,6 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
                         state.previewed_object_id = object_index
                         state.preview_render.requested = true
                     }
-                }
-                
-                if ui_collapser(layout, &state.tree_info_is_open, "Inspect Tree") {
-                    m := &Models[object.model]
-                    state.selected_model_info = inspect(m.tree)
-                    
-                    layout_indent_scope(layout)
-                    ui_text(layout, "triangle count %v", state.selected_model_info.value_count)
-                    ui_text(layout, "node count %v", state.selected_model_info.node_count)
-                    ui_text(layout, "depth: max = %v, avg = %.2f", state.selected_model_info.depth.max, state.selected_model_info.depth.avg)
-                    ui_text(layout, "values per node: max = %v, avg = %.2f", state.selected_model_info.values_per_node.max, state.selected_model_info.values_per_node.avg)
                 }
                 
                 if ui_dragger(layout, &object.transform.x.x, "scale x = %v",       object.transform.x.x) do rerender = true

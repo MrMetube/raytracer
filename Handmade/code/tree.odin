@@ -3,19 +3,13 @@ package main
 import "core:slice"
 import "core:time"
 
-Tree :: [] Tree_Node
+
 
 Tree_Node :: struct #align(32) {
-    bounds: Rectangle3,
-    count:  u32, // @note(viktor): if value_count == 0 then its subnodes, else its values
-    first:  u32, // @note(viktor): either subnodes or values
-}
-
-lane_Tree_Node :: struct #align(32) {
     bounds_min: lane_v3,
     bounds_max: lane_v3,
-    count:      lane_u32, // child count per lane, 0 => internal
-    first:      lane_u32, // child base for internal, triangle base for leaf
+    count:      lane_u32, // @note(viktor): if value_count == 0 then its subnodes, else its values
+    first:      lane_u32, // @note(viktor): either subnodes or values
 }
 
 Root_Index  :: 0
@@ -45,7 +39,7 @@ Split_Node :: struct {
 
 // @important @volatile The triangles buffer is sorted at the end.
 // You need to pass all per vertex data along, so that it can be sorted alongside the vertices.
-tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tree_allocator := context.allocator) -> ([] Tree_Node, [] lane_Triangle, [] Normals, [] UVs, [] lane_Tree_Node) {
+tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tree_allocator := context.allocator) -> ([] lane_Triangle, [] Normals, [] UVs, [] Tree_Node) {
     assert(len(triangles) != 0)
     
     allocator := context.temp_allocator
@@ -57,7 +51,12 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
     // branches = N/S parents + N/S² grandparents + ...
     // -> N leaves + branches <= 2N nodes
     // @todo(viktor): why is this not enough for large models(>100k triangles)
-    work_tree := make([dynamic] Tree_Node, 0, len(triangles)*8, allocator)
+    Work_Node :: struct {
+        bounds: Rectangle3,
+        count:  u32, // @note(viktor): if value_count == 0 then its subnodes, else its values
+        first:  u32, // @note(viktor): either subnodes or values
+    }
+    work_tree := make([dynamic] Work_Node, 0, len(triangles)*8, allocator)
     
     ////////////////////////////////////////////////
     triangle_centers := make([] v3,         len(triangles), allocator)
@@ -210,7 +209,7 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
             
             node.bounds = rect_inverted_infinity(Rectangle3)
             for sub in subs {
-                append(&work_tree, Tree_Node { bounds = sub.bounds })
+                append(&work_tree, Work_Node { bounds = sub.bounds })
                 node.bounds = rect_union(node.bounds, sub.bounds)
             }
             
@@ -235,7 +234,7 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
     ////////////////////////////////////////////////
     
     aligned_count := align(Subnodes_Per_Node, len(work_tree) - 1) + 1
-    tree := make([] Tree_Node, aligned_count, tree_allocator)
+    tree := make([] Work_Node, aligned_count, allocator)
     copy(tree, work_tree[:])
     
     ////////////////////////////////////////////////
@@ -250,7 +249,7 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
     
     // @cleanup this cannot be called multiple times, because we add a bunch of padding 
     // triangles into the middle and those are then part of the tree in the next call.
-    
+    // @cleanup this cannot be called multiple times, because we add a bunch of padding 
     lane_triangles := make([] lane_Triangle, aligned_size / LaneWidth, tree_allocator)
     padded_normals := make([] Normals, aligned_size, tree_allocator)
     padded_uvs     := make([] UVs, aligned_size, tree_allocator)
@@ -279,16 +278,12 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
     }
     assert(next_free_value_index == aligned_size)
     
-    // packing: keep root at lane 0 of wide[0], waste lanes 1..7, then pack from scalar index 1
-    
     packed_count := (len(tree)+7)/8 + 1
-    if tree[0].count != 0 {
-        // @note(viktor): all triangles fit into the root
-        packed_count = 1
+    if tree[0].count != 0 { 
+        packed_count = 1 // @note(viktor): all triangles fit into the root
     }
     
-    packed_tree := make([] lane_Tree_Node, packed_count, tree_allocator)
-    
+    packed_tree := make([] Tree_Node, packed_count, tree_allocator)
     {
         wide := &packed_tree[0]
         root := tree[0]
@@ -315,47 +310,7 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
         }
     }
     
-    return tree, lane_triangles, padded_normals, padded_uvs, packed_tree
-}
-
-////////////////////////////////////////////////
-
-Tree_Info :: struct {
-    values_per_node: Stat(u32),
-    depth: Stat(u32),
-    
-    node_count:  u32,
-    value_count: u32,
-}
-
-inspect :: proc (nodes: [] Tree_Node, it_index: u32 = Root_Index, depth : u32 = 1) -> Tree_Info {
-    it := nodes[it_index]
-    value_count := it.count
-    
-    result: Tree_Info
-    
-    result.depth = stat_make(depth)
-    result.values_per_node = stat_make(value_count)
-    result.node_count = 1
-    result.value_count = it.count
-    
-    if it.count == 0 && it.first != Root_Index {
-        for sub_index in it.first..< it.first + Subnodes_Per_Node {
-            sub_info := inspect(nodes, sub_index, depth + 1)
-            
-            result.node_count  += sub_info.node_count
-            result.value_count += sub_info.value_count
-            if sub_info.values_per_node.count != 0 {
-                stat_update(&result.values_per_node, sub_info.values_per_node)
-            }
-            stat_update(&result.depth, sub_info.depth)
-        }
-    }
-    
-    stat_finalize(&result.values_per_node)
-    stat_finalize(&result.depth)
-    
-    return result
+    return lane_triangles, padded_normals, padded_uvs, packed_tree
 }
 
 ////////////////////////////////////////////////

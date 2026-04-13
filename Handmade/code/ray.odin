@@ -203,7 +203,7 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 model_ray_o := transform_mul_1(model.inverse, ray_o)
                 model_ray_d := transform_mul_0(model.inverse, ray_d)
                 
-                hit_mask, hit_t, hit_triangle, hit_uv, tests := hit_tree(lane_mask, model.triangles, model.tree_packed, model_ray_o, model_ray_d, min_t, hit_closest_t)
+                hit_mask, hit_t, hit_triangle, hit_uv, tests := hit_tree(lane_mask, model.triangles, model.tree, model_ray_o, model_ray_d, min_t, hit_closest_t)
                 
                 hit_did_hit |= hit_mask
                 hit_did_hit &= lane_mask
@@ -470,7 +470,7 @@ texture_sample :: proc (texture: Lane(Image), uv: lane_v2) -> lane_v3 {
 }
 
 /// target_fps = 30
-/// ns_per_ray = 19
+/// ns_per_ray = 26
 /// width  = 1920 / 4
 /// height = 1080 / 4
 ///  width
@@ -554,7 +554,7 @@ transform_invert :: proc (m: $Transform) -> Transform {
 
 ////////////////////////////////////////////////
 
-hit_tree :: proc (lane_mask: lane_u32, triangles: [] lane_Triangle, tree_packed: [] lane_Tree_Node, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32) -> (lane_u32, lane_f32, lane_u32, lane_v2, Test_Info) {
+hit_tree :: proc (lane_mask: lane_u32, triangles: [] lane_Triangle, tree: [] Tree_Node, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32) -> (lane_u32, lane_f32, lane_u32, lane_v2, Test_Info) {
     spall_proc()
     
     inv_d     := 1 / ray_d
@@ -563,7 +563,7 @@ hit_tree :: proc (lane_mask: lane_u32, triangles: [] lane_Triangle, tree_packed:
     total_hit_mask: lane_u32
     info:           Test_Info
     
-    root := &tree_packed[Root_Index]
+    root := &tree[Root_Index]
     {
         min := root.bounds_min
         max := root.bounds_max
@@ -617,7 +617,7 @@ hit_tree :: proc (lane_mask: lane_u32, triangles: [] lane_Triangle, tree_packed:
                 spall_scope("subnodes")
                 
                 subs_index := 1 + (node_first - 1) / Subnodes_Per_Node
-                subs := &tree_packed[subs_index]
+                subs := &tree[subs_index]
                 
                 min := subs.bounds_min
                 max := subs.bounds_max
@@ -684,7 +684,7 @@ Stack_Entry :: struct {
     count: u32,
 }
 
-append_subnodes :: proc (stack: [] Stack_Entry, stack_count: ^u32, subs: ^lane_Tree_Node, bounds_hit_mask: lane_u32, bounds_hit_t: lane_f32) {
+append_subnodes :: proc (stack: [] Stack_Entry, stack_count: ^u32, subs: ^Tree_Node, bounds_hit_mask: lane_u32, bounds_hit_t: lane_f32) {
     spall_proc()
     
     index := transmute([Subnodes_Per_Node] u32) lane_offset
