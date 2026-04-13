@@ -60,9 +60,9 @@ init_state :: proc (state: ^State) {
     world_init(&state.world)
     
     if false do default_scene(&state.world)
-    if false do benchmark_scene(&state.world)
+    if !false do benchmark_scene(&state.world)
     if false do kenney_scene(&state.world)
-    if !false do brdf_scene(&state.world)
+    if false do brdf_scene(&state.world)
     
     state.preview_render_p = .5 * vec_cast(f32, state.window_size - {state.preview_render.image.width, state.preview_render.image.height})
     state.preview_render_drag_size = 12
@@ -354,11 +354,11 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
     
     layout_pad(layout)
     if Debug_View in (bit_set[Debug_View_Kind]{ .Triangle_Tests, .Rectangle_Tests, .Both_Tests }) {
-        if ui_dragger(layout, &Triangle_Threshold, "Triangle Threshold %v", view_magnitude(Triangle_Threshold, precision = 1), speed = 1, min = 1, max = 1000, logarithmic = true) {
+        if ui_dragger(layout, &Triangle_Threshold, "Triangle Threshold %v", view_magnitude(Triangle_Threshold, precision = 1), speed = 1, min = 1, max = 100000, logarithmic = true) {
             rerender = true
         }
         
-        if ui_dragger(layout, &Rectangle_Threshold, "Rectangle Threshold %v", view_magnitude(Rectangle_Threshold, precision = 1), speed = 1, min = 1, max = 1000, logarithmic = true) {
+        if ui_dragger(layout, &Rectangle_Threshold, "Rectangle Threshold %v", view_magnitude(Rectangle_Threshold, precision = 1), speed = 1, min = 1, max = 100000, logarithmic = true) {
             rerender = true
         }
     }

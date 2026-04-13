@@ -178,8 +178,6 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
         bounces: for bounce_index in 0..<max_bounce_count {
             spall_scope("ray bounce")
             
-            
-            
             // @speed @waste can be ~30% and increases with higher max bounce count. 
             // How can we still make use of the lanes, that already did not hit anything?
             // Can they be used for direct light sampling instead? How do we ensure correct
@@ -187,8 +185,6 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             // @correctness Rework the material model to ensure correct weighting in general.
             // Minor changes to roughness from .99 to 1.0 give very different images. I would
             // expect it to be a linear relation.
-            
-            
             
             bounces_computed += 1 & lane_mask
             loops_computed   += 1
@@ -207,7 +203,7 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 model_ray_o := transform_mul_1(model.inverse, ray_o)
                 model_ray_d := transform_mul_0(model.inverse, ray_d)
                 
-                hit_mask, hit_t, hit_triangle, hit_uv, tests := hit_tree(model.triangles, model.tree, model_ray_o, model_ray_d, min_t, hit_closest_t)
+                hit_mask, hit_t, hit_triangle, hit_uv, tests := hit_tree(model.triangles, model.tree_packed, model_ray_o, model_ray_d, min_t, hit_closest_t)
                 
                 hit_did_hit |= hit_mask
                 conditional_assign(hit_mask, &hit_closest_t,      hit_t)
@@ -557,7 +553,7 @@ transform_invert :: proc (m: $Transform) -> Transform {
 
 ////////////////////////////////////////////////
 
-hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32) -> (lane_u32, lane_f32, lane_u32, lane_v2, Test_Info) {
+hit_tree :: proc (triangles: [] lane_Triangle, tree_packed: [] lane_Tree_Node, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32) -> (lane_u32, lane_f32, lane_u32, lane_v2, Test_Info) {
     spall_proc()
     
     inv_d     := 1 / ray_d
@@ -565,10 +561,11 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
     
     total_hit_mask: lane_u32
     info:           Test_Info
+    
+    root := &tree_packed[Root_Index]
     {
-        root := tree[Root_Index]
-        min := vec_cast(lane_f32, root.bounds.min)
-        max := vec_cast(lane_f32, root.bounds.max)
+        min := root.bounds_min
+        max := root.bounds_max
         
         total_hit_mask, _ = hit_rectangle(min, max, neg_inv_o, inv_d, min_t, max_t)
         when Collect_Stats_For_Debug_View {
@@ -582,15 +579,14 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
     ////////////////////////////////////////////////
     
     spall_scope("traverse tree")
-    tree_lane := to_lane(tree)
-    tree_lane  = lane_index_offset(tree_lane, lane_offset)
     
-    stack: [128] u32
+    stack: [64] Stack_Entry
     
     model_hit_t := max_t
     model_hit_mask:     lane_u32
     model_hit_triangle: lane_u32
     model_hit_uv:       lane_v2
+    
     for lane in 0..<LaneWidth {
         if extract(total_hit_mask, lane) == 0 do continue
         
@@ -604,92 +600,37 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
         lane_inv_d     := vec_cast(lane_f32, extract(inv_d, lane))
         lane_neg_inv_o := vec_cast(lane_f32, extract(neg_inv_o, lane))
         
-        stack[0]     = Root_Index
-        stack_count := cast(u32) 1
+        stack_count: u32 = 1
+        stack[0] = { extract(root.first, 0), extract(root.count, 0) }
         
         traversal: for stack_count != 0 {
             stack_count -= 1
-            it_index := stack[stack_count]
-            node     := &tree[it_index]
+            node := stack[stack_count]
             
-            if node.count == 0 {
+            node_count := node.count
+            node_first := node.first
+            
+            if node_count == 0 {
                 spall_scope("subnodes")
-                subnodes := lane_index(tree_lane, node.first)
                 
-                node_min := lane_member(subnodes, "bounds", "min", v3)
-                node_max := lane_member(subnodes, "bounds", "max", v3)
+                subs_index := 1 + (node_first - 1) / Subnodes_Per_Node
+                subs := &tree_packed[subs_index]
                 
-                min := lane_gather_v(node_min)
-                max := lane_gather_v(node_max)
+                min := subs.bounds_min
+                max := subs.bounds_max
                 
                 bounds_hit_mask, bounds_hit_t := hit_rectangle(min, max, lane_neg_inv_o, lane_inv_d, min_t, closest_t)
                 when Collect_Stats_For_Debug_View {
                     info.rectangles += Subnodes_Per_Node
                 }
+                
                 if bounds_hit_mask == lane_false do continue traversal
                 
-                // 121ns unsorted
-                // 131ns sorted
-                #no_bounds_check if Sort_Subnodes {
-                    spall_begin("sort subnodes")
-                    t := transmute([Subnodes_Per_Node] f32) bounds_hit_t
-                    index := transmute([Subnodes_Per_Node] u32) lane_offset
-                    
-                    // @note(viktor): sort from largest to smallest, so that the last appended node is the closest, which will be popped first
-                    swap_if :: #force_inline proc(index: ^[Subnodes_Per_Node] u32, t: ^[Subnodes_Per_Node] f32, i, j: int) {
-                        if t[i] < t[j] { swap(&t[i], &t[j]); swap(&index[i], &index[j]) }
-                    }
-                    
-                    swap_if(&index, &t, 0, 1)
-                    swap_if(&index, &t, 2, 3)
-                    swap_if(&index, &t, 4, 5)
-                    swap_if(&index, &t, 6, 7)
-                    
-                    swap_if(&index, &t, 0, 2)
-                    swap_if(&index, &t, 1, 3)
-                    swap_if(&index, &t, 4, 6)
-                    swap_if(&index, &t, 5, 7)
-                    
-                    swap_if(&index, &t, 1, 2)
-                    swap_if(&index, &t, 5, 6)
-                    swap_if(&index, &t, 0, 4)
-                    swap_if(&index, &t, 1, 5)
-                    swap_if(&index, &t, 2, 6)
-                    swap_if(&index, &t, 3, 7)
-                    
-                    swap_if(&index, &t, 2, 4)
-                    swap_if(&index, &t, 3, 5)
-                    
-                    swap_if(&index, &t, 1, 2)
-                    swap_if(&index, &t, 3, 4)
-                    swap_if(&index, &t, 5, 6)
-                    
-                    swap_if(&index, &t, 2, 3)
-                    swap_if(&index, &t, 4, 5)
-                    
-                    swap_if(&index, &t, 1, 2)
-                    swap_if(&index, &t, 3, 4)
-                    swap_if(&index, &t, 5, 6)
-                    spall_end()
-                    spall_scope("append subnodes")
-                    for sub in 0..<Subnodes_Per_Node {
-                        if extract(bounds_hit_mask, index[sub]) != 0 {
-                            stack[stack_count] = index[sub] + node.first
-                            stack_count += 1
-                        }
-                    }
-                } else {
-                    spall_scope("append subnodes")
-                    // @note(viktor): the last tests showed that the sorting overhead was not worth the gains it should have provided
-                    subnode_indices := node.first + lane_offset
-                    // @note(viktor): this will be a loop unless AVX-512 is available, where it is one instruction with a few cycles of latency
-                    simd.masked_compress_store(&stack[stack_count], subnode_indices, bounds_hit_mask)
-                    stack_count += horizontal_add(1 & bounds_hit_mask)
-                }
+                append_subnodes(stack[:], &stack_count, subs, bounds_hit_mask, bounds_hit_t)
             } else {
                 spall_scope("triangles")
-                start :=         node.first / LaneWidth
-                end   := start + node.count / LaneWidth
+                start :=         node_first / LaneWidth
+                end   := start + node_count / LaneWidth
                 
                 hits_count: lane_u32
                 
@@ -702,9 +643,9 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
                     if triangle_hit_mask != lane_false {
                         conditional_assign(~triangle_hit_mask, &triangle_t, +Infinity)
                         
-                        closest_t   = simd.reduce_min(triangle_t)
-                        is_closest := equal(triangle_t, cast(lane_f32) closest_t)
-                        high_bits  := cast(u32) transmute(u8) simd.extract_msbs(is_closest)
+                        closest_t     = simd.reduce_min(triangle_t)
+                        is_closest   := equal(triangle_t, cast(lane_f32) closest_t)
+                        high_bits    := cast(u32) transmute(u8) simd.extract_msbs(is_closest)
                         closest_lane := simd.count_trailing_zeros(high_bits)
                         
                         did_hit      = true
@@ -718,7 +659,7 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
                 }
                 
                 when Collect_Stats_For_Debug_View {
-                    info.triangles += cast(u64) node.count
+                    info.triangles += cast(u64) node_count
                     info.triangle_hits += cast(u64) horizontal_add(hits_count)
                 }
             }
@@ -733,6 +674,78 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree: Tree, ray_o, ray_d: lane_v3
     }
     
     return model_hit_mask, model_hit_t, model_hit_triangle, model_hit_uv, info
+}
+
+Stack_Entry :: struct {
+    first: u32,
+    count: u32,
+}
+
+append_subnodes :: proc (stack: [] Stack_Entry, stack_count: ^u32, subs: ^lane_Tree_Node, bounds_hit_mask: lane_u32, bounds_hit_t: lane_f32) {
+    spall_proc()
+    
+    #no_bounds_check if Sort_Subnodes {
+        spall_begin("sort subnodes")
+        t     := transmute([Subnodes_Per_Node] f32) bounds_hit_t
+        index := transmute([Subnodes_Per_Node] u32) lane_offset
+        
+        swap_if :: #force_inline proc(index: ^[Subnodes_Per_Node] u32, t: ^[Subnodes_Per_Node] f32, i, j: int) {
+            #no_bounds_check if t[i] < t[j] { 
+                swap(&t[i], &t[j]); 
+                swap(&index[i], &index[j])
+            }
+        }
+        
+        swap_if(&index, &t, 0, 1)
+        swap_if(&index, &t, 2, 3)
+        swap_if(&index, &t, 4, 5)
+        swap_if(&index, &t, 6, 7)
+        
+        swap_if(&index, &t, 0, 2)
+        swap_if(&index, &t, 1, 3)
+        swap_if(&index, &t, 4, 6)
+        swap_if(&index, &t, 5, 7)
+        
+        swap_if(&index, &t, 1, 2)
+        swap_if(&index, &t, 5, 6)
+        swap_if(&index, &t, 0, 4)
+        swap_if(&index, &t, 1, 5)
+        swap_if(&index, &t, 2, 6)
+        swap_if(&index, &t, 3, 7)
+        
+        swap_if(&index, &t, 2, 4)
+        swap_if(&index, &t, 3, 5)
+        
+        swap_if(&index, &t, 1, 2)
+        swap_if(&index, &t, 3, 4)
+        swap_if(&index, &t, 5, 6)
+        
+        swap_if(&index, &t, 2, 3)
+        swap_if(&index, &t, 4, 5)
+        
+        swap_if(&index, &t, 1, 2)
+        swap_if(&index, &t, 3, 4)
+        swap_if(&index, &t, 5, 6)
+        spall_end()
+        
+        spall_scope("append subnodes")
+        for sub in 0..<Subnodes_Per_Node {
+            if extract(bounds_hit_mask, index[sub]) != 0 {
+                it: Stack_Entry
+                it.first = extract(subs.first, index[sub])
+                it.count = extract(subs.count, index[sub])
+                
+                stack[stack_count^] = it
+                stack_count^ += 1
+            }
+        }
+    } else {
+        unimplemented()
+        // spall_scope("append subnodes")
+        // subnodes := node_first + lane_offset
+        // simd.masked_compress_store(&stack[stack_count^], subnodes, bounds_hit_mask)
+        // stack_count^ += horizontal_add(1 & bounds_hit_mask)
+    }
 }
 
 ////////////////////////////////////////////////

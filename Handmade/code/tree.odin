@@ -11,6 +11,13 @@ Tree_Node :: struct #align(32) {
     first:  u32, // @note(viktor): either subnodes or values
 }
 
+lane_Tree_Node :: struct #align(32) {
+    bounds_min: lane_v3,
+    bounds_max: lane_v3,
+    count:      lane_u32, // child count per lane, 0 => internal
+    first:      lane_u32, // child base for internal, triangle base for leaf
+}
+
 Root_Index  :: 0
 
 Subnodes_Per_Node :: 8
@@ -37,7 +44,7 @@ Split_Node :: struct {
 
 // @important @volatile The triangles buffer is sorted at the end.
 // You need to pass all per vertex data along, so that it can be sorted alongside the vertices.
-tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tree_allocator := context.allocator) -> ([] Tree_Node, [] lane_Triangle, [] Normals, [] UVs) {
+tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tree_allocator := context.allocator) -> ([] Tree_Node, [] lane_Triangle, [] Normals, [] UVs, [] lane_Tree_Node) {
     assert(len(triangles) != 0)
     
     allocator := context.temp_allocator
@@ -271,7 +278,43 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
     }
     assert(next_free_value_index == aligned_size)
     
-    return tree, lane_triangles, padded_normals, padded_uvs
+    // packing: keep root at lane 0 of wide[0], waste lanes 1..7, then pack from scalar index 1
+    
+    packed_count := (len(tree)+7)/8 + 1
+    if tree[0].count != 0 {
+        // @note(viktor): all triangles fit into the root
+        packed_count = 1
+    }
+    
+    packed_tree := make([] lane_Tree_Node, packed_count, tree_allocator)
+    
+    {
+        wide := &packed_tree[0]
+        root := tree[0]
+        
+        wide.bounds_min = vec_cast(lane_f32, root.bounds.min)
+        wide.bounds_max = vec_cast(lane_f32, root.bounds.max)
+        wide.first      = root.first
+        wide.count      = root.count
+    }
+    
+    for i := 1; i < len(tree); i += Subnodes_Per_Node {
+        wide := &packed_tree[1 + (i - 1) / Subnodes_Per_Node]
+        
+        for lane in 0..<Subnodes_Per_Node {
+            child_index := i + lane
+            if child_index >= len(tree) do break
+            
+            child := tree[child_index]
+            
+            replace(&wide.bounds_min, lane, child.bounds.min)
+            replace(&wide.bounds_max, lane, child.bounds.max)
+            replace(&wide.first,      lane, child.first)
+            replace(&wide.count,      lane, child.count)
+        }
+    }
+    
+    return tree, lane_triangles, padded_normals, padded_uvs, packed_tree
 }
 
 ////////////////////////////////////////////////
