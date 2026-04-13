@@ -220,7 +220,7 @@ main :: proc () {
             }
             
             if rl.IsKeyPressed(.F5) && !state.quality_render.active {
-                output_path := "./render.bmp"
+                output_path := "../output/render.bmp"
                 img.write_bmp(ctprint("%v", output_path), state.quality_render.image.width, state.quality_render.image.height, 4, &state.quality_render.image.data[0])
                 cwd, _ := os.get_working_directory(context.temp_allocator)
                 print("Wrote ouput to %v/%v\n", cwd, output_path)
