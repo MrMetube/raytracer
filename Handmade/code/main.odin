@@ -338,7 +338,7 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
     
     ////////////////////////////////////////////////
     
-    rerender := false
+    rerender := state.fast_render.requested
     defer state.fast_render.requested = rerender
     layout_begin_horizontal(layout)
         for kind in Debug_View_Kind {
@@ -378,29 +378,6 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
     if ui_collapser(layout, &state.ojects_is_open, "Objects") {
         layout_indent_scope(layout)
         
-        // @api, can this just be a source_location for unique ui elements(no loop, no function used in loop)
-        layout_begin_horizontal(layout)
-            rebuild_all: bool
-            if ui_button(layout, set_value_interaction(&rebuild_all, true), "Rebuild all Trees") {
-                rebuild_all = true
-            }
-            
-            if ui_dragger(layout, &Values_Per_Node, "Values per Node %v", Values_Per_Node, min = 8, max = 1024) do rebuild_all = true
-            
-            if rebuild_all {
-                start := time.now()
-                for object_index in 1..=state.world.last_used_object_index {
-                    object := &state.world.objects[object_index]
-                        
-                    m := &Models[object.model]
-                    model_rebuild_tree(m)
-                }
-                
-                print("building trees took %v\n", time.since(start))
-                
-                state.fast_render.requested = true
-            }
-        layout_end_horizontal(layout)
         
         // @api maybe make an iterator?
         for object_index in 1..=state.world.last_used_object_index {

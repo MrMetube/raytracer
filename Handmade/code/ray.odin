@@ -203,9 +203,10 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 model_ray_o := transform_mul_1(model.inverse, ray_o)
                 model_ray_d := transform_mul_0(model.inverse, ray_d)
                 
-                hit_mask, hit_t, hit_triangle, hit_uv, tests := hit_tree(model.triangles, model.tree_packed, model_ray_o, model_ray_d, min_t, hit_closest_t)
+                hit_mask, hit_t, hit_triangle, hit_uv, tests := hit_tree(lane_mask, model.triangles, model.tree_packed, model_ray_o, model_ray_d, min_t, hit_closest_t)
                 
                 hit_did_hit |= hit_mask
+                hit_did_hit &= lane_mask
                 conditional_assign(hit_mask, &hit_closest_t,      hit_t)
                 conditional_assign(hit_mask, &hit_triangle_index, hit_triangle)
                 conditional_assign(hit_mask, &hit_triangle_uv,    hit_uv)
@@ -395,7 +396,7 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             if Early_Elimination {
                 // @todo(viktor): retest this
                 early_termination_start :: cast(u32) 4
-                if bounce_index < early_termination_start {
+                if bounce_index >= early_termination_start {
                     early_termination_epsilon :: 0.05
                     early_termination_min :: cast(lane_f32)      early_termination_epsilon
                     early_termination_max :: cast(lane_f32) (1 - early_termination_epsilon)
@@ -467,7 +468,7 @@ texture_sample :: proc (texture: Lane(Image), uv: lane_v2) -> lane_v3 {
 }
 
 /// target_fps = 30
-/// ns_per_ray = 34
+/// ns_per_ray = 19
 /// width  = 1920 / 4
 /// height = 1080 / 4
 ///  width
@@ -553,7 +554,7 @@ transform_invert :: proc (m: $Transform) -> Transform {
 
 ////////////////////////////////////////////////
 
-hit_tree :: proc (triangles: [] lane_Triangle, tree_packed: [] lane_Tree_Node, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32) -> (lane_u32, lane_f32, lane_u32, lane_v2, Test_Info) {
+hit_tree :: proc (lane_mask: lane_u32, triangles: [] lane_Triangle, tree_packed: [] lane_Tree_Node, ray_o, ray_d: lane_v3, min_t, max_t: lane_f32) -> (lane_u32, lane_f32, lane_u32, lane_v2, Test_Info) {
     spall_proc()
     
     inv_d     := 1 / ray_d
@@ -568,6 +569,8 @@ hit_tree :: proc (triangles: [] lane_Triangle, tree_packed: [] lane_Tree_Node, r
         max := root.bounds_max
         
         total_hit_mask, _ = hit_rectangle(min, max, neg_inv_o, inv_d, min_t, max_t)
+        total_hit_mask &= lane_mask
+        
         when Collect_Stats_For_Debug_View {
             info.rectangles += LaneWidth
         }
@@ -684,10 +687,11 @@ Stack_Entry :: struct {
 append_subnodes :: proc (stack: [] Stack_Entry, stack_count: ^u32, subs: ^lane_Tree_Node, bounds_hit_mask: lane_u32, bounds_hit_t: lane_f32) {
     spall_proc()
     
+    index := transmute([Subnodes_Per_Node] u32) lane_offset
+    
     #no_bounds_check if Sort_Subnodes {
         spall_begin("sort subnodes")
-        t     := transmute([Subnodes_Per_Node] f32) bounds_hit_t
-        index := transmute([Subnodes_Per_Node] u32) lane_offset
+        t := transmute([Subnodes_Per_Node] f32) bounds_hit_t
         
         swap_if :: #force_inline proc(index: ^[Subnodes_Per_Node] u32, t: ^[Subnodes_Per_Node] f32, i, j: int) {
             #no_bounds_check if t[i] < t[j] { 
@@ -727,24 +731,19 @@ append_subnodes :: proc (stack: [] Stack_Entry, stack_count: ^u32, subs: ^lane_T
         swap_if(&index, &t, 3, 4)
         swap_if(&index, &t, 5, 6)
         spall_end()
-        
-        spall_scope("append subnodes")
-        for sub in 0..<Subnodes_Per_Node {
-            if extract(bounds_hit_mask, index[sub]) != 0 {
-                it: Stack_Entry
-                it.first = extract(subs.first, index[sub])
-                it.count = extract(subs.count, index[sub])
-                
-                stack[stack_count^] = it
-                stack_count^ += 1
-            }
+    }
+    
+    spall_scope("append subnodes")
+    // @speed simd.masked_compress_store would work if it was only one value per entry
+    for sub in 0..<Subnodes_Per_Node {
+        if extract(bounds_hit_mask, index[sub]) != 0 {
+            it: Stack_Entry
+            it.first = extract(subs.first, index[sub])
+            it.count = extract(subs.count, index[sub])
+            
+            stack[stack_count^] = it
+            stack_count^ += 1
         }
-    } else {
-        unimplemented()
-        // spall_scope("append subnodes")
-        // subnodes := node_first + lane_offset
-        // simd.masked_compress_store(&stack[stack_count^], subnodes, bounds_hit_mask)
-        // stack_count^ += horizontal_add(1 & bounds_hit_mask)
     }
 }
 

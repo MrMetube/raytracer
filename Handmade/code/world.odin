@@ -105,33 +105,21 @@ benchmark_scene :: proc (world: ^World) {
         
         object := make_object(world)
         object.model = ctx.id
-        object.material = 4
+        object.material = 1
         object.transform.t.y =  5
         object.transform.t.z = -10
     }
     
     { // light
         ctx := begin_model()
-        load_obj(ctx, "./models", "sphere.obj")
-        end_model(ctx)
-        
-        object := make_object(world)
-        object.model = ctx.id
-        object.material = 3
-        object.transform = transform_set_scale(object.transform, v3{.5, .5, .5})
-        object.transform.t = {0, 0, 8}
-    }
-    
-    { // ground
-        ctx := begin_model()
         load_obj(ctx, "./models", "plane.obj")
         end_model(ctx)
         
         object := make_object(world)
         object.model = ctx.id
-        object.material = 1
-        object.transform = transform_set_scale(object.transform, v3{50, 50, 1})
-        object.transform.t.z = -10
+        object.material = 3
+        object.transform = transform_set_scale(object.transform, v3{16, 16, 1})
+        object.transform.t.z = 16
     }
 }
 

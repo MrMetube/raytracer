@@ -8,28 +8,29 @@ BRDFs (Bidirectional Reflectance Distribution Function) are used for reflections
 ## Screenshots
 (anti-chronological order)
 
-![Render 19](data/render_19.png)
-![Render 18](data/render_18.png)
-![Render 17](data/render_17.png)
+![Render 20](output/render_20.png)
+![Render 19](output/render_19.png)
+![Render 18](output/render_18.png)
+![Render 17](output/render_17.png)
 ~300k triangles in one model.
-![Render 16](data/render_16.png)
+![Render 16](output/render_16.png)
 The camera is inside a glass like sphere.
-![Render 15](data/render_15.png)
+![Render 15](output/render_15.png)
 Refractions.
-![Render 14](data/render_14.png)
+![Render 14](output/render_14.png)
 Non-uniform scaled models.
-![Render 13](data/render_13.png)
+![Render 13](output/render_13.png)
 Fixed buggy normals and uv interpolation.
-![Render 12](data/render_12.png)
+![Render 12](output/render_12.png)
 Load obj-files with per vertex normals.
-![Render 11](data/render_11.png)
-![Render 10](data/render_10.png)
-![Render 9](data/render_9.png)
-![Render 8](data/render_8.png)
-![Render 7](data/render_7.png)
-![Render 6](data/render_6.png)
-![Render 5](data/render_day_5.png)
-![Render 4](data/render_day_4.png)
-![Render 3](data/render_day_3.png)
-![Render 2](data/render_day_2.png)
-![Render 1](data/render_day_1.png)
+![Render 11](output/render_11.png)
+![Render 10](output/render_10.png)
+![Render 9](output/render_9.png)
+![Render 8](output/render_8.png)
+![Render 7](output/render_7.png)
+![Render 6](output/render_6.png)
+![Render 5](output/render_day_5.png)
+![Render 4](output/render_day_4.png)
+![Render 3](output/render_day_3.png)
+![Render 2](output/render_day_2.png)
+![Render 1](output/render_day_1.png)

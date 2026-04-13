@@ -20,8 +20,9 @@ lane_Tree_Node :: struct #align(32) {
 
 Root_Index  :: 0
 
+// @note(viktor): determined to be optimal(along side 64 V/N) with the stanford lucy scene
+Values_Per_Node   :: 32 
 Subnodes_Per_Node :: 8
-Values_Per_Node   := 128 // determined through experimentation, higher is better, after this point there were no more gains, this may be because the most complex model is then reduced to a depth 1 tree
 
 Tree_Max_Depth :: 32
 
