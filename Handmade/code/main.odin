@@ -59,9 +59,10 @@ init_state :: proc (state: ^State) {
     state.camera = camera_look_at({0, -7, 3}, {0, 0, 1})
     world_init(&state.world)
     
-    default_scene(&state.world)
-    // benchmark_scene(&state.world)
-    // kenney_scene(&state.world)
+    if false do default_scene(&state.world)
+    if false do benchmark_scene(&state.world)
+    if false do kenney_scene(&state.world)
+    if !false do brdf_scene(&state.world)
     
     state.preview_render_p = .5 * vec_cast(f32, state.window_size - {state.preview_render.image.width, state.preview_render.image.height})
     state.preview_render_drag_size = 12

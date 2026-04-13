@@ -58,7 +58,6 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, brdf_data: ^[dynamic
         }
         
         assert(len(brdf_data) == auto_cast(start + total_count))
-        assert(len(brdf_data) == cap(brdf_data))
     } else {
         append(brdf_data, v3{1,1,1})
     }

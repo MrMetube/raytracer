@@ -3,18 +3,12 @@ package main
 import "core:slice"
 import "core:time"
 
-// @important 
-// Currently the subnodes always start on even indices.
-// That means that they are pairwise on the same cacheline.
-// This is because Nil and Root are appended as a pair and then
-// all subnodes are always appended as pairs.
-
 Tree :: [] Tree_Node
 
 Tree_Node :: struct #align(32) {
-    bounds:      Rectangle3,
-    count: u32, // @note(viktor): if value_count == 0 then its subnodes, else its values
-    first: u32, // @note(viktor): either subnodes or values
+    bounds: Rectangle3,
+    count:  u32, // @note(viktor): if value_count == 0 then its subnodes, else its values
+    first:  u32, // @note(viktor): either subnodes or values
 }
 
 Root_Index  :: 0
