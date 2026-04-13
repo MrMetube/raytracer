@@ -421,7 +421,6 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
         camera_p = vec_cast(lane_f32, camera.t),
     }
     
-    settings.start = time.now()
     for row in 0..<tile_rows {
         for col in 0..<tile_cols {
             rect := rect_min_dimension(tile_size * {col, row}, tile_size)
@@ -441,6 +440,7 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
         }
     }
     
+    settings.start = time.now()
     shift :: 3
     for oy in cast(i32) 0..<shift {
         for ox in cast(i32) 0..<shift {

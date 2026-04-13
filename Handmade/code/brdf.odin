@@ -69,7 +69,6 @@ load_brdf_merl :: proc (filename: string, dest: ^BrdfTable, brdf_data: ^[dynamic
 ////////////////////////////////////////////////
 
 brdf_lookup :: proc (brdf_data: [] v3, material: Lane(Material), view_direction, normal, tangent, binormal, light_direction: lane_v3) -> lane_v3 {
-    spall_proc()
     brdf_data := to_lane(brdf_data)
     
     half_vector := normalize_or_zero(.5 * (view_direction + light_direction))

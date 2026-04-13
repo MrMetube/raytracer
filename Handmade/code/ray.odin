@@ -286,7 +286,6 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 hit_tangent  = normalize_or_zero(cross(hit_normal, axis))
                 hit_binormal = normalize_or_zero(cross(hit_normal, hit_tangent))
             }
-            spall_end()
             
             hit_angle       := dot(-ray_d, hit_normal)
             front_face_mask := greater_than(hit_angle, 0)
@@ -298,10 +297,12 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 case .Tangents:  sample = vec_abs(hit_tangent);  break bounces
                 case .Binormals: sample = vec_abs(hit_binormal); break bounces
             }
+            spall_end()
             
             ////////////////////////////////////////////////
             
             when true {
+                spall_begin("ray reflection")
                 reflect_bounce := reflect(ray_d, hit_normal)
                 random_bounce  := normalize_or_zero(hit_normal + random_bilateral(entropy, lane_v3))
                 
@@ -331,6 +332,7 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 
                 choose_refract: lane_u32
                 next_d := reflect_d
+                spall_end()
             } else {
                 refract :: proc (incident: $V/ [$N] $E, normal: V, eta_ratio: E) -> V {
                     cos_angle := dot(-incident, normal)
@@ -394,8 +396,8 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             ////////////////////////////////////////////////
             
             if Early_Elimination {
-                // @todo(viktor): retest this
-                early_termination_start :: cast(u32) 4
+                // @todo(viktor): retest if this is worth it
+                early_termination_start :: cast(u32) 2
                 if bounce_index >= early_termination_start {
                     early_termination_epsilon :: 0.05
                     early_termination_min :: cast(lane_f32)      early_termination_epsilon
@@ -505,7 +507,6 @@ transform_transpose :: proc (m: $Transform) -> Transform {
 }
 
 transform_mul_1 :: proc (m: $Transform, v: $V/ [$N] $E) -> V {
-    spall_proc()
     result := vec_cast(E, m.t)
     result  = fused_mul_add(vec_cast(E, m.x), v.x, result)
     result  = fused_mul_add(vec_cast(E, m.y), v.y, result)
@@ -515,7 +516,6 @@ transform_mul_1 :: proc (m: $Transform, v: $V/ [$N] $E) -> V {
 }
 
 transform_mul_0 :: proc (m: $Transform, v: $V/ [$N] $E) -> V {
-    spall_proc()
     when type_of(m.x.x) != E {
         result := vec_cast(E, m.x) * v.x
         result  = fused_mul_add(vec_cast(E, m.y), v.y, result)
@@ -750,6 +750,7 @@ append_subnodes :: proc (stack: [] Stack_Entry, stack_count: ^u32, subs: ^lane_T
 ////////////////////////////////////////////////
 
 hit_rectangle :: proc (min, max: lane_v3, neg_inv_o, inv_d: lane_v3, t_min_init, t_max_init: lane_f32) -> (lane_u32, lane_f32) {
+    spall_proc()
     t1x := fused_mul_add(min.x, inv_d.x, neg_inv_o.x)
     t2x := fused_mul_add(max.x, inv_d.x, neg_inv_o.x)
     
@@ -770,6 +771,7 @@ hit_rectangle :: proc (min, max: lane_v3, neg_inv_o, inv_d: lane_v3, t_min_init,
 }
 
 hit_triangle :: proc (triangle: ^lane_Triangle, ray_o, ray_d: lane_v3, min_t: lane_f32, max_t: lane_f32) -> (lane_u32, lane_f32, lane_v2) {
+    spall_proc()
     a  := triangle.a
     ab := triangle.ab
     ac := triangle.ac

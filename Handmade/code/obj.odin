@@ -147,17 +147,16 @@ load_texture_from_png :: proc (path: string) -> Image {
     
     data := make([] Color, width * height, context.allocator)
     
-    image_data := stbi.load(cpath, &width, &height, &channels, 4)
-    defer stbi.image_free(image_data)
+    bytes := stbi.load(cpath, &width, &height, &channels, 4)
+    defer stbi.image_free(bytes)
+    image := (cast([^] Color) &bytes[0])[:width * height]
     
     // @note(viktor): flip the y-axis to be +y = up
     for y in 0..<height {
         for x in 0..<width {
-            i := y * width + x * channels
-            c := cast(^Color) &image_data[i]
-            
-            j := (height-1-y) * width + x
-            data[j] = c^
+            i := x +           y  * width
+            j := x + (height-1-y) * width
+            data[j] = image[i]
         }
     }
     
