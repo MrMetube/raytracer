@@ -2,7 +2,7 @@
 #+no-instrumentation
 package main
 
-SpallDisabled :: !true
+SpallDisabled :: true
 
 ////////////////////////////////////////////////
 

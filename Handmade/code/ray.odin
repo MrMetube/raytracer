@@ -3,6 +3,7 @@ package main
 import "base:intrinsics"
 import "core:simd"
 
+// @todo(viktor): the ab,ac optimization is not really needed here anymore, as the renderer only uses lane_triangles and that calculation can just be done in tree_build, simplifying the loader
 Triangle :: struct {
     a:  v3,
     ab: v3,
@@ -615,6 +616,7 @@ hit_tree :: proc (lane_mask: lane_u32, triangles: [] lane_Triangle, tree: [] Tre
             
             if node_count == 0 {
                 spall_scope("subnodes")
+                assert(node.first != 0)
                 
                 subs_index := 1 + (node_first - 1) / Subnodes_Per_Node
                 subs := &tree[subs_index]
