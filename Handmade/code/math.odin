@@ -820,30 +820,18 @@ rect_intersection :: proc(a, b: $R/Rectangle($T)) -> (result: R) {
 }
 
 rect_union_point :: proc(a: $R/Rectangle($T), b: T) -> (result: R) {
-    result.min.x = min(a.min.x, b.x)
-    result.min.y = min(a.min.y, b.y)
-    
-    result.max.x = max(a.max.x, b.x)
-    result.max.y = max(a.max.y, b.y)
-    
-    when len(T) >= 3 {
-        result.min.z = min(a.min.z, b.z)
-        result.max.z = max(a.max.z, b.z)
+    #no_bounds_check #unroll for i in 0..<len(T) {
+        result.min[i] = min(a.min[i], b[i])
+        result.max[i] = max(a.max[i], b[i])
     }
     
     return result
 }
 
 rect_union :: proc(a: $R/Rectangle($T), b: R) -> (result: R) {
-    result.min.x = min(a.min.x, b.min.x)
-    result.min.y = min(a.min.y, b.min.y)
-    
-    result.max.x = max(a.max.x, b.max.x)
-    result.max.y = max(a.max.y, b.max.y)
-    
-    when len(T) >= 3 {
-        result.min.z = min(a.min.z, b.min.z)
-        result.max.z = max(a.max.z, b.max.z)
+    #no_bounds_check #unroll for i in 0..<len(T) {
+        result.min[i] = min(a.min[i], b.min[i])
+        result.max[i] = max(a.max[i], b.max[i])
     }
     
     return result

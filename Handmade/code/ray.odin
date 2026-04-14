@@ -695,7 +695,7 @@ append_subnodes :: proc (stack: [] Stack_Entry, stack_count: ^u32, subs: ^Tree_N
         
         swap_if :: #force_inline proc(index: ^[Subnodes_Per_Node] u32, t: ^[Subnodes_Per_Node] f32, i, j: int) {
             #no_bounds_check if t[i] < t[j] { 
-                swap(&t[i], &t[j]); 
+                swap(&t[i], &t[j])
                 swap(&index[i], &index[j])
             }
         }
