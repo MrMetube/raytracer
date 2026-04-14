@@ -301,8 +301,6 @@ init_render_image :: proc (settings: ^Render_Settings, window_size: v2i) {
 }
 
 render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camera, models: [] Draw_Model, brdf_data: [] v3, materials: [] Material) {
-    spall_proc()
-    
     free_all(settings.allocator)
     
     render.active   = true

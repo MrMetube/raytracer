@@ -40,6 +40,8 @@ Split_Node :: struct {
 // @important @volatile The triangles buffer is sorted at the end.
 // You need to pass all per vertex data along, so that it can be sorted alongside the vertices.
 tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tree_allocator := context.allocator) -> ([] lane_Triangle, [] Normals, [] UVs, [] Tree_Node) {
+    spall_proc()
+    
     assert(len(triangles) != 0)
     
     allocator := context.temp_allocator
@@ -59,7 +61,9 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
     work_tree := make([dynamic] Work_Node, 0, len(triangles)*8, allocator)
     
     ////////////////////////////////////////////////
-    triangle_centers := make([] v3,         len(triangles), allocator)
+    spall_begin("prepass")
+    triangle_centers: [3] [] f32
+    for i in 0..<3 do triangle_centers[i] = make([] f32, len(triangles), allocator)
     triangle_bounds  := make([] Rectangle3, len(triangles), allocator)
     
     append_nothing(&work_tree)
@@ -74,7 +78,9 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
             root_values[value_index] = cast(u32) value_index
             
             center := triangle.a + (triangle.ab + triangle.ac) / 3
-            triangle_centers[value_index] = center
+            for i in 0..<3 {
+                triangle_centers[i][value_index] = center[i]
+            }
             
             bounds := rect_inverted_infinity(Rectangle3)
             bounds = rect_union_point(bounds, triangle.a)
@@ -89,8 +95,10 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
         half_area := dim.y * dim.z + dim.x * (dim.z + dim.y)
         root_cost = half_area * cast(f32) len(root_values)
     }
+    spall_end()
     
     ////////////////////////////////////////////////
+    spall_begin("allocate buffers")
     final_indices := make(map[u32] [] u32, allocator)
     
     stack := make([dynamic] Node_Info, 0, Tree_Max_Depth, allocator)
@@ -99,7 +107,9 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
     // @note(viktor): used by split_node, allocate only once
     temp_prefix := make([] Split_Node, len(triangles), allocator)
     temp_suffix := make([] Split_Node, len(triangles), allocator)
+    spall_end()
     
+    spall_begin("stack loop")
     for len(&stack) > 0 {
         it := pop(&stack)
         
@@ -112,21 +122,11 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
             subs[0].cost    = it.cost
             subs[0].indices = it.indices
             
-            for count := 1; count < Subnodes_Per_Node; count *= 2 {
+            for count := 1; count <= Subnodes_Per_Node/2; count *= 2 {
                 for i in 0..<count {
-                    Sort_Data :: struct {
-                        split_axis: int,
-                        triangle_centers: [] v3,
-                    }
-                    
                     sort_along_axis :: proc (a, b: u32, data_p: pmm) -> bool {
-                        data := cast(^Sort_Data) data_p
-                        
-                        a_center := data.triangle_centers[a]
-                        b_center := data.triangle_centers[b]
-                        axis := data.split_axis
-                        
-                        return a_center[axis] < b_center[axis]
+                        centers := cast(^[] f32) data_p
+                        return centers[a] < centers[b]
                     }
                     
                     get_half_area :: proc (bounds: Rectangle3) -> f32 {
@@ -137,6 +137,7 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
                     
                     best_a, best_b: Split_Node
                     best_split_axis: int
+                    best_a_count:    u32
                     
                     ////////////////////////////////////////////////
                     
@@ -144,23 +145,24 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
                     min_cost := subs[i].cost
                     
                     node_count := cast(u32) len(indices)
-                    best_a_count: u32
                     suffix := temp_suffix[:node_count]
                     prefix := temp_prefix[:node_count]
                     
                     for split_axis in 0..<3 {
-                        data := Sort_Data { split_axis, triangle_centers }
-                        slice.sort_by_with_data(indices, sort_along_axis, &data)
+                        spall_begin("sort axis")
+                        slice.sort_by_with_data(indices, sort_along_axis, &triangle_centers[split_axis])
+                        spall_end()
                         
+                        spall_begin("prefix and suffix")
                         s_bounds := rect_inverted_infinity(Rectangle3)
                         p_bounds := rect_inverted_infinity(Rectangle3)
                         for p_index in 0..<len(indices) {
                             s_index := len(indices) - 1 - p_index
-                            prefix_value := indices[p_index]
-                            suffix_value := indices[s_index]
+                            prefix_index := indices[p_index]
+                            suffix_index := indices[s_index]
                             
-                            p_bounds = rect_union(p_bounds, triangle_bounds[prefix_value])
-                            s_bounds = rect_union(s_bounds, triangle_bounds[suffix_value])
+                            p_bounds = rect_union(p_bounds, triangle_bounds[prefix_index])
+                            s_bounds = rect_union(s_bounds, triangle_bounds[suffix_index])
                             
                             a_count := cast(f32) p_index
                             b_count := cast(f32) p_index + 1
@@ -170,7 +172,9 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
                             prefix[p_index].bounds = p_bounds
                             suffix[s_index].bounds = s_bounds
                         }
+                        spall_end()
                         
+                        spall_begin("search cost")
                         for i in 0..<node_count-1 {
                             a_count := i + 1
                             a := prefix[a_count]
@@ -186,13 +190,16 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
                                 best_b = b
                             }
                         }
+                        spall_end()
                     }
                     
                     // @note(viktor): only accept splits that are better
                     if min_cost == subs[i].cost do break split
                     
-                    data := Sort_Data { best_split_axis, triangle_centers }
-                    slice.sort_by_with_data(indices, sort_along_axis, &data)
+                    spall_begin("better split")
+                    spall_begin("final sort")
+                    slice.sort_by_with_data(indices, sort_along_axis, &triangle_centers[best_split_axis])
+                    spall_end()
                     
                     best_a.indices = indices[:best_a_count]
                     best_b.indices = indices[best_a_count:]
@@ -201,6 +208,7 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
                     
                     subs[i+0]     = best_a
                     subs[i+count] = best_b
+                    spall_end()
                 }
             }
             
@@ -230,9 +238,11 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
             final_indices[it.index] = it.indices
         }
     }
+    spall_end()
     
     ////////////////////////////////////////////////
     
+    spall_begin("post pass")
     aligned_count := align(Subnodes_Per_Node, len(work_tree) - 1) + 1
     tree := make([] Work_Node, aligned_count, allocator)
     copy(tree, work_tree[:])
@@ -310,8 +320,13 @@ tree_build :: proc (triangles: [] Triangle, normals: [] Normals, uvs: [] UVs, tr
         }
     }
     
+    spall_end()
+    
     return lane_triangles, padded_normals, padded_uvs, packed_tree
 }
+
+// 2.2s
+// 1.8s keep triangles centers per axis
 
 ////////////////////////////////////////////////
 

@@ -2,7 +2,7 @@
 #+no-instrumentation
 package main
 
-SpallDisabled :: true
+SpallDisabled :: !true
 
 ////////////////////////////////////////////////
 
@@ -17,7 +17,7 @@ import "core:fmt"
 @(private="file", thread_local) backing_buffer: [] u8
 
 ////////////////////////////////////////////////
-
+    
 when false {
     @(instrumentation_enter)
     @(disabled=SpallDisabled)

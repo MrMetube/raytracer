@@ -20,7 +20,6 @@
     - once there are more than 3 models in a scene
     
 ### engine
-- just load all brdfs
 - scene editing
     - models selection
     - transform manipulators
