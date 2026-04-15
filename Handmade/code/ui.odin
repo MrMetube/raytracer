@@ -182,6 +182,12 @@ set_value_interaction :: proc (target: ^$T, value: T) -> Interaction {
 
 ////////////////////////////////////////////////
 
+Button_Events :: bit_set [Button_Event]
+Button_Event :: enum {
+    selected,
+    active,
+}
+
 // @todo(viktor): @api collapse into begin ui_element set_interaction(used for color) set_outline, set_text, end_ui_element
 // @cleanup what is an interaction in this once we have drags and sliders and moves
 ui_button :: proc (layout: ^Layout, interaction: Interaction, format: string, args: ..any, is_highlighted := false) -> bool {
@@ -190,7 +196,7 @@ ui_button :: proc (layout: ^Layout, interaction: Interaction, format: string, ar
     size := measure_text(layout, text)
     text_p := layout.at
     rect := rect_min_dimension(text_p, size)
-    rect = rect_add_radius(rect, v2{4, 1})
+    rect  = rect_add_radius(rect, v2{4, 1})
     
     // @theme
     outline      := DarkGreen
@@ -215,7 +221,9 @@ ui_button :: proc (layout: ^Layout, interaction: Interaction, format: string, ar
     result: bool
     if rect_contains(rect, layout.ui.mouse_p) {
         layout.ui.next_hot_interaction = interaction
-        result = is_ended(layout.ui, interaction)
+        if is_ended(layout.ui, interaction) {
+            result = true
+        }
     }
     
     layout_pad(layout)
@@ -385,11 +393,11 @@ ui_color_picker :: proc (layout: ^Layout, rgb: ^v3, format: string) -> bool {
 
 ui_toggle :: proc (layout: ^Layout, condition: ^bool, text: string) -> bool {
     interaction := set_value_interaction(condition, !condition^)
-    pressed := ui_button(layout, interaction, text, is_highlighted = condition^)
-    if pressed {
+    clicked := ui_button(layout, interaction, text, is_highlighted = condition^)
+    if clicked {
         condition^ = !condition^
     }
-    return pressed
+    return clicked
 }
 
 ui_collapser :: proc (layout: ^Layout, is_open: ^bool, text: string) -> bool {
@@ -398,6 +406,24 @@ ui_collapser :: proc (layout: ^Layout, is_open: ^bool, text: string) -> bool {
     return result
 }
 
+ui_radio_button :: proc (layout: ^Layout, target: ^$T, value: T, format: string, args: ..any, event := Button_Events{ .active }) -> bool {
+    active := target^ == value
+    result: bool
+    if ui_button(layout, set_value_interaction(target, value), format, ..args, is_highlighted = active) {
+        if !active {
+            target^ = value
+            if .selected in event {
+                result = true
+            }
+        }
+    }
+    
+    if .active in event && target^ == value {
+        result = true
+    }
+    
+    return result
+}
 ////////////////////////////////////////////////
 
 ui_text :: proc (layout: ^Layout, format: string, args: ..any) {

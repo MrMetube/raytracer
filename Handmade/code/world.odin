@@ -25,7 +25,7 @@ Object :: struct {
 ////////////////////////////////////////////////
 
 world_init :: proc (world: ^World) {
-    append(&world.materials, Material{ emit    = { .3  , .4  , .5  }, emission = 2 })
+    append(&world.materials, Material{ emit = { .3  , .4  , .5  }, emission = 2 })
     world_load_brdf(world, 0, "nil")
     reserve(&world.brdf_data, 200_000_000)
 }

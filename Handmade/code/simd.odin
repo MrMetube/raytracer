@@ -99,32 +99,25 @@ lane_slice_start_end :: proc (slice: Lane_Slice($T), start, end: lane_u32, calle
 
 // @todo(viktor): once OLS doesn't crash anymore we can remove the parameter
 lane_member :: proc { lane_member_1, lane_member_2 }
-lane_member_1 :: proc (lane: Lane($T), $member: string, $_member_type: typeid) -> Lane(_member_type) 
-where Has(T, member), Field(T, member) == _member_type {
+lane_member_1 :: proc (lane: Lane($T), $member: string) -> Lane(Field(T, member)) where Has(T, member) {
     offset :: Offset(T, member)
-    result := Lane(_member_type) { lane.p + offset }
-    
+    result := Lane(Field(T, member)) { lane.p + offset }
     return result
 }
 
-lane_member_2 :: proc (lane: Lane($T), $first_member: string, $member_of_first_member: string, $_member_type: typeid) -> Lane(_member_type)
-where Has(T, first_member), Has(Field(T, first_member), member_of_first_member) {
-    T1 :: Field(T, first_member)
-    T2 :: Field(T1, member_of_first_member)
-    #assert(T2 == _member_type)
-    
-    offset :: Offset(T, first_member) + Offset(T1, member_of_first_member)
-    result := Lane(_member_type) { lane.p + offset }
+lane_member_2 :: proc (lane: Lane($T), $first_member: string, $member_of_first: string) -> Lane(Field(Field(T, first_member), member_of_first)) where Has(T, first_member), Has(Field(T, first_member), member_of_first) {
+    first := lane_member(lane, first_member)
+    result := lane_member(first, member_of_first)
     
     return result
 }
 
 lane_member_slice :: proc (lane: Lane($T), $member: string, $member_type: typeid / [] $E) -> Lane_Slice(E) {
-    slice := cast(Lane(RawSlice)) lane_member(lane, member, member_type)
+    slice := cast(Lane(RawSlice)) lane_member(lane, member)
     
     result: Lane_Slice(E)
-    result.p   = cast(lane_umm) lane_gather(lane_member(slice, "data", pmm))
-    result.len = cast(lane_u32) lane_gather(lane_member(slice, "len",  int))
+    result.p   = cast(lane_umm) lane_gather(lane_member(slice, "data"))
+    result.len = cast(lane_u32) lane_gather(lane_member(slice, "len"))
     
     return result
 }

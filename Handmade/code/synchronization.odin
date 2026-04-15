@@ -21,6 +21,7 @@ volatile_store     :: intrinsics.volatile_store
 atomic_add         :: intrinsics.atomic_add
 atomic_exchange    :: intrinsics.atomic_exchange
 
+spin_hint          :: intrinsics.cpu_relax
 read_cycle_counter :: intrinsics.read_cycle_counter
 
 complete_previous_writes_before_future_writes :: proc () {
@@ -55,17 +56,4 @@ begin_ticket_mutex :: proc (mutex: ^TicketMutex) {
 
 end_ticket_mutex :: proc (mutex: ^TicketMutex) {
     atomic_add(&mutex.serving, 1)
-}
-
-spin_hint :: proc () {
-    // @study(viktor): what does intrinsics.cpu_relax compile to?, is this similar?
-    when ODIN_ARCH == .amd64 || ODIN_ARCH == .i386 {
-        asm { "pause" , "" } ()
-    } else when ODIN_ARCH == .arm32 || ODIN_ARCH == .arm64 {
-        asm { "yield", "" } ()
-    } else when ODIN_ARCH == .riscv64 || ODIN_ARCH == .wasm32 || ODIN_ARCH == .wasm64p32 || ODIN_ARCH == .Unknown {
-        // no-op fallback
-    } else {
-        #assert(false, "new microarch was added")
-    }
 }

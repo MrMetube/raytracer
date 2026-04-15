@@ -227,12 +227,12 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             spall_begin("ray color accumulation")
             
             model          := lane_index(to_lane(info.models), hit_model_index)
-            material_index := lane_gather_mask(lane_member(model, "material", Material_Id), hit_did_hit, 0)
+            material_index := lane_gather_mask(lane_member(model, "material"), hit_did_hit, 0)
             
             materials    := to_lane(info.materials)
             material     := lane_index(materials, material_index)
-            hit_emit     := lane_gather_v(lane_member(material, "emit",        v3))
-            hit_emission := lane_gather(  lane_member(material, "emission", f32))
+            hit_emit     := lane_gather_v(lane_member(material, "emit"))
+            hit_emission := lane_gather(  lane_member(material, "emission"))
             hit_emit     *= hit_emission
             
             // only allow world.no_hit on the first time we didn't hit anything
@@ -271,9 +271,9 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 n1 := lane_gather_v(lane_index(triangle_normal, 1))
                 n2 := lane_gather_v(lane_index(triangle_normal, 2))
                 
-                ix := lane_gather_v(lane_member(model, "normal", "x", v3))
-                iy := lane_gather_v(lane_member(model, "normal", "y", v3))
-                iz := lane_gather_v(lane_member(model, "normal", "z", v3))
+                ix := lane_gather_v(lane_member(model, "normal", "x"))
+                iy := lane_gather_v(lane_member(model, "normal", "y"))
+                iz := lane_gather_v(lane_member(model, "normal", "z"))
                 // @note(viktor): no translation
                 
                 t := lane_Transform{ix, iy, iz, 0}
@@ -318,13 +318,13 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 // currently singular values. That seems to be the way the industry is already heading
                 // and it would make my renderer compatible with those asset pipelines. 
                 
-                roughness := lane_gather(lane_member(material, "roughness", f32))
+                roughness := lane_gather(lane_member(material, "roughness"))
                 reflect_d := linear_blend(reflect_bounce, random_bounce, roughness)
                 
                 reflectance  := brdf_lookup(info.brdf_data, material, -ray_d, hit_normal, hit_tangent, hit_binormal, reflect_d)
-                reflect_tint := lane_gather_v(lane_member(material, "reflect", v3))
+                reflect_tint := lane_gather_v(lane_member(material, "reflect"))
                 
-                reflect_base := texture_sample(lane_member(model, "data", "base_color", Image), hit_texture_uv)
+                reflect_base := texture_sample(lane_member(model, "data", "base_color"), hit_texture_uv)
                 
                 reflectance *= reflect_base * reflect_tint
                 // reflectance *= maximum(dot(hit_normal, reflect_d), 0)
@@ -433,8 +433,8 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
 
 texture_sample :: proc (texture: Lane(Image), uv: lane_v2) -> lane_v3 {
     spall_proc()
-    width  := lane_gather(lane_member(texture, "width",  i32))
-    height := lane_gather(lane_member(texture, "height", i32))
+    width  := lane_gather(lane_member(texture, "width"))
+    height := lane_gather(lane_member(texture, "height"))
     data   := lane_member_slice(texture, "data", [] Color)
     
     i := uv * vec_cast(lane_f32, width, height)

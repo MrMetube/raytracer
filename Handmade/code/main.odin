@@ -132,7 +132,7 @@ main :: proc () {
         free_all(context.temp_allocator)
         
         rl.BeginDrawing()
-        rl.ClearBackground({0x18, 0x18, 0x18, 0xff})
+        rl.ClearBackground({0x00, 0x00, 0x00, 0xff})
         
         delta_time := rl.GetFrameTime()
         layout.dt = delta_time
@@ -252,7 +252,6 @@ main :: proc () {
         
         // @cleanup the request system, can we just render every frame?
         if state.fast_render.requested && state.previewed_object_id != 0 {
-        // @cleanup the request system, can we just render every frame?
             state.preview_render.requested = true
         }
         
@@ -270,6 +269,7 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
         small_size := state.window_size / small_factor
         p := state.window_size - small_size
         p.y = 0
+        
         if state.fast_image_is_focussed {
             rl.DrawTextureEx(state.fast_render.texture, 0, 0, cast(f32) state.fast_render.image_size_factor, rl.WHITE)
             rl.DrawTextureEx(state.quality_render.texture, vec_cast(f32, p), 0, cast(f32) state.quality_render.image_size_factor / small_factor, rl.WHITE)
@@ -340,8 +340,7 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
     defer state.fast_render.requested = rerender
     layout_begin_horizontal(layout)
         for kind in Debug_View_Kind {
-            if ui_button(layout, set_value_interaction(&Debug_View, kind), "%v", kind, is_highlighted = Debug_View == kind) {
-                Debug_View = kind
+            if ui_radio_button(layout, &Debug_View, kind, "%v", kind, event = { .selected }) {
                 rerender = true
             }
         }
@@ -381,11 +380,7 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
         for object_index in 1..=state.world.last_used_object_index {
             object := &state.world.objects[object_index]
             
-                if ui_button(layout, set_value_interaction(&state.selected_object_id, object_index), "Object %v", object_index, is_highlighted = state.selected_object_id == object_index) {
-                state.selected_object_id = object_index
-            }
-            
-            if state.selected_object_id == object_index {
+            if ui_radio_button(layout, &state.selected_object_id, object_index, "Object %v", object_index) {
                 layout_indent_scope(layout)
                 
                 if ui_button(layout, set_value_interaction(&state.previewed_object_id, object_index), "Focus", is_highlighted = state.previewed_object_id == object_index) {
@@ -405,8 +400,7 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
                 if ui_dragger(layout, &object.transform.t.z, "translation z = %v", object.transform.t.z) do rerender = true
                 
                 max_material_id := cast(Material_Id) len(state.world.materials)-1
-                material_released := ui_dragger_clamp_uint(layout, &object.material, "material %v", object.material, min = 1, max = max_material_id)
-                if material_released {
+                if ui_dragger(layout, &object.material, "material %v", object.material, min = 1, max = max_material_id) {
                     rerender = true
                 }
             }
@@ -419,23 +413,20 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
         
         for &material, index in state.world.materials {
             id := cast(Material_Id) index
-            if ui_button(layout, set_value_interaction(&state.selected_material_id, id), "Material %v: material %v", id, state.world.material_names[id], is_highlighted = id == state.selected_material_id) {
-                state.selected_material_id = id
-            }
             
-            if id == state.selected_material_id {
+            if ui_radio_button(layout, &state.selected_material_id, id, "Material %v %v", id, state.world.material_names[id]) {
                 layout_indent_scope(layout)
                 
                 material.emission = max(0.000001, material.emission)
-                if ui_dragger(layout, &material.roughness, "Roughness %f", material.roughness, speed = 0.001, min = 0, max = 1) do rerender = true
-                if ui_dragger(layout, &material.emission, "Emission %f", material.emission, logarithmic = true, min = 0.00001, max = 1000) do rerender = true
-                if ui_dragger(layout, &material.transmission, "Transmission %f", material.transmission, speed = 0.001, min = 0, max = 1) do rerender = true
-                if ui_dragger(layout, &material.index_of_refraction, "Index of Refraction %f", material.index_of_refraction, speed = 0.01, min = 0, max = 10) do rerender = true
+                if ui_dragger(layout, &material.roughness,           "Roughness %f",           material.roughness,           speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(layout, &material.emission,            "Emission %f",            material.emission,            logarithmic = true, min = 0.00001, max = 1000) do rerender = true
+                if ui_dragger(layout, &material.transmission,        "Transmission %f",        material.transmission,        speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(layout, &material.index_of_refraction, "Index of Refraction %f", material.index_of_refraction, speed = 0.01,       min = 0,       max = 10)   do rerender = true
                 
                 layout_begin_horizontal(layout)
                     if ui_color_picker(layout, &material.transmit, "Transmit") do rerender = true
-                    if ui_color_picker(layout, &material.emit,     "Emit") do rerender = true
-                    if ui_color_picker(layout, &material.reflect,  "Reflect") do rerender = true
+                    if ui_color_picker(layout, &material.emit,     "Emit")     do rerender = true
+                    if ui_color_picker(layout, &material.reflect,  "Reflect")  do rerender = true
                 layout_end_horizontal(layout)
                 
             }
@@ -468,12 +459,16 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Layout, settings: ^Rend
         
         layout_indent(layout)
             if ui_button(layout,  {kind = .SetValue, target = &settings.render_time }, "Reset") {
-                stat_init(&settings.render_time, time.diff(settings.start, settings.end))
+                if !settings.active {
+                    stat_init(&settings.render_time, time.diff(settings.start, settings.end))
+                } else {
+                    stat_init(&settings.render_time)
+                }
                 stat_finalize(&settings.render_time)
                 stat_init(&settings.time_per_ray)
                 stat_finalize(&settings.time_per_ray)
             }
-            ui_text(layout, "Time: min %v, avg %v, max %v", settings.render_time.min, cast(time.Duration) settings.render_time.avg, settings.render_time.max)
+            ui_text(layout, "Time: min %v, avg %v, max %v",         settings.render_time.min,  cast(time.Duration) settings.render_time.avg,  settings.render_time.max)
             ui_text(layout, "Time per Ray: min %v, avg %v, max %v", settings.time_per_ray.min, cast(time.Duration) settings.time_per_ray.avg, settings.time_per_ray.max)
         layout_unindent(layout)
         layout_pad(layout)

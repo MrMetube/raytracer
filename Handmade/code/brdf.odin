@@ -119,8 +119,8 @@ brdf_lookup :: proc (brdf_data: [] v3, material: Lane(Material), view_direction,
         return result
     }
     
-    brdf  := lane_member(material, "brdf", BrdfTable)
-    count := lane_gather_v(lane_member(brdf, "count", [3] u32))
+    brdf  := lane_member(material, "brdf")
+    count := lane_gather_v(lane_member(brdf, "count"))
     
     i0 := round_positive(lane_u32, f0 * cast(lane_f32) (count[0]-1))
     i1 := round_positive(lane_u32, f1 * cast(lane_f32) (count[1]-1))
@@ -130,8 +130,8 @@ brdf_lookup :: proc (brdf_data: [] v3, material: Lane(Material), view_direction,
     // @note(viktor): index of [] f32 -> index of [] v3
     indices = transmute(lane_u32) (transmute([LaneWidth] u32) indices / 3) 
     
-    values_index := lane_gather(lane_member(brdf, "value_offset", u32))
-    values_count := lane_gather(lane_member(brdf, "value_count", u32))
+    values_index := lane_gather(lane_member(brdf, "value_offset"))
+    values_count := lane_gather(lane_member(brdf, "value_count"))
     values := lane_slice(brdf_data, values_index, values_index+values_count)
     
     value  := lane_index(values, indices)
