@@ -486,3 +486,45 @@ get_time_per_ray_and_print_stats :: proc (stats: ^Render_Stats, total_time: time
     
     return cast(time.Duration) time_per_ray
 }
+
+////////////////////////////////////////////////
+
+camera_look_at :: proc (p: v3, at: v3) -> Camera {
+    camera: Camera
+    camera.t = p
+    camera.z = normalize_or_zero(camera.t - at)
+    camera.x = normalize_or_zero(cross(v3{0, 0, 1}, camera.z))
+    camera.y = normalize_or_zero(cross(camera.z, camera.x))
+    return camera
+}
+
+camera_orbit :: proc (p: v3, orbit: f32, dolly, pitch: f32) -> Camera {
+    offset := p
+    
+    camera := xy_rotation(orbit) * yz_rotation(pitch)
+    offset.z += dolly
+    offset = multiply(camera, offset)
+    
+    result: Camera
+    result.x = get_column(camera, 0)
+    result.y = get_column(camera, 1)
+    result.z = get_column(camera, 2)
+    result.t = offset
+    return result
+}
+
+axis_angle_rotation :: proc(axis: v3, angle: f32) -> m4 {
+    cos_angle := cos(angle)
+    sin_angle := sin(angle)
+    inv_angle := 1.0 - cos_angle
+    
+    x, y, z := axis.x, axis.y, axis.z
+    
+    return m4 {
+        inv_angle*x*x + cos_angle,   inv_angle*x*y - sin_angle*z, inv_angle*x*z + sin_angle*y, 0,
+        inv_angle*x*y + sin_angle*z, inv_angle*y*y + cos_angle,   inv_angle*y*z - sin_angle*x, 0,
+        inv_angle*x*z - sin_angle*y, inv_angle*y*z + sin_angle*x, inv_angle*z*z + cos_angle,   0,
+        0,                           0,                           0,                           1,
+    }
+}
+

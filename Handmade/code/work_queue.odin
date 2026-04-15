@@ -136,7 +136,9 @@ worker_thread :: proc (parameter: pmm) {
     info := cast(^CreateThreadInfo) parameter
     queue := info.queue
     
-    spall_init_thread(info.index, begin_deffered = false)
+    spall_init_thread(info.index)
+    defer spall_deinit_thread()
+    
     atomic_add(&queue.opened_thread_count, 1)
     
     win.SetThreadDescription(win.GetCurrentThread(), win.utf8_to_wstring(sprint("%v: %v", queue.name, info.name_index)))

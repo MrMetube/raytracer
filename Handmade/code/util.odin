@@ -83,26 +83,27 @@ align_offset :: proc (#any_int alignment: u64, value: $T) -> T    { return (valu
 is_aligned   :: proc (#any_int alignment: u64, value: $T) -> bool { return align_offset(alignment, value) == 0 }
 
 safe_truncate :: proc ($R: typeid, value: $T) -> (result: R)
-where size_of(T) > size_of(R), intrinsics.type_is_integer(T), intrinsics.type_is_integer(R){
+where size_of(T) > size_of(R), intrinsics.type_is_integer(T), intrinsics.type_is_integer(R) {
     assert(value <= cast(T) max(R))
     result = cast(R) value
     return result
 }
 
-@(require_results) rec_cast :: proc ($T: typeid, rec: $R/Rectangle([$N] $E)) -> Rectangle([N] T) where T != E {
-    return { vec_cast(T, rec.min), vec_cast(T, rec.max)}
+@(require_results) rect_cast :: proc ($T: typeid, rect: $R/Rectangle([$N] $E)) -> Rectangle([N] T) where T != E {
+    return { vec_cast(T, rect.min), vec_cast(T, rect.max)}
 }
 vec_cast :: proc { vcast_2, vcast_3, vcast_4, vcast_vec }
-@(require_results) vcast_2 :: proc ($T: typeid, x, y: $E) -> ([2] T) where T != E {
+@(require_results) vcast_2 :: proc ($T: typeid, x, y: $E) -> [2] T where T != E {
     return {cast(T) x, cast(T) y}
 }
-@(require_results) vcast_3 :: proc ($T: typeid, x, y, z: $E) -> ([3] T) where T != E {
+@(require_results) vcast_3 :: proc ($T: typeid, x, y, z: $E) -> [3] T where T != E {
     return {cast(T) x, cast(T) y, cast(T) z}
 }
-@(require_results) vcast_4 :: proc ($T: typeid, x, y, z, w: $E) -> ([4] T) where T != E {
+@(require_results) vcast_4 :: proc ($T: typeid, x, y, z, w: $E) -> [4] T where T != E {
     return {cast(T) x, cast(T) y, cast(T) z, cast(T) w}
 }
-@(require_results) vcast_vec :: proc ($T: typeid, v: [$N] $E) -> (result: [N] T) where T != E {
+@(require_results) vcast_vec :: proc ($T: typeid, v: [$N] $E) -> [N] T where T != E {
+    result: [N] T
     #no_bounds_check #unroll for i in 0..<N {
         result[i] = cast(T) v[i]
     }

@@ -53,7 +53,7 @@ State :: struct {
     preview_camera_dolly:  f32,
 }
 
-init_state :: proc (state: ^State) {
+state_init :: proc (state: ^State) {
     state.camera = camera_look_at({0, -7, 3}, {0, 0, 1})
     world_init(&state.world)
     
@@ -114,7 +114,7 @@ main :: proc () {
         close_work_queue_and_wait_for_threads(&state.renderer.queue)
     }
     
-    init_state(state)
+    state_init(state)
     
     render_settings := make([dynamic] ^Render_Settings, 0, 2, context.allocator)
     append(&render_settings, &state.quality_render)
@@ -199,16 +199,16 @@ main :: proc () {
             if dddp != 0 || state.ddp != 0 {
                 dddp = normalize_or_zero(dddp)
                 dddp *= speed
-                state.ddp  += dddp
-                state.ddp  *= 0.9
-                state.dp   += state.ddp * delta_time
-                state.dp   *= 0.9
+                state.ddp += dddp
+                state.ddp *= 0.9
+                state.dp  += state.ddp * delta_time
+                state.dp  *= 0.9
                 if length_squared(state.dp) < square(cast(f32) 0.01) do state.dp = 0
                 
                 if state.dp != 0 {
-                    state.camera.t += state.dp.x * state.camera.x    * delta_time
-                    state.camera.t += state.dp.y * v3{0, 0, 1} * delta_time
-                    state.camera.t += state.dp.z * state.camera.z    * delta_time
+                    state.camera.t += state.dp.x * state.camera.x * delta_time
+                    state.camera.t += state.dp.y * v3{0, 0, 1}    * delta_time
+                    state.camera.t += state.dp.z * state.camera.z * delta_time
                     
                     state.fast_render.requested = true
                 }
@@ -516,45 +516,4 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Layout, settings: ^Rend
     }
     
     return result
-}
-
-////////////////////////////////////////////////
-
-camera_look_at :: proc (p: v3, at: v3) -> Camera {
-    camera: Camera
-    camera.t = p
-    camera.z = normalize_or_zero(camera.t - at)
-    camera.x = normalize_or_zero(cross(v3{0, 0, 1}, camera.z))
-    camera.y = normalize_or_zero(cross(camera.z, camera.x))
-    return camera
-}
-
-camera_orbit :: proc (p: v3, orbit: f32, dolly, pitch: f32) -> Camera {
-    offset := p
-    
-    camera := xy_rotation(orbit) * yz_rotation(pitch)
-    offset.z += dolly
-    offset = multiply(camera, offset)
-    
-    result: Camera
-    result.x = get_column(camera, 0)
-    result.y = get_column(camera, 1)
-    result.z = get_column(camera, 2)
-    result.t = offset
-    return result
-}
-
-axis_angle_rotation :: proc(axis: v3, angle: f32) -> m4 {
-    cos_angle := cos(angle)
-    sin_angle := sin(angle)
-    inv_angle := 1.0 - cos_angle
-    
-    x, y, z := axis.x, axis.y, axis.z
-    
-    return m4 {
-        inv_angle*x*x + cos_angle,   inv_angle*x*y - sin_angle*z, inv_angle*x*z + sin_angle*y, 0,
-        inv_angle*x*y + sin_angle*z, inv_angle*y*y + cos_angle,   inv_angle*y*z - sin_angle*x, 0,
-        inv_angle*x*z - sin_angle*y, inv_angle*y*z + sin_angle*x, inv_angle*z*z + cos_angle,   0,
-        0,                           0,                           0,                           1,
-    }
 }

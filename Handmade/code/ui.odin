@@ -424,6 +424,7 @@ ui_radio_button :: proc (layout: ^Layout, target: ^$T, value: T, format: string,
     
     return result
 }
+
 ////////////////////////////////////////////////
 
 ui_text :: proc (layout: ^Layout, format: string, args: ..any) {
