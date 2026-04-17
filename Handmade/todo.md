@@ -12,6 +12,7 @@
 - hdr and apeture/exposure adjustments
 
 ### renderer
+- make textures handles where the nil handle just is the 1x1 white texture?
 - texture sampling
     - use textures for: normals, other surface properties, material?
 - instanced rendering

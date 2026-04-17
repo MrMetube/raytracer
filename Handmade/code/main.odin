@@ -60,7 +60,6 @@ state_init :: proc (state: ^State) {
     if false do default_scene(&state.world)
     if !false do benchmark_scene(&state.world)
     if false do kenney_scene(&state.world)
-    if false do brdf_scene(&state.world)
     
     state.preview_render_p = .5 * vec_cast(f32, state.window_size - {state.preview_render.image.width, state.preview_render.image.height})
     state.preview_render_drag_size = 12
@@ -236,7 +235,7 @@ main :: proc () {
                     draw_model(settings, object.model, object.material, object.transform)
                 }
                 
-                render_end(&state.renderer, settings, state.world.brdf_data[:], state.world.materials[:])
+                render_end(&state.renderer, settings, state.world.materials[:])
             }
         }
         
@@ -330,7 +329,7 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
             set_camera(settings, state.preview_camera)
             draw_model(settings, object.model, object.material, object.transform)
             
-            render_end(&state.renderer, settings, state.world.brdf_data[:], state.world.materials[:])
+            render_end(&state.renderer, settings, state.world.materials[:])
         }
     }
     
@@ -417,16 +416,19 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
             if ui_radio_button(layout, &state.selected_material_id, id, "Material %v %v", id, state.world.material_names[id]) {
                 layout_indent_scope(layout)
                 
-                material.emission = max(0.000001, material.emission)
-                if ui_dragger(layout, &material.roughness,           "Roughness %f",           material.roughness,           speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(layout, &material.emission,            "Emission %f",            material.emission,            logarithmic = true, min = 0.00001, max = 1000) do rerender = true
-                if ui_dragger(layout, &material.transmission,        "Transmission %f",        material.transmission,        speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(layout, &material.index_of_refraction, "Index of Refraction %f", material.index_of_refraction, speed = 0.01,       min = 0,       max = 10)   do rerender = true
+                material.emit_strength = max(0.000001, material.emit_strength)
+                if ui_dragger(layout, &material.emit_strength, "Emission %f",  material.emit_strength, logarithmic = true, min = 0.00001, max = 1000) do rerender = true
+                if ui_dragger(layout, &material.roughness,     "Roughness %f", material.roughness,     speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(layout, &material.specular_strength, "specular_strength %f", material.specular_strength, speed = 0.001, min = 0, max = 1)    do rerender = true
+                if ui_dragger(layout, &material.anisotropic,       "anisotropic %f",       material.anisotropic,       speed = 0.001, min = 0, max = 1)    do rerender = true
+                if ui_dragger(layout, &material.subsurface,        "subsurface %f",        material.subsurface,        speed = 0.001, min = 0, max = 1)    do rerender = true
+                if ui_dragger(layout, &material.sheen,             "sheen %f",             material.sheen,             speed = 0.001, min = 0, max = 1)    do rerender = true
+                if ui_dragger(layout, &material.sheen_tint,        "sheen_tint %f",        material.sheen_tint,        speed = 0.001, min = 0, max = 1)    do rerender = true
+                if ui_dragger(layout, &material.metallic,          "metallic %f",          material.metallic,          speed = 0.001, min = 0, max = 1)    do rerender = true
                 
                 layout_begin_horizontal(layout)
-                    if ui_color_picker(layout, &material.transmit, "Transmit") do rerender = true
-                    if ui_color_picker(layout, &material.emit,     "Emit")     do rerender = true
-                    if ui_color_picker(layout, &material.reflect,  "Reflect")  do rerender = true
+                    if ui_color_picker(layout, &material.emit_color, "Emit")      do rerender = true
+                    if ui_color_picker(layout, &material.base_tint,  "base tint") do rerender = true
                 layout_end_horizontal(layout)
                 
             }

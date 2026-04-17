@@ -1,14 +1,10 @@
 package main
 
-import "core:os"
-import "core:strings"
-
 World :: struct {
     objects:                [1024] Object,
     last_used_object_index: Object_Id,
     
     materials: [dynamic] Material,
-    brdf_data: [dynamic] v3,
     
     material_names: [dynamic] string,
 }
@@ -25,49 +21,26 @@ Object :: struct {
 ////////////////////////////////////////////////
 
 world_init :: proc (world: ^World) {
-    append(&world.materials, Material{ emit = { .3  , .4  , .5  }, emission = 2 })
-    world_load_brdf(world, 0, "nil")
-    reserve(&world.brdf_data, 200_000_000)
+    append(&world.materials, Material{ emit_color = { .3  , .4  , .5  }, emit_strength = 2 })
+    append(&world.material_names, "nil")
 }
 
 load_default_materials :: proc (world: ^World) {
-    append(&world.materials, Material{ reflect = { .5  , .5  , .5  }, roughness = .9 })
-    append(&world.materials, Material{ reflect = { .7  , .5  , .3  }, roughness = .3})
-    append(&world.materials, Material{ emit    = { .35 , .2 ,  .01 }, roughness = .8, emission = 200, })
-    append(&world.materials, Material{ reflect = { .2  , .8  , .2  }, roughness = .4})
-    append(&world.materials, Material{ reflect = { .65 , .1  , .7  }, roughness = .95})
-    append(&world.materials, Material{ reflect = { .9  , .9  , .8  }, roughness = .25})
-    append(&world.materials, Material{ reflect = { .8  , .9  , .8  }, roughness = .05, transmit = {0.8, 1.0, 0.9}, transmission = 1, index_of_refraction = 1.5 })
+    append(&world.materials, Material{ base_tint = { .5  , .5  , .5  }, roughness = .9 })
+    append(&world.materials, Material{ base_tint = { .7  , .5  , .3  }, roughness = .3})
+    append(&world.materials, Material{ emit_color = { .35 , .2 ,  .01 }, roughness = .8, emit_strength = 200, })
+    append(&world.materials, Material{ base_tint = { .2  , .8  , .2  }, roughness = .4})
+    append(&world.materials, Material{ base_tint = { .65 , .1  , .7  }, roughness = .95})
+    append(&world.materials, Material{ base_tint = { .9  , .9  , .8  }, roughness = .25})
+    // append(&world.materials, Material{ base_tint = { .8  , .9  , .8  }, roughness = .05, transmit = {0.8, 1.0, 0.9}, transmission = 1, index_of_refraction = 1.5 })
     
-    world_load_brdf(world, 1, "gray-plastic")
-    world_load_brdf(world, 2, "brass")
-    world_load_brdf(world, 3, "gold-paint")
-    world_load_brdf(world, 4, "green-latex")
-    world_load_brdf(world, 5, "purple-paint")
-    world_load_brdf(world, 6, "white-marble")
-    world_load_brdf(world, 7, "glass")
-}
-
-load_all_merl_materials :: proc (world: ^World) {
-    dir, open_error := os.open("./BRDFDatabase/brdfs/")
-    if open_error != nil {
-        print("ERROR: Failed to open brdfs: %v\n", open_error)
-        panic("")
-    }
-    
-    iter := os.read_directory_iterator_create(dir)
-    for it in os.read_directory_iterator(&iter) {
-        end :: ".binary"
-        if strings.ends_with(it.name, end) {
-            name := clone_string(it.name)
-            name = name[:len(name)-len(end)]
-            append(&world.materials, Material{ reflect = .1, roughness = .5 })
-            id := cast(Material_Id) len(world.materials) - 1
-            world_load_brdf(world, id, name)
-        }
-    }
-    
-    print("total brdf data count %v / %v bytes\n", len(world.brdf_data), len(world.brdf_data) * size_of(world.brdf_data[0]))
+    append(&world.material_names, "gray-plastic")
+    append(&world.material_names, "brass")
+    append(&world.material_names, "gold-paint")
+    append(&world.material_names, "green-latex")
+    append(&world.material_names, "purple-paint")
+    append(&world.material_names, "white-marble")
+    // append(&world.material_names, "glass")
 }
 
 clone_string :: proc (s: string, allocator := context.allocator) -> string {
@@ -75,13 +48,6 @@ clone_string :: proc (s: string, allocator := context.allocator) -> string {
     copy(bytes, transmute([] u8) s)
     result := transmute(string) bytes
     return result
-}
-
-world_load_brdf :: proc (world: ^World, material: Material_Id, name: string) {
-    path := tprint("./BRDFDatabase/brdfs/%v.binary", name)
-    load_brdf_merl(path, &world.materials[material].brdf, &world.brdf_data)
-    append(&world.material_names, name)
-    print("brdf: loaded %v\n", name)
 }
 
 make_object :: proc (world: ^World) -> ^Object {
@@ -204,30 +170,5 @@ default_scene :: proc (world: ^World) {
         object.model = ctx.id
         object.material = 1
         object.transform = transform_set_scale(object.transform, v3{50, 50, 1})
-    }
-}
-
-brdf_scene :: proc (world: ^World) {
-    load_all_merl_materials(world)
-    
-    ctx := begin_model()
-    load_obj(ctx, "./models", "uvsphere.obj")
-    end_model(ctx)
-    
-    sphere := ctx.id
-    
-    height :: 10
-    width  :: 10
-    outer: for y in 0..<height {
-        for x in 0..<width {
-            index := x + y * width
-            if index >= len(world.materials) do break outer
-            
-            object := make_object(world)
-            object.model = sphere
-            object.material = cast(Material_Id) index + 1
-            
-            object.transform.t.xy = linear_blend(v2{-12, -12}, v2{12, 12}, vec_cast(f32, x, y) / {width, height})
-        }
     }
 }

@@ -96,13 +96,7 @@ square_root :: proc(x: $T) -> (result: T) {
 
 power :: math.pow
 
-linear_blend  :: proc{ linear_blend_v_e, linear_blend_e }
-linear_blend_v_e :: proc(from: $V/[$N]$Element, to: V, t: Element) -> V {
-    result := (1-t) * from + t * to
-    
-    return result
-}
-linear_blend_e :: proc(from: $T, to: T, t: T) -> T  {
+linear_blend :: proc(from: $V, to: V, t: $T) -> V  {
     result := (1-t) * from + t * to
     
     return result

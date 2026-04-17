@@ -107,23 +107,20 @@ lane_Transform :: struct {
 Camera :: distinct Transform
 
 Material :: struct {
-    emit:     v3,
-    reflect:  v3,
-    transmit: v3,
+    emit_strength: f32,
+    emit_color:     v3,
     
-    emission:  f32,
+    base_tint: v3,
+    
     roughness: f32,
-    index_of_refraction: f32,
-    transmission:        f32,
-    
-    brdf: BrdfTable,
-}
-
-BrdfTable :: struct {
-    count: [3] u32,
-    // @note(viktor): a view into the render.brdf_data array
-    value_offset: u32,
-    value_count:  u32,
+    anisotropic: f32,
+    specular_strength: f32,
+    subsurface: f32,
+    sheen: f32,
+    sheen_tint: f32,
+    metallic: f32,
+    clearcoat: f32,
+    clearcoat_gloss: f32,
 }
 
 ////////////////////////////////////////////////
@@ -261,13 +258,13 @@ set_camera :: proc (settings: ^Render_Settings, camera: Camera) {
     settings.draw_camera = camera
 }
 
-render_end :: proc (render: ^Render, settings: ^Render_Settings, brdf_data: [] v3, materials: [] Material) {
+render_end :: proc (render: ^Render, settings: ^Render_Settings, materials: [] Material) {
     assert(settings.requested)
     assert(!settings.active)
     
     // @speed build tree of models once there are enough models in a scene
     
-    render_start(render, settings, settings.draw_camera, settings.draw_models[:], brdf_data, materials)
+    render_start(render, settings, settings.draw_camera, settings.draw_models[:], materials)
     clear(&settings.draw_models)
 }
 
@@ -300,7 +297,7 @@ init_render_image :: proc (settings: ^Render_Settings, window_size: v2i) {
     settings.image.data   = make([] Color, settings.image.width * settings.image.height, context.allocator)
 }
 
-render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camera, models: [] Draw_Model, brdf_data: [] v3, materials: [] Material) {
+render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camera, models: [] Draw_Model, materials: [] Material) {
     free_all(settings.allocator)
     
     render.active   = true
@@ -409,7 +406,6 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
         
         models    = render_models,
         materials = render_materials,
-        brdf_data = brdf_data,
         
         camera_x = vec_cast(lane_f32, half_film_size.x * camera.x),
         camera_y = vec_cast(lane_f32, half_film_size.y * camera.y),

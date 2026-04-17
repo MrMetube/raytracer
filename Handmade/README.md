@@ -4,6 +4,7 @@ Renders 3D models and uses a BVH (bounding volume hierarchy) to accelerate this.
 BRDFs (Bidirectional Reflectance Distribution Function) are used for reflections, which are based on measurements of real materials.
 
 [MERL BRDF source](https://www.merl.com/research/downloads/BRDF/)
+[Disney BRDF](https://media.disneyanimation.com/uploads/production/publication_asset/48/asset/s2012_pbs_disney_brdf_notes_v3.pdf)
 
 ## Screenshots
 (anti-chronological order)

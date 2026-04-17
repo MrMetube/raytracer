@@ -2,6 +2,7 @@ package main
 
 import "base:intrinsics"
 import "core:simd"
+import "core:math"
 
 // @todo(viktor): the ab,ac optimization is not really needed here anymore, as the renderer only uses lane_triangles and that calculation can just be done in tree_build, simplifying the loader
 Triangle :: struct {
@@ -53,7 +54,6 @@ Collect_Stats_For_Debug_View :: true
 Render_Tile_Info :: struct #all_or_none {
     models:    [] Render_Model,
     materials: [] Material,
-    brdf_data: [] v3, 
     
     image: Image,
     camera_x: lane_v3, // scaled by film_size
@@ -228,18 +228,18 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             
             model          := lane_index(to_lane(info.models), hit_model_index)
             material_index := lane_gather_mask(lane_member(model, "material"), hit_did_hit, 0)
+            materials      := to_lane(info.materials)
+            material       := lane_index(materials, material_index)
             
-            materials    := to_lane(info.materials)
-            material     := lane_index(materials, material_index)
-            hit_emit     := lane_gather_v(lane_member(material, "emit"))
-            hit_emission := lane_gather(  lane_member(material, "emission"))
-            hit_emit     *= hit_emission
+            emit_color    := lane_gather_v(lane_member(material, "emit_color"))
+            emit_strength := lane_gather(  lane_member(material, "emit_strength"))
+            emit_color    *= emit_strength
             
             // only allow world.no_hit on the first time we didn't hit anything
-            hit_emit  *= cast(lane_f32) (1 & lane_mask)
+            emit_color  *= cast(lane_f32) (1 & lane_mask)
             lane_mask &= hit_did_hit
             
-            sample += attenuation * hit_emit
+            sample += attenuation * emit_color
             
             spall_end()
             if lane_mask == lane_false do break bounces
@@ -302,38 +302,91 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
             
             ////////////////////////////////////////////////
             
+            
+            choose_refract: lane_u32
             when true {
-                spall_begin("ray reflection")
                 reflect_bounce := reflect(ray_d, hit_normal)
                 random_bounce  := normalize_or_zero(hit_normal + random_bilateral(entropy, lane_v3))
                 
-                // @todo(viktor): you really cant do roughness like this.
-                // I think the merl brdfs were an interesting experiment but it is now time to move on.
-                // Look into computed and not sampled models for brdfs or better bsdfs that are easier
-                // to be adjusted by artist. I don't actually need 100% realistic, I just want this to
-                // be based on reality and then it can be changed to be interesting.
-                
-                // In general I want the whole material system to change to using and sampling textures, 
-                // which then can assign a value per triangle vertex or just be a 1x1 texture of the 
-                // currently singular values. That seems to be the way the industry is already heading
-                // and it would make my renderer compatible with those asset pipelines. 
-                
                 roughness := lane_gather(lane_member(material, "roughness"))
                 reflect_d := linear_blend(reflect_bounce, random_bounce, roughness)
+                next_d    := reflect_d
                 
-                reflectance  := brdf_lookup(info.brdf_data, material, -ray_d, hit_normal, hit_tangent, hit_binormal, reflect_d)
-                reflect_tint := lane_gather_v(lane_member(material, "reflect"))
+                ////////////////////////////////////////////////
                 
-                reflect_base := texture_sample(lane_member(model, "data", "base_color"), hit_texture_uv)
+                light := next_d
+                view  := -ray_d
+                half  := normalize(light + view)
                 
-                reflectance *= reflect_base * reflect_tint
-                // reflectance *= maximum(dot(hit_normal, reflect_d), 0)
+                angle_light := dot(light, hit_normal)
+                angle_view  := dot(view,  hit_normal)
+                angle_half  := dot(half,  hit_normal)
+                angle_diff  := dot(light, half)
                 
+                ////////////////////////////////////////////////
+                
+                metallic   := lane_gather(lane_member(material, "metallic"))
+                base_tint  := lane_gather_v(lane_member(material, "base_tint"))
+                base_color := texture_sample(lane_member(model, "data", "base_color"), hit_texture_uv)
+                
+                diffuse_color := base_tint * base_color
+                
+                ////////////////////////////////////////////////
+                
+                reflectance: lane_v3
+                {
+                    subsurface := lane_gather(lane_member(material, "subsurface"))
+                    sheen      := lane_gather(lane_member(material, "sheen"))
+                    sheen_tint := lane_gather(lane_member(material, "sheen_tint"))
+                    
+                    diffuse     := diffuse_burley(diffuse_color, angle_light, angle_view, angle_half, angle_diff, roughness, subsurface, sheen, sheen_tint)
+                    reflectance += diffuse * (1 - metallic)
+                }
+                
+                {
+                    anisotropic       := lane_gather(lane_member(material, "anisotropic"))
+                    specular_strength := lane_gather(lane_member(material, "specular_strength"))
+                    
+                    // corresponds to IOR or [1-1.8]
+                    // default is specular = .5 -> IOR = 1.5
+                    // may be set above 1
+                    incident_specular := linear_blend(cast(lane_f32) 0, 0.08, specular_strength)
+                    
+                    alpha := square(roughness)
+                    aspect := square_root(1 - 0.9 * anisotropic)
+                    alpha_x := alpha / aspect
+                    alpha_y := alpha * aspect
+                    
+                    d := ggx_aniso(half, angle_half, alpha_x, alpha_y, hit_tangent, hit_binormal)
+                    f := schlick_reflectance_xx(angle_diff, incident_specular)
+                    g := g1_aniso(half, light, alpha_x, alpha_y) * g1_aniso(half, view, alpha_x, alpha_y)
+                    
+                    specular    := specular_microfacet(angle_light, angle_view, d, f, g)
+                    reflectance += specular * linear_blend(cast(lane_v3) 1, diffuse_color, metallic)
+                }
+                
+                clearcoat := lane_gather(lane_member(material, "clearcoat"))
+                if clearcoat != 0 {
+                    clearcoat_gloss := lane_gather(lane_member(material, "clearcoat_gloss"))
+                    
+                    // clearcoat has IOR :: 1.5
+                    normalized_clearcoat := linear_blend(cast(lane_f32) 0, 0.25, clearcoat)
+                    
+                    // @slop what are the actual limits of this blend?
+                    clearcoat_roughness := linear_blend(cast(lane_f32) 0.1, 0.001, clearcoat_gloss)
+                    clearcoat_alpha := square(clearcoat_roughness)
+                    
+                    dcc := ggx_iso(angle_half, clearcoat_alpha)
+                    fcc := schlick_reflectance_xx(angle_diff, 0.04)
+                    gcc := g1_iso(half, light, clearcoat_alpha) * g1_iso(half, view, clearcoat_alpha)
+                    
+                    clearcoat_specular := normalized_clearcoat * 0.25 * specular_microfacet(angle_light, angle_view, dcc, fcc, gcc)
+                    reflectance        += clearcoat_specular
+                }
+                
+                reflectance *= maximum(angle_light, 0)
                 conditional_assign(hit_did_hit, &attenuation, attenuation * reflectance)
                 
-                choose_refract: lane_u32
-                next_d := reflect_d
-                spall_end()
             } else {
                 refract :: proc (incident: $V/ [$N] $E, normal: V, eta_ratio: E) -> V {
                     cos_angle := dot(-incident, normal)
@@ -344,14 +397,7 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                     result := (a - b) * cast(E) (1 & root_mask)
                     return result
                 }
-                
-                schlick_reflectance :: proc (cos_angle, eta_ratio: lane_f32) -> lane_f32 {
-                    r := square((1 - eta_ratio) / (1 + eta_ratio))
-                    x := 1 - cos_angle
-                    result := r + (1 - r) * (x * square(square(x)))
-                    return result
-                }
-                
+
                 air_index_of_refraction :: 1
                 hit_index_of_refraction := lane_gather(lane_member(material, "index_of_refraction", f32))
                 ior_ratio := hit_index_of_refraction / air_index_of_refraction
@@ -375,7 +421,6 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
                 reflect_d     := reflect(ray_d, hit_normal)
                 reflect_value := brdf_lookup(info.brdf_data, material, -ray_d, hit_normal, hit_tangent, hit_binormal, reflect_d)
                 reflect_pdf   := ternary(total_internal_reflection, cast(lane_f32) 1, fresnel)
-                
                 
                 ////////////////////////////////////////////////
                 
@@ -423,9 +468,104 @@ cast_rays :: proc (film_p: lane_v2, entropy: ^RandomSeries, info: Render_Tile_In
     result.final_color.g = horizontal_add(final_color.g)
     result.final_color.b = horizontal_add(final_color.b)
     
-    result.bounces_computed  = cast(u64) horizontal_add(bounces_computed)
-    result.loops_computed    = cast(u64) horizontal_add(loops_computed)
+    result.bounces_computed = cast(u64) horizontal_add(bounces_computed)
+    result.loops_computed   = cast(u64) horizontal_add(loops_computed)
     
+    return result
+}
+
+////////////////////////////////////////////////
+// Disney BRDF
+
+g1_aniso :: proc (half, direction: lane_v3, alpha_x, alpha_y: lane_f32) -> lane_f32 {
+    result: lane_f32
+    // @todo(viktor): the real aniso 
+    result = g1_iso(half, direction, alpha_x)
+    return result
+}
+g1_iso :: proc (half, direction: lane_v3, alpha: lane_f32) -> lane_f32 {
+    // @correctness divide by zero, if view == light -> half == direction -> angle = 1 -> x -> 1 / 0
+    angle := dot(half, direction)
+    x           := angle / (alpha * square_root(1 - square(angle)))
+    // @correctness if x == 0 -> denom = NaN
+    denominator := 1 + (-1 + square_root(1 + 1 / square(x))) * 0.5
+    result      := 1 / denominator
+    return result
+}
+
+ggx_iso :: proc (angle_half, alpha: lane_f32) -> lane_f32 {
+    square_alpha := square(alpha)
+    // @speed
+    log_square_alpha: lane_f32
+    for lane in 0..<LaneWidth {
+        replace(&log_square_alpha, lane, math.log2(extract(square_alpha, lane)))
+    }
+    denominator := Pi * log_square_alpha * (1 + (square_alpha - 1) * square(angle_half))
+    result := (square_alpha - 1) / denominator
+    
+    return result
+}
+
+ggx_aniso :: proc (half: lane_v3, angle_half_normal, alpha_x, alpha_y: lane_f32, tangent, binormal: lane_v3) -> lane_f32 {
+    square_half_x := square(dot(half, tangent))
+    square_half_y := square(dot(half, binormal))
+    square_angle_half := square(angle_half_normal)
+    
+    square_x := square(alpha_x)
+    square_y := square(alpha_y)
+    denominator := Pi * alpha_x * alpha_y * square(square_half_x / square_x + square_half_y / square_y + square_angle_half)
+    // @todo(viktor): check if zero and then used is possible
+    result := 1 / denominator
+    return result
+}
+
+fifth_power :: proc (x: lane_f32) -> lane_f32 {
+    xs := square(x)
+    result := square(xs) * x
+    return result
+}
+
+schlick_reflectance :: proc (cos_angle, eta_ratio: lane_f32) -> lane_f32 {
+    r := square((1 - eta_ratio) / (1 + eta_ratio))
+    result := schlick_reflectance_xx(cos_angle, r)
+    return result
+}
+schlick_reflectance_xx :: proc (cos_angle, base_reflectance: lane_f32) -> lane_f32 {
+    result := linear_blend(fifth_power(1 - cos_angle), 1, base_reflectance)
+    return result
+}
+
+diffuse_burley :: proc (diffuse_color: lane_v3, angle_light, angle_view, angle_half, angle_diff: lane_f32, roughness, subsurface, sheen, sheen_tint: lane_f32) -> lane_v3 {
+    f0  := cast(lane_f32) 1
+    f90 := 0.5 + 2 * (roughness * square(angle_diff))
+    
+    diffuse_factor := linear_blend(f0, f90, angle_light) 
+    diffuse_factor *= linear_blend(f0, f90, angle_view)
+    
+    subsurface_factor: lane_f32
+    if subsurface != 0 {
+        fss0  := cast(lane_f32) 1
+        fss90 := roughness * square(angle_half)
+        fss   := linear_blend(fss0, fss90, fifth_power(1 - angle_light))
+        fss   *= linear_blend(fss0, fss90, fifth_power(1 - angle_view))
+        subsurface_factor = 1.25 * (fss * (1 / (angle_light + angle_view) - 0.5) + 0.5)
+    }
+    
+    sheen_color: lane_v3
+    if sheen != 0 {
+        sheen_factor := sheen * fifth_power(1 - angle_diff)
+        sheen_color = sheen_factor * linear_blend(cast(lane_v3) 1, diffuse_color, sheen_tint)
+    }
+    
+    diffuse_factor = linear_blend(diffuse_factor, subsurface_factor, subsurface)
+    
+    result := diffuse_color * diffuse_factor / Pi + sheen_color
+    return result
+}
+
+specular_microfacet :: proc (angle_light, angle_view: lane_f32, d, f, g: lane_f32) -> lane_f32 {
+    result := d * f * g
+    result *= 1 / (4 * angle_light * angle_view)
     return result
 }
 
@@ -471,7 +611,7 @@ texture_sample :: proc (texture: Lane(Image), uv: lane_v2) -> lane_v3 {
 }
 
 /// target_fps = 30
-/// ns_per_ray = 26
+/// ns_per_ray = 17
 /// width  = 1920 / 4
 /// height = 1080 / 4
 ///  width
