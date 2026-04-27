@@ -1,7 +1,8 @@
 # Handmade Ray Tracer
 A CPU ray-tracer(or path tracer), which tries to be as fast as possible using SIMD (Single Instruction Multiple Data) and multi-threading.
 Renders 3D models and uses a BVH (bounding volume hierarchy) to accelerate this.
-BRDFs (Bidirectional Reflectance Distribution Function) are used for reflections, which are based on measurements of real materials.
+Disney's 2012 BRDFs (Bidirectional Reflectance Distribution Function) is used for reflections
+Previously MERL BRDS lookup tables were used, which are based on measurements of real materials.
 
 [MERL BRDF source](https://www.merl.com/research/downloads/BRDF/)
 [Disney BRDF](https://media.disneyanimation.com/uploads/production/publication_asset/48/asset/s2012_pbs_disney_brdf_notes_v3.pdf)
@@ -9,6 +10,8 @@ BRDFs (Bidirectional Reflectance Distribution Function) are used for reflections
 ## Screenshots
 (anti-chronological order)
 
+![Render 22](output/render_22.png)
+![Render 21](output/render_21.png)
 ![Render 20](output/render_20.png)
 ![Render 19](output/render_19.png)
 ![Render 18](output/render_18.png)

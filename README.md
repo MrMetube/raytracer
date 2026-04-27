@@ -1,33 +1,15 @@
 # Ray Tracing
 3 cpu ray tracers. The first in java was part of a voluntary uni project. The other two were made in my free time.
 
-## Screenshots
-(anti-chronological order)
-
 ### Handmade
-![Render 16](Handmade/data/render_16.png)
-The camera is inside a glass like sphere.
-![Render 15](Handmade/data/render_15.png)
-Refractions.
-![Render 14](Handmade/data/render_14.png)
-Non-uniform scaled models.
-![Render 13](Handmade/data/render_13.png)
-Fixed buggy normals and uv interpolation.
-![Render 12](Handmade/data/render_12.png)
-Load obj-files with per vertex normals.
-![Render 11](Handmade/data/render_11.png)
-![Render 10](Handmade/data/render_10.png)
-![Render 9](Handmade/data/render_9.png)
-![Render 8](Handmade/data/render_8.png)
-![Render 7](Handmade/data/render_7.png)
-![Render 6](Handmade/data/render_6.png)
-![Render 5](Handmade/data/render_day_5.png)
-![Render 4](Handmade/data/render_day_4.png)
-![Render 3](Handmade/data/render_day_3.png)
-![Render 2](Handmade/data/render_day_2.png)
-![Render 1](Handmade/data/render_day_1.png)
+It has its own [README](Handmade/README.md)
+![Render](<Handmade/output/render_22.png>) 
+![Render](<Handmade/output/render_21.png>) 
+![Render](<Handmade/output/render_16.png>) 
+![Render](<Handmade/output/render_14.png>) 
 
 ### Java
+(anti-chronological order)
 ![alt text](<java/archive/broken intersect LightShader.png>) 
 ![alt text](<java/archive/broken intersect SpecularShader.png>) 
 ![alt text](<java/archive/broken intersect DiffuseShader.png>) 
