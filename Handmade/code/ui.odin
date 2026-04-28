@@ -47,6 +47,13 @@ DraggerFlag :: enum {
 }
 DraggerFlags :: bit_set[DraggerFlag]
 
+Theme :: struct {
+    outline: v4,
+    background: v4,
+    text: v4,
+    text_shadow: v4,
+}
+
 ////////////////////////////////////////////////
 
 begin_ui :: proc (ui: ^UI) {
@@ -182,51 +189,91 @@ set_value_interaction :: proc (target: ^$T, value: T) -> Interaction {
 
 ////////////////////////////////////////////////
 
-Button_Events :: bit_set [Button_Event]
-Button_Event :: enum {
-    selected,
-    active,
+// @cleanup what is an interaction in this once we have drags and sliders and moves
+ui_button :: proc (parent: ^UI_Element, interaction: Interaction, format: string, args: ..any) -> bool {
+    hot    := is_hot(parent.ui, interaction)
+    active := is_active(parent.ui, interaction)
+    
+    theme := theme_button(hot, active)
+    result := ui_themed_button(parent, interaction, theme, format, ..args)
+    
+    return result
 }
 
-// @todo(viktor): @api collapse into begin ui_element set_interaction(used for color) set_outline, set_text, end_ui_element
-// @cleanup what is an interaction in this once we have drags and sliders and moves
-ui_button :: proc (layout: ^Layout, interaction: Interaction, format: string, args: ..any, is_highlighted := false) -> bool {
-    text := tprint(format, ..args)
+ui_toggle :: proc (parent: ^UI_Element, condition: ^bool, format: string, args: ..any) -> bool {
+    interaction := set_value_interaction(condition, !condition^)
+    hot    := is_hot(parent.ui, interaction)
+    active := is_active(parent.ui, interaction) || condition^
     
-    size := measure_text(layout, text)
-    text_p := layout.at
-    rect := rect_min_dimension(text_p, size)
-    rect  = rect_add_radius(rect, v2{4, 1})
+    theme := theme_button(hot, active)
+    clicked := ui_themed_button(parent, interaction, theme, format, ..args)
     
-    // @theme
-    outline      := DarkGreen
-    background   := DarkGreen
-    text_color   := Jasmine
-    shadow_color := Black
-    if is_hot(layout.ui, interaction) {
-        outline = Green
-        background = Isabelline
-        text_color = Green
-        shadow_color = 0
-    } else if is_active(layout.ui, interaction) || is_highlighted {
-        background = Green
-        text_color = Isabelline
+    if clicked {
+        condition^ = !condition^
     }
     
-    draw_rectangle_outline(rect, 1, outline)
-    draw_rectangle(rect, background)
-    draw_text(layout, text, text_p, text_color, shadow_color)
-    layout_advance_2(layout, rect_get_dimension(rect)) // @api
+    return clicked
+}
+
+ui_collapser :: proc (parent: ^UI_Element, is_open: ^bool, format: string, args: ..any) -> bool {
+    was_open := is_open^
+    interaction := set_value_interaction(is_open, !was_open)
+    
+    hot    := is_hot(parent.ui, interaction)
+    active := is_active(parent.ui, interaction) || was_open
+    
+    theme := theme_button(hot, active)
+    
+    if ui_themed_button(parent, interaction, theme, format, ..args) {
+        is_open^ = !was_open
+    }
+    
+    result := is_open^
+    
+    return result
+}
+
+ui_radio_button :: proc (parent: ^UI_Element, target: ^$T, value: T, format: string, args: ..any) -> bool {
+    active := target^ == value
+    
+    interaction := set_value_interaction(target, value)
+    hot := is_hot(parent.ui, interaction)
+    active  = is_active(parent.ui, interaction) || active
+    
+    theme := theme_button(hot, active)
+    clicked := ui_themed_button(parent, interaction, theme, format, ..args)
     
     result: bool
-    if rect_contains(rect, layout.ui.mouse_p) {
-        layout.ui.next_hot_interaction = interaction
-        if is_ended(layout.ui, interaction) {
+    if clicked {
+        if !active {
+            target^ = value
             result = true
         }
     }
     
-    layout_pad(layout)
+    return result
+}
+
+ui_themed_button :: proc (parent: ^UI_Element, interaction: Interaction, theme: Theme, format: string, args: ..any) -> bool {
+    text := tprint(format, ..args)
+    text_size := measure_text(parent, text)
+    
+    button := begin_ui_element_calculated(parent)
+    ui_element_set_interaction(&button, interaction)
+    ui_element_set_border(&button, theme.outline)
+    ui_element_set_padding(&button, { 4, 2 })
+        text_element := begin_ui_element(&button, &text_size)
+        end_ui_element(&text_element)
+    end_ui_element(&button)
+    
+    draw_rectangle(button.bounds, theme.background)
+    draw_text(parent, text, text_element.bounds.min, theme.text, theme.text_shadow)
+    
+    result: bool
+    // @todo(viktor): this should be inside end_ui_element
+    if rect_contains(button.bounds, parent.ui.mouse_p) && is_ended(parent.ui, interaction) {
+        result = true
+    }
     
     return result
 }
@@ -357,9 +404,9 @@ __ui_dragger_raw :: proc (layout: ^Layout, interaction: Interaction, format: str
     text := tprint(format, ..args)
     size := measure_text(layout, text)
     
-    text_p := layout.at
+    text_p := layout.allocated.min
     draw_text(layout, text, text_p, text_color)
-    layout_advance_2(layout, size)
+    layout_advance(layout, size)
     
     rect := rect_min_dimension(text_p, size) 
     if rect_contains(rect, layout.ui.mouse_p) {
@@ -371,12 +418,12 @@ __ui_dragger_raw :: proc (layout: ^Layout, interaction: Interaction, format: str
 
 ui_color_picker :: proc (layout: ^Layout, rgb: ^v3, format: string) -> bool {
     ui_text(layout, format)
-    layout_pad(layout)
+    layout_advance(layout, layout.spacing)
     
     size :: 40
-    bounds := rect_min_dimension(layout.at, size)
-    layout_advance_2(layout, size + {40, 0})
-    layout_pad(layout)
+    bounds := rect_min_dimension(layout.allocated.min, size)
+    layout_advance_2_dim(layout, size + {40, 0})
+    layout_advance(layout, layout.spacing)
     
     color := color_to_rl(rgb^)
     before := color
@@ -391,65 +438,30 @@ ui_color_picker :: proc (layout: ^Layout, rgb: ^v3, format: string) -> bool {
 
 ////////////////////////////////////////////////
 
-ui_toggle :: proc (layout: ^Layout, condition: ^bool, text: string) -> bool {
-    interaction := set_value_interaction(condition, !condition^)
-    clicked := ui_button(layout, interaction, text, is_highlighted = condition^)
-    if clicked {
-        condition^ = !condition^
-    }
-    return clicked
-}
-
-ui_collapser :: proc (layout: ^Layout, is_open: ^bool, text: string) -> bool {
-    ui_toggle(layout, is_open, text)
-    result := is_open^
-    return result
-}
-
-ui_radio_button :: proc (layout: ^Layout, target: ^$T, value: T, format: string, args: ..any, event := Button_Events{ .active }) -> bool {
-    active := target^ == value
-    result: bool
-    if ui_button(layout, set_value_interaction(target, value), format, ..args, is_highlighted = active) {
-        if !active {
-            target^ = value
-            if .selected in event {
-                result = true
-            }
-        }
-    }
-    
-    if .active in event && target^ == value {
-        result = true
-    }
-    
-    return result
-}
-
-////////////////////////////////////////////////
-
 ui_text :: proc (layout: ^Layout, format: string, args: ..any) {
     text := tprint(format, ..args)
-    text_p := layout.at
+    text_p := layout.allocated.min
     size := measure_text(layout, text)
     // @theme
     draw_text(layout, text, text_p, Jasmine)
-    layout_advance_2(layout, size)
+    layout_advance(layout, size)
 }
 
 ui_progress_bar :: proc (layout: ^Layout, percentage: f32, width: f32) {
     border_size :: 2
     size := v2{width, layout.font_size - border_size*2}
-    rect     := rect_min_dimension(layout.at+border_size, size)
-    progress := rect_min_dimension(layout.at+border_size, size * v2{percentage, 1}) 
+    at := layout.allocated.min
+    rect     := rect_min_dimension(at+border_size, size)
+    progress := rect_min_dimension(at+border_size, size * v2{percentage, 1}) 
     
     // @theme
     draw_rectangle_outline(rect, border_size, DarkGreen)
     draw_rectangle(rect, Green)
     draw_rectangle(progress, Isabelline)
     
-    layout_advance_2(layout, size)
+    layout_advance(layout, size)
     
-    layout_pad(layout)
+    layout_advance(layout, layout.spacing)
 }
 
 ////////////////////////////////////////////////
@@ -473,15 +485,15 @@ draw_rectangle :: proc (rect: Rectangle2, color: v4) {
     rl.DrawRectangleRec(rect_to_rl(rect), color_to_rl(color))
 }
 
-draw_rectangle_outline :: proc (rect: Rectangle2, thickness: f32, color: v4) {
+draw_rectangle_outline :: proc (rect: Rectangle2, thickness: v2, color: v4) {
     dim    := rect_get_dimension(rect)
     center := rect_get_center(rect)
     
-    top := rect_center_dimension(v2{center.x, rect.min.y-thickness/2}, v2{dim.x + 2*thickness, thickness})
-    bot := rect_center_dimension(v2{center.x, rect.max.y+thickness/2}, v2{dim.x + 2*thickness, thickness})
+    top := rect_center_dimension(v2{center.x, rect.min.y-thickness.y/2}, v2{dim.x + 2*thickness.x, thickness.y})
+    bot := rect_center_dimension(v2{center.x, rect.max.y+thickness.y/2}, v2{dim.x + 2*thickness.x, thickness.y})
     
-    lef := rect_center_dimension(v2{rect.min.x-thickness/2, center.y}, v2{thickness, dim.y})
-    rig := rect_center_dimension(v2{rect.max.x+thickness/2, center.y}, v2{thickness, dim.y})
+    lef := rect_center_dimension(v2{rect.min.x-thickness.x/2, center.y}, v2{thickness.x, dim.y})
+    rig := rect_center_dimension(v2{rect.max.x+thickness.x/2, center.y}, v2{thickness.x, dim.y})
     
     draw_rectangle(top, color)
     draw_rectangle(bot, color)
@@ -511,5 +523,224 @@ color_to_rl :: proc (color: $V) -> rl.Color {
 color_from_rl :: proc (color: rl.Color) -> v4 {
     bytes := cast(Color) color
     result := color_from_u8(bytes)
+    return result
+}
+
+////////////////////////////////////////////////
+
+Layout :: UI_Element
+UI_Element :: struct {
+    using xxx: xx,
+    
+    parent: ^UI_Element,
+    
+    flags:       UI_Element_Flags,
+    interaction: Interaction,
+    
+    border_color: v4,
+    spacing: v2,
+    padding: v2,
+    
+    size_kind: UI_Element_Size_Kind,
+    
+    ////////////////////////////////////////////////
+    // Fixed Size
+    size: ^v2,
+    
+    ////////////////////////////////////////////////
+    // Allocated Size
+    allocated: Rectangle2,
+
+    ////////////////////////////////////////////////
+    // Calculated Size
+    child_p:   v2,
+    child_min: v2,
+    child_max: v2,
+    child_count: f32,
+    
+    ////////////////////////////////////////////////
+    // result for user
+    bounds:  Rectangle2,
+        
+    ////////////////////////////////////////////////
+    // Linear Layout
+    base_x: f32,
+    // @naming
+    size_children: v2,
+}
+
+xx :: struct {
+    ui: ^UI,
+    font: rl.Font,
+    font_size: f32,
+    
+    dt: f32,
+}
+
+UI_Element_Size_Kind :: enum {
+    Allocated,
+    Fixed,   // by user
+    Calculated, // from children
+}
+
+UI_Element_Flags :: bit_set[UI_Element_Flag]
+UI_Element_Flag :: enum {
+    has_interaction,
+    has_border,
+    
+    grow_horizontal,
+}
+
+begin_ui_element :: proc (parent: ^UI_Element, size: ^v2) -> UI_Element {
+    result := make_ui_element(parent)
+    
+    result.size      = size
+    result.size_kind = .Fixed
+    
+    return result
+}
+
+begin_ui_element_calculated :: proc (parent: ^UI_Element) -> UI_Element {
+    result := make_ui_element(parent)
+    result.size_kind = .Calculated
+    
+    // @todo(viktor): 
+    switch parent.size_kind {
+    case .Fixed:   unimplemented()
+    case .Allocated:  result.child_min = parent.allocated.min
+    case .Calculated: result.child_min = parent.child_p
+    }
+    result.child_p   = result.child_min
+    result.child_max = result.child_min
+    
+    result.flags += { .grow_horizontal }
+    
+    return result
+}
+
+make_ui_element :: proc (parent: ^UI_Element) -> UI_Element {
+    result: UI_Element
+    
+    result.xxx = parent.xxx
+    result.parent = parent
+    
+    return result
+}
+
+// @api should .interaction just be a maybe, even if we already have a .flags?
+ui_element_set_interaction :: proc (element: ^UI_Element, interaction: Interaction) {
+    element.flags      += { .has_interaction }
+    element.interaction = interaction
+}
+
+ui_element_set_border :: proc (element: ^UI_Element, color := Red) {
+    element.flags += { .has_border }
+    element.border_color = color
+}
+
+ui_element_set_padding :: proc (element: ^UI_Element, padding: v2) {
+    element.padding = padding
+    switch element.size_kind {
+    case .Fixed, .Allocated: // nothing
+    case .Calculated: 
+        element.child_min += padding
+        element.child_p   += padding
+        element.child_max += padding * 2
+    }
+}
+
+end_ui_element :: proc (element: ^UI_Element) {
+    // @todo(viktor): resize interactions
+    
+    Border_Size :: 2
+    border: v2
+    if .has_border in element.flags {
+        border = Border_Size
+    }
+    
+    parent := element.parent
+    total_min: v2
+    switch parent.size_kind {
+    case .Fixed:   unimplemented()
+    case .Allocated:  total_min = parent.allocated.min
+        
+    case .Calculated:
+        if parent.child_count != 0 {
+            mask  := .grow_horizontal in parent.flags ? v2{ 1, 0 } : v2{ 0, 1 }
+            space := parent.spacing * mask
+            parent.child_p   += space
+            parent.child_max += space
+        }
+        
+        total_min = parent.child_p
+    }
+    parent.child_count += 1
+    
+    if .has_border in parent.flags {
+        total_min += Border_Size
+    }
+    
+    element_dim: v2
+    switch element.size_kind {
+        case .Allocated:  unimplemented()
+        case .Fixed:      element_dim = element.size^
+        case .Calculated: element_dim = (element.child_max + element.padding) - element.child_min
+    }
+    
+    total_dim := element_dim + border * 2
+    total_bounds  := rect_min_dimension(total_min,          total_dim)
+    element.bounds = rect_min_dimension(total_min + border, element_dim)
+    
+    if border != 0 {
+        draw_rectangle_outline(element.bounds, border, element.border_color)
+    }
+    
+    ui := element.ui
+    if .has_interaction in element.flags && rect_contains(element.bounds, ui.mouse_p) {
+        ui.next_hot_interaction = element.interaction
+    }
+    
+    switch parent.size_kind {
+    case .Fixed: // nothing
+    
+    case .Allocated:
+        if .grow_horizontal in parent.flags {
+            parent.allocated.min.x = total_bounds.max.x
+            parent.size_children.y = max(parent.size_children.y, total_dim.y)
+        } else {
+            parent.allocated.min.y = total_bounds.max.y
+        }
+        
+    case .Calculated:
+        if .grow_horizontal in parent.flags {
+            parent.child_p.x   += total_dim.x
+            parent.child_max.x += total_dim.x
+            parent.child_max.y  = max(parent.child_max.y, total_bounds.max.y)
+        } else {
+            parent.child_p.y   += total_dim.y
+            parent.child_max.x  = max(parent.child_max.x, total_bounds.max.x)
+            parent.child_max.y += total_dim.y
+        }
+    }
+}
+
+////////////////////////////////////////////////
+
+theme_button :: proc (is_hot: bool, is_active: bool) -> Theme {
+    result: Theme
+    result.outline     = DarkGreen
+    result.background  = DarkGreen
+    result.text        = Jasmine
+    result.text_shadow = Black
+    if is_hot {
+        result.outline = Green
+        result.background = Isabelline
+        result.text = Green
+        result.text_shadow = 0
+    } else if is_active {
+        result.background = Green
+        result.text = Isabelline
+    }
+    
     return result
 }

@@ -2,32 +2,13 @@ package main
 
 import rl "vendor:raylib"
 
-Layout :: struct {
-    dt: f32,
-    
-    font: rl.Font,
-    font_size: f32,
-    text_color: rl.Color,
-    default_padding: f32,
-    
-    at:  v2,
-    horizontal: bool,
-    largest_y_advance: f32,
-    base_x: f32,
-    
-    ////////////////////////////////////////////////
-    
-    ui: ^UI,
-}
-
 ////////////////////////////////////////////////
 
-layout_init :: proc (layout: ^Layout, font: rl.Font, text_color: v4, font_size: f32, default_padding: f32 = 8) {
+layout_init :: proc (layout: ^Layout, font: rl.Font, font_size: f32, spacing: f32 = 8) {
     layout^ = {}
     layout.font = font
     layout.font_size = font_size
-    layout.text_color = cast(rl.Color) color_to_u8(text_color)
-    layout.default_padding = default_padding
+    layout.spacing = spacing
     
     rl.GuiEnable()
     rl.GuiSetFont(layout.font)
@@ -59,57 +40,60 @@ layout_init :: proc (layout: ^Layout, font: rl.Font, text_color: v4, font_size: 
     }
 }
 
-layout_begin :: proc (layout: ^Layout, ui: ^UI, begin: v2, dt: f32) {
+layout_begin :: proc (layout: ^Layout, ui: ^UI, bounds: Rectangle2, dt: f32) {
     layout.ui = ui
     
-    layout.at = begin
+    layout.allocated = bounds
     layout.base_x = {}
-    layout.horizontal = {}
-    layout.largest_y_advance = {}
+    layout.flags = {}
+    layout.size_children = {}
     layout.dt = dt
+    
+    layout.child_count = {}
 }
 
-layout_pad :: proc (layout: ^Layout) {
-    layout_advance_2(layout, layout.default_padding)
-}
-layout_advance :: proc { layout_advance_1, layout_advance_2 }
+layout_advance :: proc { layout_advance_1, layout_advance_2_bounds, layout_advance_2_dim }
 layout_advance_1 :: proc (layout: ^Layout, size: f32) {
-    if layout.horizontal {
-        layout.at.x += size
+    if .grow_horizontal in layout.flags {
+        layout.allocated.min.x += size
     } else {
-        layout.at.y += size
+        layout.allocated.min.y += size
     }
 }
 
-layout_advance_2 :: proc (layout: ^Layout, dimension: v2) {
-    if layout.horizontal {
-        layout.at.x += dimension.x
-        layout.largest_y_advance = max(layout.largest_y_advance, dimension.y)
+layout_advance_2_bounds :: proc (layout: ^Layout, rect: Rectangle2) {
+    layout_advance_2_dim(layout, rect_get_dimension(rect))
+}
+layout_advance_2_dim :: proc (layout: ^Layout, dimension: v2) {
+    if .grow_horizontal in layout.flags {
+        layout.allocated.min.x += dimension.x
+        layout.size_children.y = max(layout.size_children.y, dimension.y)
     } else {
-        layout.at.y += dimension.y
+        layout.allocated.min.y += dimension.y
     }
 }
 
 layout_begin_horizontal :: proc (layout: ^Layout) {
-    assert(!layout.horizontal)
-    layout.horizontal = true
+    assert(.grow_horizontal not_in layout.flags)
+    layout.flags += { .grow_horizontal }
     
-    layout.base_x = layout.at.x
-    layout.largest_y_advance = 0
+    layout.base_x = layout.allocated.min.x
+    layout.size_children.y = 0
 }
 
 layout_end_horizontal :: proc (layout: ^Layout) {
-    assert(layout.horizontal)
-    layout.horizontal = false
-    layout.at.x  = layout.base_x
-    layout.at.y += layout.largest_y_advance
+    assert(.grow_horizontal in layout.flags)
+    layout.flags -= { .grow_horizontal }
+    
+    layout.allocated.min.x  = layout.base_x
+    layout.allocated.min.y += layout.size_children.y
 }
 
 layout_indent :: proc (layout: ^Layout) {
-    layout.at.x += 20
+    layout.allocated.min.x += 20
 }
 layout_unindent :: proc (layout: ^Layout) {
-    layout.at.x -= 20
+    layout.allocated.min.x -= 20
 }
 
 @(deferred_in=layout_unindent)

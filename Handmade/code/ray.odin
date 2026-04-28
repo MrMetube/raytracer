@@ -1,6 +1,5 @@
 package main
 
-import "base:intrinsics"
 import "core:simd"
 import "core:math"
 

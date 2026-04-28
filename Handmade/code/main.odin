@@ -57,8 +57,8 @@ state_init :: proc (state: ^State) {
     state.camera = camera_look_at({0, -7, 3}, {0, 0, 1})
     world_init(&state.world)
     
-    if false do default_scene(&state.world)
-    if !false do benchmark_scene(&state.world)
+    if !false do default_scene(&state.world)
+    if false do benchmark_scene(&state.world)
     if false do kenney_scene(&state.world)
     
     state.preview_render_p = .5 * vec_cast(f32, state.window_size - {state.preview_render.image.width, state.preview_render.image.height})
@@ -104,7 +104,7 @@ main :: proc () {
     {
         font_size :: 20
         font := rl.LoadFontEx("./fonts/VictorMono-Bold.otf", font_size, nil, 0)
-        layout_init(layout, font, Jasmine, font_size)
+        layout_init(layout, font, font_size)
     }
     
     init_render(&state.renderer, core_count)
@@ -213,7 +213,7 @@ main :: proc () {
                 }
             }
             
-            if rl.IsKeyPressed(.TAB) && !(rl.IsKeyDown(.LEFT_ALT) || rl.IsKeyDown(.RIGHT_ALT)) {
+            if rl.IsKeyPressed(.TAB) && !rl.IsKeyDown(.LEFT_ALT) && !rl.IsKeyDown(.RIGHT_ALT) {
                 state.fast_image_is_focussed = !state.fast_image_is_focussed
             }
             
@@ -261,7 +261,9 @@ main :: proc () {
 ////////////////////////////////////////////////
 
 draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
-    layout_begin(layout, ui, 10, delta_time)
+    screen_bounds := rect_zero_dimension(vec_cast(f32, state.window_size))
+    layout_bounds := rect_add_radius(screen_bounds, -10)
+    layout_begin(layout, ui, layout_bounds, delta_time)
     
     {
         small_factor :: 6
@@ -337,19 +339,33 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
     
     rerender := state.fast_render.requested
     defer state.fast_render.requested = rerender
-    layout_begin_horizontal(layout)
+    if true {
+        bar := begin_ui_element_calculated(layout)
+        bar.spacing = 20
         for kind in Debug_View_Kind {
-            if ui_radio_button(layout, &Debug_View, kind, "%v", kind, event = { .selected }) {
+            if ui_radio_button(&bar, &Debug_View, kind, "%v", kind) {
+                rerender = true
+            }
+        }
+        if ui_toggle(&bar, &Sort_Subnodes,     "Sort Subnodes")     do rerender = true
+        if ui_toggle(&bar, &Early_Elimination, "Early Elimination") do rerender = true
+        end_ui_element(&bar)
+    } else {
+        layout_begin_horizontal(layout)
+        layout.spacing = 10
+        for kind in Debug_View_Kind {
+            if ui_radio_button(layout, &Debug_View, kind, "%v", kind) {
                 rerender = true
             }
         }
         if ui_toggle(layout, &Sort_Subnodes,     "Sort Subnodes")     do rerender = true
         if ui_toggle(layout, &Early_Elimination, "Early Elimination") do rerender = true
-    layout_end_horizontal(layout)
+        layout_end_horizontal(layout)
+    }
     
-    
-    layout_pad(layout)
-    if Debug_View in (bit_set[Debug_View_Kind]{ .Triangle_Tests, .Rectangle_Tests, .Both_Tests }) {
+    layout_advance(layout, layout.spacing)
+    tests := bit_set[Debug_View_Kind] { .Triangle_Tests, .Rectangle_Tests, .Both_Tests }
+    if Debug_View in tests {
         if ui_dragger(layout, &Triangle_Threshold, "Triangle Threshold %v", view_magnitude(Triangle_Threshold, precision = 1), speed = 1, min = 1, max = 100000, logarithmic = true) {
             rerender = true
         }
@@ -370,19 +386,19 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
     
     ////////////////////////////////////////////////
     
-    
     if ui_collapser(layout, &state.ojects_is_open, "Objects") {
         layout_indent_scope(layout)
-        
         
         // @api maybe make an iterator?
         for object_index in 1..=state.world.last_used_object_index {
             object := &state.world.objects[object_index]
             
-            if ui_radio_button(layout, &state.selected_object_id, object_index, "Object %v", object_index) {
+            ui_radio_button(layout, &state.selected_object_id, object_index, "Object %v", object_index)
+            if state.selected_object_id == object_index {
                 layout_indent_scope(layout)
                 
-                if ui_button(layout, set_value_interaction(&state.previewed_object_id, object_index), "Focus", is_highlighted = state.previewed_object_id == object_index) {
+                ui_radio_button(layout, &state.previewed_object_id, object_index, "Focus")
+                if state.previewed_object_id == object_index {
                     if state.previewed_object_id == object_index {
                         state.previewed_object_id = 0
                     } else {
@@ -406,25 +422,28 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
         }
     }
     
-    layout_pad(layout)
+    layout_advance(layout, layout.spacing)
     if ui_collapser(layout, &state.materials_is_open, "Materials") {
         layout_indent_scope(layout)
         
         for &material, index in state.world.materials {
             id := cast(Material_Id) index
             
-            if ui_radio_button(layout, &state.selected_material_id, id, "Material %v %v", id, state.world.material_names[id]) {
+            ui_radio_button(layout, &state.selected_material_id, id, "Material %v %v", id, state.world.material_names[id])
+            if state.selected_material_id == id {
                 layout_indent_scope(layout)
                 
                 material.emit_strength = max(0.000001, material.emit_strength)
-                if ui_dragger(layout, &material.emit_strength, "Emission %f",  material.emit_strength, logarithmic = true, min = 0.00001, max = 1000) do rerender = true
-                if ui_dragger(layout, &material.roughness,     "Roughness %f", material.roughness,     speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(layout, &material.specular_strength, "specular_strength %f", material.specular_strength, speed = 0.001, min = 0, max = 1)    do rerender = true
-                if ui_dragger(layout, &material.anisotropic,       "anisotropic %f",       material.anisotropic,       speed = 0.001, min = 0, max = 1)    do rerender = true
-                if ui_dragger(layout, &material.subsurface,        "subsurface %f",        material.subsurface,        speed = 0.001, min = 0, max = 1)    do rerender = true
-                if ui_dragger(layout, &material.sheen,             "sheen %f",             material.sheen,             speed = 0.001, min = 0, max = 1)    do rerender = true
-                if ui_dragger(layout, &material.sheen_tint,        "sheen_tint %f",        material.sheen_tint,        speed = 0.001, min = 0, max = 1)    do rerender = true
-                if ui_dragger(layout, &material.metallic,          "metallic %f",          material.metallic,          speed = 0.001, min = 0, max = 1)    do rerender = true
+                if ui_dragger(layout, &material.emit_strength,     "Emission %f",          material.emit_strength,     logarithmic = true, min = 0.00001, max = 1000) do rerender = true
+                if ui_dragger(layout, &material.roughness,         "Roughness %f",         material.roughness,         speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(layout, &material.specular_strength, "specular_strength %f", material.specular_strength, speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(layout, &material.anisotropic,       "anisotropic %f",       material.anisotropic,       speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(layout, &material.subsurface,        "subsurface %f",        material.subsurface,        speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(layout, &material.sheen,             "sheen %f",             material.sheen,             speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(layout, &material.sheen_tint,        "sheen_tint %f",        material.sheen_tint,        speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(layout, &material.metallic,          "metallic %f",          material.metallic,          speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(layout, &material.clearcoat,         "clearcoat %f",         material.clearcoat,         speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(layout, &material.clearcoat_gloss,   "clearcoat_gloss %f",   material.clearcoat_gloss,   speed = 0.001,      min = 0,       max = 1)    do rerender = true
                 
                 layout_begin_horizontal(layout)
                     if ui_color_picker(layout, &material.emit_color, "Emit")      do rerender = true
@@ -445,7 +464,8 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Layout, settings: ^Rend
         
         layout_begin_horizontal(layout)
             if can_be_focused {
-                result = ui_button(layout, { kind = .SetValue, target = settings, value = name }, "Focus", is_highlighted = is_focused)
+                // @todo(viktor): is_focused -> highlighted
+                result = ui_button(layout, { kind = .SetValue, target = settings, value = name }, "Focus")
             }
             
             ui_toggle(layout, &settings.display_progress, "Display Progress")
@@ -457,7 +477,7 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Layout, settings: ^Rend
                 ui_text(layout, "%v", time.diff(settings.start, settings.end))
             }
         layout_end_horizontal(layout)
-        layout_pad(layout)
+        layout_advance(layout, layout.spacing)
         
         layout_indent(layout)
             if ui_button(layout,  {kind = .SetValue, target = &settings.render_time }, "Reset") {
@@ -473,7 +493,7 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Layout, settings: ^Rend
             ui_text(layout, "Time: min %v, avg %v, max %v",         settings.render_time.min,  cast(time.Duration) settings.render_time.avg,  settings.render_time.max)
             ui_text(layout, "Time per Ray: min %v, avg %v, max %v", settings.time_per_ray.min, cast(time.Duration) settings.time_per_ray.avg, settings.time_per_ray.max)
         layout_unindent(layout)
-        layout_pad(layout)
+        layout_advance(layout, layout.spacing)
         
         if settings.active {
             layout_begin_horizontal(layout)
@@ -486,7 +506,7 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Layout, settings: ^Rend
         } else {
             layout_advance(layout, layout.font_size)
         }
-        layout_pad(layout)
+        layout_advance(layout, layout.spacing)
         
         layout_begin_horizontal(layout)
             if ui_button(layout, set_value_interaction(&settings.rays_per_pixel, settings.rays_per_pixel / 2 ), "-") do settings.rays_per_pixel /= 2 
@@ -494,7 +514,7 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Layout, settings: ^Rend
             ui_text(layout, "rays per_pixel %v", settings.rays_per_pixel)
             settings.rays_per_pixel = clamp(settings.rays_per_pixel, LaneWidth, 8192)
         layout_end_horizontal(layout)
-        layout_pad(layout)
+        layout_advance(layout, layout.spacing)
         
         ui_dragger(layout, &settings.max_bounce_count, "Bounces %v", settings.max_bounce_count, min = 1, max = 64)
         
@@ -511,10 +531,10 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Layout, settings: ^Rend
                 }
             }
             
-            layout_pad(layout)
+            layout_advance(layout, layout.spacing)
             ui_text(layout, "resolution %vx%v", settings.image.width, settings.image.height)
         layout_end_horizontal(layout)
-        layout_pad(layout)
+        layout_advance(layout, layout.spacing)
     }
     
     return result
