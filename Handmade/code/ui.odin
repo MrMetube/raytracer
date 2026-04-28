@@ -544,7 +544,7 @@ Element :: struct {
     
     ////////////////////////////////////////////////
     // Calculated Size
-    child_p:   v2,
+    child_sum: v2,
     child_min: v2,
     child_max: v2,
     child_count: f32,
@@ -598,10 +598,10 @@ begin_ui_element_calculated :: proc (parent: ^Element) -> Element {
     switch parent.size_kind {
     case .Fixed:   unimplemented()
     case .Allocated:  result.child_min = parent.allocated.min
-    case .Calculated: result.child_min = parent.child_p
+    case .Calculated: result.child_min = ui_element_min(parent)
     }
-    result.child_p   = result.child_min
     result.child_max = result.child_min
+    result.child_sum = 0
     
     return result
 }
@@ -639,64 +639,57 @@ ui_element_set_padding :: proc (element: ^Element, padding: v2) {
     case .Fixed, .Allocated: // nothing
     case .Calculated: 
         element.child_min += padding
-        element.child_p   += padding
         element.child_max += padding * 2
     }
 }
 
+ui_element_min :: proc (element: ^Element) -> v2 {
+    if element == nil do return 0
+    
+    result: v2
+    switch element.size_kind {
+    case .Fixed:     unimplemented()
+    case .Allocated: result = element.allocated.min
+        
+    case .Calculated:
+        result = ui_element_min(element.parent)
+        result += element.child_sum
+        result += element.padding
+        mask := .grow_horizontal in element.flags ? v2{ 1, 0 } : v2{ 0, 1 }
+        result += element.spacing * element.child_count * mask
+    }
+    
+    if .has_border in element.flags {
+        result += Border_Size
+    }
+    
+    return result
+}
+
+Border_Size :: 2
+
 end_ui_element :: proc (element: ^Element) {
     // @todo(viktor): resize interactions
     
-    Border_Size :: 2
     border: v2
     if .has_border in element.flags {
         border = Border_Size
     }
     
     parent := element.parent
-    total_min: v2
-    switch parent.size_kind {
-    case .Fixed:   unimplemented()
-    case .Allocated:  total_min = parent.allocated.min
-        
-    case .Calculated:
-        if parent.child_count != 0 {
-            // mask  := .grow_horizontal in parent.flags ? v2{ 1, 0 } : v2{ 0, 1 }
-            // space := parent.spacing * mask
-            // parent.child_p   += space
-            // parent.child_max += space
-        }
-        
-        total_min = parent.child_p
-    }
+    total_min := ui_element_min(parent)
     parent.child_count += 1
-    
-    if .has_border in parent.flags {
-        total_min += Border_Size
-    }
     
     element_dim: v2
     switch element.size_kind {
         case .Allocated:  unimplemented()
         case .Fixed:      element_dim = element.size
-        case .Calculated: element_dim = (element.child_max + element.padding) - element.child_min
+        case .Calculated: element_dim = element.child_max + element.padding - element.child_min
     }
     
     total_dim := element_dim + border * 2
     total_bounds  := rect_min_dimension(total_min,          total_dim)
     element.bounds = rect_min_dimension(total_min + border, element_dim)
-    
-    // draw_rectangle(rect_center_dimension(element.child_p, 4), Emerald)
-    // draw_rectangle(rect_center_dimension(element.child_max, 4), Blue)
-    // draw_rectangle(rect_center_dimension(element.child_min, 4), Orange)
-    if border != 0 {
-        draw_rectangle_outline(element.bounds, border, element.border_color)
-    }
-    
-    ui := element.ui
-    if .has_interaction in element.flags && rect_contains(element.bounds, ui.mouse_p) {
-        ui.next_hot_interaction = element.interaction
-    }
     
     switch parent.size_kind {
     case .Fixed: // nothing
@@ -711,14 +704,23 @@ end_ui_element :: proc (element: ^Element) {
         
     case .Calculated:
         if .grow_horizontal in parent.flags {
-            parent.child_p.x   += total_dim.x
+            parent.child_sum.x   += total_dim.x
             parent.child_max.x += total_dim.x
             parent.child_max.y  = max(parent.child_max.y, total_bounds.max.y)
         } else {
-            parent.child_p.y   += total_dim.y
+            parent.child_sum.y += total_dim.y
             parent.child_max.x  = max(parent.child_max.x, total_bounds.max.x)
             parent.child_max.y += total_dim.y
         }
+    }
+    
+    if border != 0 {
+        draw_rectangle_outline(element.bounds, border, element.border_color)
+    }
+    
+    ui := element.ui
+    if .has_interaction in element.flags && rect_contains(element.bounds, ui.mouse_p) {
+        ui.next_hot_interaction = element.interaction
     }
 }
 
