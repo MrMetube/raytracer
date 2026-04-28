@@ -4,7 +4,7 @@ import rl "vendor:raylib"
 
 ////////////////////////////////////////////////
 
-layout_init :: proc (layout: ^Layout, font: rl.Font, font_size: f32, spacing: f32 = 8) {
+layout_init :: proc (layout: ^Element, font: rl.Font, font_size: f32, spacing: f32 = 8) {
     layout^ = {}
     layout.font = font
     layout.font_size = font_size
@@ -41,11 +41,10 @@ layout_init :: proc (layout: ^Layout, font: rl.Font, font_size: f32, spacing: f3
     }
 }
 
-layout_begin :: proc (layout: ^Layout, ui: ^UI, bounds: Rectangle2, dt: f32) {
+layout_begin :: proc (layout: ^Element, ui: ^UI, bounds: Rectangle2, dt: f32) {
     layout.ui = ui
     
     layout.allocated = bounds
-    layout.base_x = {}
     layout.flags = {}
     layout.size_children = {}
     layout.dt = dt
@@ -53,7 +52,7 @@ layout_begin :: proc (layout: ^Layout, ui: ^UI, bounds: Rectangle2, dt: f32) {
     layout.child_count = {}
 }
 
-layout_advance :: proc (layout: ^Layout, dimension: v2) {
+layout_advance :: proc (layout: ^Element, dimension: v2) {
     if .grow_horizontal in layout.flags {
         layout.allocated.min.x += dimension.x
         layout.size_children.y = max(layout.size_children.y, dimension.y)
@@ -62,14 +61,14 @@ layout_advance :: proc (layout: ^Layout, dimension: v2) {
     }
 }
 
-layout_indent :: proc (layout: ^Layout) {
+layout_indent :: proc (layout: ^Element) {
     layout.allocated.min.x += 20
 }
-layout_unindent :: proc (layout: ^Layout) {
+layout_unindent :: proc (layout: ^Element) {
     layout.allocated.min.x -= 20
 }
 
 @(deferred_in=layout_unindent)
-layout_indent_scope :: proc (layout: ^Layout) {
+layout_indent_scope :: proc (layout: ^Element) {
     layout_indent(layout)
 }

@@ -5,10 +5,10 @@ import "core:math"
 import rl "vendor:raylib"
 
 UI :: struct {
-    ended_interaction:    Interaction, // @naming
-    active_interaction:   Interaction,
-    hot_interaction:      Interaction,
     next_hot_interaction: Interaction,
+    hot_interaction:      Interaction,
+    active_interaction:   Interaction,
+    ended_interaction:    Interaction, // @naming
     
     mouse_p:  v2,
     mouse_dp: v2,
@@ -190,7 +190,7 @@ set_value_interaction :: proc (target: ^$T, value: T) -> Interaction {
 ////////////////////////////////////////////////
 
 // @cleanup what is an interaction in this once we have drags and sliders and moves
-ui_button :: proc (parent: ^UI_Element, interaction: Interaction, format: string, args: ..any) -> bool {
+ui_button :: proc (parent: ^Element, interaction: Interaction, format: string, args: ..any) -> bool {
     hot    := is_hot(parent.ui, interaction)
     active := is_active(parent.ui, interaction)
     
@@ -200,7 +200,7 @@ ui_button :: proc (parent: ^UI_Element, interaction: Interaction, format: string
     return result
 }
 
-ui_toggle :: proc (parent: ^UI_Element, condition: ^bool, format: string, args: ..any) -> bool {
+ui_toggle :: proc (parent: ^Element, condition: ^bool, format: string, args: ..any) -> bool {
     interaction := set_value_interaction(condition, !condition^)
     hot    := is_hot(parent.ui, interaction)
     active := is_active(parent.ui, interaction) || condition^
@@ -215,7 +215,7 @@ ui_toggle :: proc (parent: ^UI_Element, condition: ^bool, format: string, args: 
     return clicked
 }
 
-ui_collapser :: proc (parent: ^UI_Element, is_open: ^bool, format: string, args: ..any) -> bool {
+ui_collapser :: proc (parent: ^Element, is_open: ^bool, format: string, args: ..any) -> bool {
     was_open := is_open^
     interaction := set_value_interaction(is_open, !was_open)
     
@@ -233,12 +233,11 @@ ui_collapser :: proc (parent: ^UI_Element, is_open: ^bool, format: string, args:
     return result
 }
 
-ui_radio_button :: proc (parent: ^UI_Element, target: ^$T, value: T, format: string, args: ..any) -> bool {
-    active := target^ == value
-    
+ui_radio_button :: proc (parent: ^Element, target: ^$T, value: T, format: string, args: ..any) -> bool {
     interaction := set_value_interaction(target, value)
-    hot := is_hot(parent.ui, interaction)
-    active  = is_active(parent.ui, interaction) || active
+    
+    hot    := is_hot(parent.ui, interaction)
+    active := is_active(parent.ui, interaction) || target^ == value
     
     theme := theme_button(hot, active)
     clicked := ui_themed_button(parent, interaction, theme, format, ..args)
@@ -254,7 +253,7 @@ ui_radio_button :: proc (parent: ^UI_Element, target: ^$T, value: T, format: str
     return result
 }
 
-ui_themed_button :: proc (parent: ^UI_Element, interaction: Interaction, theme: Theme, format: string, args: ..any) -> bool {
+ui_themed_button :: proc (parent: ^Element, interaction: Interaction, theme: Theme, format: string, args: ..any) -> bool {
     text := tprint(format, ..args)
     text_size := measure_text(parent, text)
     
@@ -262,7 +261,7 @@ ui_themed_button :: proc (parent: ^UI_Element, interaction: Interaction, theme: 
     ui_element_set_interaction(&button, interaction)
     ui_element_set_border(&button, theme.outline)
     ui_element_set_padding(&button, { 4, 2 })
-        text_element := begin_ui_element(&button, &text_size)
+        text_element := begin_ui_element(&button, text_size)
         end_ui_element(&text_element)
     end_ui_element(&button)
     
@@ -305,41 +304,41 @@ ui_mover :: proc (ui: ^UI, drag: ^v2, size: v2) -> bool {
 // @todo(viktor): dragger should be only for unclamped values, for clamped values there should just be a slider that shows the user the range and where the current value lies within that range
 ui_dragger :: proc { ui_dragger_float, ui_dragger_int, ui_dragger_clamp_float, ui_dragger_clamp_int, ui_dragger_clamp_uint }
 // @copypasta clamps
-ui_dragger_clamp_float :: proc (layout: ^Layout, value: ^f32, speed, min, max: f32, format: string, args: ..any, flags := DraggerFlags{}) -> bool {
+ui_dragger_clamp_float :: proc (parent: ^Element, value: ^f32, speed, min, max: f32, format: string, args: ..any, flags := DraggerFlags{}) -> bool {
     interaction := Interaction{ kind = .Drag, target = value }
     
-    changed, released := ui_dragger_base(layout, value, speed, interaction, flags, format, ..args)
+    changed, released := ui_dragger_base(parent, value, speed, interaction, flags, format, ..args)
     if changed {
         value^ = clamp(value^, min, max)
     }
     
     return released
 }
-ui_dragger_clamp_int :: proc (layout: ^Layout, value: ^$I, format: string, args: ..any, speed: f32 = 1, min: int = min(int), max: int = max(int), logarithmic := false) -> bool where !intrinsics.type_is_unsigned(I), intrinsics.type_is_integer(I) {
+ui_dragger_clamp_int :: proc (parent: ^Element, value: ^$I, format: string, args: ..any, speed: f32 = 1, min: int = min(int), max: int = max(int), logarithmic := false) -> bool where !intrinsics.type_is_unsigned(I), intrinsics.type_is_integer(I) {
     before := value^
-    released := ui_dragger_int(layout, value, format, ..args, speed = speed, logarithmic = logarithmic)
+    released := ui_dragger_int(parent, value, format, ..args, speed = speed, logarithmic = logarithmic)
     if value^ != before {
         value^ = clamp(value^, cast(I) min, cast(I) max)
     }
     
     return released
 }
-ui_dragger_clamp_uint :: proc (layout: ^Layout, value: ^$T, format: string, args: ..any, speed: f32 = 1, #any_int min: u64 = min(u64), #any_int max: u64 = max(u64), logarithmic := false) -> bool where intrinsics.type_is_unsigned(T), intrinsics.type_is_integer(T) {
+ui_dragger_clamp_uint :: proc (parent: ^Element, value: ^$T, format: string, args: ..any, speed: f32 = 1, #any_int min: u64 = min(u64), #any_int max: u64 = max(u64), logarithmic := false) -> bool where intrinsics.type_is_unsigned(T), intrinsics.type_is_integer(T) {
     before := value^
-    released := ui_dragger_int(layout, value, format, ..args, speed = speed, logarithmic = logarithmic)
+    released := ui_dragger_int(parent, value, format, ..args, speed = speed, logarithmic = logarithmic)
     if value^ != before {
         value^ = clamp(value^, cast(T) min, cast(T) max)
     }
     
     return released
 }
-ui_dragger_int :: proc (layout: ^Layout, value: ^$I, format: string, args: ..any, speed: f32 = 1, logarithmic := false) -> bool where intrinsics.type_is_integer(I) {
+ui_dragger_int :: proc (parent: ^Element, value: ^$I, format: string, args: ..any, speed: f32 = 1, logarithmic := false) -> bool where intrinsics.type_is_integer(I) {
     interaction := Interaction{ kind = .Drag, target = value }
     
     temp := cast(f32) value^
     flags : DraggerFlags
     if logarithmic do flags += { .logarithmic }
-    changed, released := ui_dragger_base(layout, &temp, speed, interaction, flags, format, ..args)
+    changed, released := ui_dragger_base(parent, &temp, speed, interaction, flags, format, ..args)
     
     if changed {
         next := round(I, temp)
@@ -347,16 +346,16 @@ ui_dragger_int :: proc (layout: ^Layout, value: ^$I, format: string, args: ..any
         value^  = next
     }
     
-    released = is_ended(layout.ui, interaction)
+    released = is_ended(parent.ui, interaction)
     
     return released
 }
-ui_dragger_float :: proc (layout: ^Layout, value: ^f32, format: string, args: ..any, speed: f32 = 1, min := min(f32), max := max(f32), logarithmic := false) -> bool {
+ui_dragger_float :: proc (parent: ^Element, value: ^f32, format: string, args: ..any, speed: f32 = 1, min := min(f32), max := max(f32), logarithmic := false) -> bool {
     interaction := Interaction{ kind = .Drag, target = value }
     
     flags : DraggerFlags
     if logarithmic do flags += { .logarithmic }
-    changed, released := ui_dragger_base(layout, value, speed, interaction, flags, format, ..args)
+    changed, released := ui_dragger_base(parent, value, speed, interaction, flags, format, ..args)
     
     if changed {
         value^ = clamp(value^, min, max)
@@ -364,10 +363,19 @@ ui_dragger_float :: proc (layout: ^Layout, value: ^f32, format: string, args: ..
     return released
 }
 
-ui_dragger_base :: proc (layout: ^Layout, value: ^f32, speed: f32, interaction: Interaction, flags: DraggerFlags, format: string, args: ..any) -> (changed: bool, released: bool) {
-    __ui_dragger_raw(layout, interaction, format, ..args)
+ui_dragger_base :: proc (parent: ^Element, value: ^f32, speed: f32, interaction: Interaction, flags: DraggerFlags, format: string, args: ..any) -> (changed: bool, released: bool) {
+    theme := theme_dragger(is_hot(parent.ui, interaction) || is_active(parent.ui, interaction))
     
-    if is_active(layout.ui, interaction) {
+    text := tprint(format, ..args)
+    text_size := measure_text(parent, text)
+    
+    element := begin_ui_element(parent, text_size)
+    ui_element_set_interaction(&element, interaction)
+    end_ui_element(&element)
+    
+    draw_text(parent, text, element.bounds.min, theme.text)
+    
+    if is_active(parent.ui, interaction) {
         before := value^
         val    := value^
         
@@ -377,7 +385,7 @@ ui_dragger_base :: proc (layout: ^Layout, value: ^f32, speed: f32, interaction: 
             speed /= 1000
         }
         
-        val += speed * layout.ui.mouse_dp.x
+        val += speed * parent.ui.mouse_dp.x
         
         if .logarithmic in flags {
             val = math.exp(val)
@@ -387,36 +395,14 @@ ui_dragger_base :: proc (layout: ^Layout, value: ^f32, speed: f32, interaction: 
         changed = val != before
     }
     
-    released = is_ended(layout.ui, interaction)
+    released = is_ended(parent.ui, interaction)
     
     return changed, released
 }
 
-__ui_dragger_raw :: proc (layout: ^Layout, interaction: Interaction, format: string, args: ..any) {
-    // @theme
-    text_color := Jasmine
-    if is_hot(layout.ui, interaction) {
-        text_color = Isabelline
-    } else if is_active(layout.ui, interaction) {
-        text_color = Isabelline
-    }
-    
-    text := tprint(format, ..args)
-    size := measure_text(layout, text)
-    
-    text_p := layout.allocated.min
-    draw_text(layout, text, text_p, text_color)
-    layout_advance(layout, size)
-    
-    rect := rect_min_dimension(text_p, size) 
-    if rect_contains(rect, layout.ui.mouse_p) {
-        layout.ui.next_hot_interaction = interaction
-    }
-}
-
 ////////////////////////////////////////////////
 
-ui_color_picker :: proc (parent: ^UI_Element, rgb: ^v3, format: string) -> bool {
+ui_color_picker :: proc (parent: ^Element, rgb: ^v3, format: string) -> bool {
     ui_text(parent, format)
     layout_advance(parent, parent.spacing)
     
@@ -424,7 +410,7 @@ ui_color_picker :: proc (parent: ^UI_Element, rgb: ^v3, format: string) -> bool 
     
     picker := v2{ 40, 40 }
     size := picker + v2{ 20, 0 }
-    element := begin_ui_element(parent, &size)
+    element := begin_ui_element(parent, size)
     ui_element_set_border(&element, theme.outline)
     end_ui_element(&element)
     
@@ -443,22 +429,22 @@ ui_color_picker :: proc (parent: ^UI_Element, rgb: ^v3, format: string) -> bool 
 
 ////////////////////////////////////////////////
 
-ui_text :: proc (parent: ^UI_Element, format: string, args: ..any) {
+ui_text :: proc (parent: ^Element, format: string, args: ..any) {
     text := tprint(format, ..args)
     text_size := measure_text(parent, text)
     
-    element := begin_ui_element(parent, &text_size)
+    element := begin_ui_element(parent, text_size)
     end_ui_element(&element)
     
     theme := theme_button(false, false)
     draw_text(parent, text, element.bounds.min, theme.text, theme.text_shadow)
 }
 
-ui_progress_bar :: proc (parent: ^UI_Element, percentage: f32, width: f32) {
+ui_progress_bar :: proc (parent: ^Element, percentage: f32, width: f32) {
     theme := theme_button(false, true)
     
     size := v2{width, parent.font_size}
-    element := begin_ui_element(parent, &size)
+    element := begin_ui_element(parent, size)
     ui_element_set_border(&element, theme.outline)
     end_ui_element(&element)
     
@@ -472,14 +458,14 @@ ui_progress_bar :: proc (parent: ^UI_Element, percentage: f32, width: f32) {
 
 ////////////////////////////////////////////////
 
-measure_text :: proc (element: ^UI_Element, text: string) -> v2 {
+measure_text :: proc (element: ^Element, text: string) -> v2 {
     ctext := ctprint(text)
     result := rl.MeasureTextEx(element.font, ctext, element.font_size, 1)
     return result
 }
 
 // @theme
-draw_text :: proc (element: ^UI_Element, text: string, p: v2, color: v4, shadow_color := Black) {
+draw_text :: proc (element: ^Element, text: string, p: v2, color: v4, shadow_color := Black) {
     ctext := ctprint(text)
     if shadow_color.a != 0 {
         rl.DrawTextEx(element.font, ctext, p+2, element.font_size, 1, color_to_rl(shadow_color))
@@ -534,29 +520,28 @@ color_from_rl :: proc (color: rl.Color) -> v4 {
 
 ////////////////////////////////////////////////
 
-Layout :: UI_Element
-UI_Element :: struct {
-    using xxx: xx,
+Element :: struct {
+    using info: UI_Info,
     
-    parent: ^UI_Element,
+    parent: ^Element,
     
-    flags:       UI_Element_Flags,
+    flags:       UI_Flags,
     interaction: Interaction,
     
     border_color: v4,
     spacing: v2,
     padding: v2,
     
-    size_kind: UI_Element_Size_Kind,
+    size_kind: UI_Size_Kind,
     
     ////////////////////////////////////////////////
     // Fixed Size
-    size: ^v2,
+    size: v2,
     
     ////////////////////////////////////////////////
     // Allocated Size
     allocated: Rectangle2,
-
+    
     ////////////////////////////////////////////////
     // Calculated Size
     child_p:   v2,
@@ -567,15 +552,14 @@ UI_Element :: struct {
     ////////////////////////////////////////////////
     // result for user
     bounds:  Rectangle2,
-        
+    
     ////////////////////////////////////////////////
     // Linear Layout
-    base_x: f32,
     // @naming
     size_children: v2,
 }
 
-xx :: struct {
+UI_Info :: struct {
     ui: ^UI,
     font: rl.Font,
     font_size: f32,
@@ -583,21 +567,21 @@ xx :: struct {
     dt: f32,
 }
 
-UI_Element_Size_Kind :: enum {
+UI_Size_Kind :: enum {
     Allocated,
     Fixed,   // by user
     Calculated, // from children
 }
 
-UI_Element_Flags :: bit_set[UI_Element_Flag]
-UI_Element_Flag :: enum {
+UI_Flags :: bit_set[UI_Flag]
+UI_Flag :: enum {
     has_interaction,
     has_border,
     
     grow_horizontal,
 }
 
-begin_ui_element :: proc (parent: ^UI_Element, size: ^v2) -> UI_Element {
+begin_ui_element :: proc (parent: ^Element, size: v2) -> Element {
     result := make_ui_element(parent)
     
     result.size      = size
@@ -606,7 +590,7 @@ begin_ui_element :: proc (parent: ^UI_Element, size: ^v2) -> UI_Element {
     return result
 }
 
-begin_ui_element_calculated :: proc (parent: ^UI_Element) -> UI_Element {
+begin_ui_element_calculated :: proc (parent: ^Element) -> Element {
     result := make_ui_element(parent)
     result.size_kind = .Calculated
     
@@ -619,32 +603,37 @@ begin_ui_element_calculated :: proc (parent: ^UI_Element) -> UI_Element {
     result.child_p   = result.child_min
     result.child_max = result.child_min
     
-    result.flags += { .grow_horizontal }
-    
     return result
 }
 
-make_ui_element :: proc (parent: ^UI_Element) -> UI_Element {
-    result: UI_Element
+make_ui_element :: proc (parent: ^Element) -> Element {
+    result: Element
     
-    result.xxx = parent.xxx
+    result.info = parent.info
     result.parent = parent
     
     return result
 }
 
+begin_horizontal_element :: proc (parent: ^Element) -> Element {
+    result := begin_ui_element_calculated(parent)
+    result.flags += { .grow_horizontal }
+    result.spacing = 10
+    return result
+}
+
 // @api should .interaction just be a maybe, even if we already have a .flags?
-ui_element_set_interaction :: proc (element: ^UI_Element, interaction: Interaction) {
+ui_element_set_interaction :: proc (element: ^Element, interaction: Interaction) {
     element.flags      += { .has_interaction }
     element.interaction = interaction
 }
 
-ui_element_set_border :: proc (element: ^UI_Element, color := Red) {
+ui_element_set_border :: proc (element: ^Element, color := Red) {
     element.flags += { .has_border }
     element.border_color = color
 }
 
-ui_element_set_padding :: proc (element: ^UI_Element, padding: v2) {
+ui_element_set_padding :: proc (element: ^Element, padding: v2) {
     element.padding = padding
     switch element.size_kind {
     case .Fixed, .Allocated: // nothing
@@ -655,7 +644,7 @@ ui_element_set_padding :: proc (element: ^UI_Element, padding: v2) {
     }
 }
 
-end_ui_element :: proc (element: ^UI_Element) {
+end_ui_element :: proc (element: ^Element) {
     // @todo(viktor): resize interactions
     
     Border_Size :: 2
@@ -689,7 +678,7 @@ end_ui_element :: proc (element: ^UI_Element) {
     element_dim: v2
     switch element.size_kind {
         case .Allocated:  unimplemented()
-        case .Fixed:      element_dim = element.size^
+        case .Fixed:      element_dim = element.size
         case .Calculated: element_dim = (element.child_max + element.padding) - element.child_min
     }
     
@@ -748,6 +737,17 @@ theme_button :: proc (is_hot: bool, is_active: bool) -> Theme {
         result.text_shadow = 0
     } else if is_active {
         result.background = Green
+        result.text = Isabelline
+    }
+    
+    return result
+}
+
+theme_dragger :: proc (is_hot_or_active: bool) -> Theme {
+    // @todo(viktor): default theme
+    result: Theme
+    result.text = Jasmine
+    if is_hot_or_active {
         result.text = Isabelline
     }
     
