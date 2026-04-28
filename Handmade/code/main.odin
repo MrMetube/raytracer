@@ -247,6 +247,8 @@ main :: proc () {
         
         interact(ui)
         
+        end_ui(ui)
+        
         ////////////////////////////////////////////////
         
         // @cleanup the request system, can we just render every frame?

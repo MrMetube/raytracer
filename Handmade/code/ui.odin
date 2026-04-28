@@ -13,7 +13,7 @@ UI :: struct {
     mouse_p:  v2,
     mouse_dp: v2,
     
-    stack: [dynamic; 256] Element,
+    elements: [dynamic; 256] Element,
 }
 
 parent_stack: [dynamic; 256] ^Element
@@ -52,10 +52,10 @@ DraggerFlag :: enum {
 DraggerFlags :: bit_set[DraggerFlag]
 
 Theme :: struct {
-    outline: v4,
+    border: v4,
     background: v4,
     text: v4,
-    text_shadow: v4,
+    shadow: v4,
 }
 
 ////////////////////////////////////////////////
@@ -71,9 +71,11 @@ Element :: struct {
     flags:       UI_Flags,
     interaction: Interaction,
     
-    border_color: v4,
     spacing: v2,
     padding: v2,
+    
+    theme: Theme,
+    text: string,
     
     size_kind: UI_Size_Kind,
     
@@ -109,6 +111,8 @@ UI_Flags :: bit_set[UI_Flag]
 UI_Flag :: enum {
     has_interaction,
     has_border,
+    has_background,
+    has_text,
     
     grow_horizontal,
 }
@@ -119,7 +123,10 @@ begin_ui :: proc (ui: ^UI) {
     ui.mouse_p  = rl.GetMousePosition()
     ui.mouse_dp = rl.GetMouseDelta()
     
-    clear(&ui.stack)
+    clear(&ui.elements)
+}
+
+end_ui :: proc (ui: ^UI) {
 }
 
 interact :: proc (ui: ^UI) {
@@ -325,21 +332,17 @@ ui_radio_button :: proc (target: ^$T, value: T, format: string, args: ..any) -> 
 ui_themed_button :: proc (interaction: Interaction, theme: Theme, format: string, args: ..any) -> bool {
     parent := ui_peek_parent()
     
+    // @api begin_ui_element_sized_by_text? or something to not format and measure twice
     text := tprint(format, ..args)
     text_size := measure_text(parent, text)
     
-    button := begin_ui_element_calculated()
-    ui_element_set_interaction(button, interaction)
-    ui_element_set_border(button, theme.outline)
+    button := begin_ui_element(text_size)
+    ui_element_interaction(button, interaction)
+    ui_element_border(button, theme.border)
+    ui_element_text(button, theme.text, theme.shadow, format, ..args)
+    ui_element_background(button, theme.background)
     button.padding = { 4, 2 }
-    ui_push_parent(button)
-        text_element := begin_ui_element(text_size)
-        end_ui_element(text_element)
-    ui_pop_parent()
     end_ui_element(button)
-    
-    draw_rectangle(button.bounds, theme.background)
-    draw_text(parent, text, text_element.bounds.min, theme.text, theme.text_shadow)
     
     result: bool
     // @todo(viktor): this should be inside end_ui_element
@@ -446,10 +449,9 @@ ui_dragger_base :: proc (value: ^f32, speed: f32, interaction: Interaction, flag
     text_size := measure_text(parent, text)
     
     element := begin_ui_element(text_size)
-    ui_element_set_interaction(element, interaction)
+    ui_element_interaction(element, interaction)
+    ui_element_text(element, theme.text, theme.shadow, format, ..args)
     end_ui_element(element)
-    
-    draw_text(parent, text, element.bounds.min, theme.text)
     
     if is_active(parent.ui, interaction) {
         before := value^
@@ -489,7 +491,7 @@ ui_color_picker :: proc (rgb: ^v3, text: string) -> bool {
     picker := v2{ 40, 40 }
     size := picker + v2{ 20, 0 }
     element := begin_ui_element(size)
-    ui_element_set_border(element, theme.outline)
+    ui_element_border(element, theme.border)
     end_ui_element(element)
     
     layout_advance(parent, parent.spacing)
@@ -517,7 +519,7 @@ ui_text :: proc (format: string, args: ..any) {
     end_ui_element(element)
     
     theme := theme_button(false, false)
-    draw_text(parent, text, element.bounds.min, theme.text, theme.text_shadow)
+    draw_text(parent, text, element.bounds.min, theme.text, theme.shadow)
 }
 
 ui_progress_bar :: proc (percentage: f32, width: f32) {
@@ -527,7 +529,7 @@ ui_progress_bar :: proc (percentage: f32, width: f32) {
     
     size := v2{width, parent.font_size}
     element := begin_ui_element(size)
-    ui_element_set_border(element, theme.outline)
+    ui_element_border(element, theme.border)
     end_ui_element(element)
     
     rect     := element.bounds
@@ -536,19 +538,23 @@ ui_progress_bar :: proc (percentage: f32, width: f32) {
     
     draw_rectangle(progress, theme.text)
     draw_rectangle(rest,     theme.background)
+    text := tprint("%v", view_percentage(percentage))
+    text_size := measure_text(&element.info, text)
+    tt := rect_center_dimension(rect_get_center(element.bounds), text_size)
+    draw_text(&element.info, text, tt.min, Jasmine, theme.shadow)
 }
 
 ////////////////////////////////////////////////
 
-measure_text :: proc (element: ^Element, text: string) -> v2 {
-    ctext := ctprint(text)
-    result := rl.MeasureTextEx(element.font, ctext, element.font_size, 1)
+measure_text :: proc (info: ^UI_Info, text: string) -> v2 {
+    ctext := ctprint("%v", text)
+    result := rl.MeasureTextEx(info.font, ctext, info.font_size, 1)
     return result
 }
 
 // @theme
 draw_text :: proc (info: ^UI_Info, text: string, p: v2, color: v4, shadow_color := Black) {
-    ctext := ctprint(text)
+    ctext := ctprint("%v", text)
     if shadow_color.a != 0 {
         rl.DrawTextEx(info.font, ctext, p+2, info.font_size, 1, color_to_rl(shadow_color))
     }
@@ -623,9 +629,9 @@ begin_ui_element_calculated :: proc () -> ^Element {
 make_ui_element :: proc () -> ^Element {
     parent := ui_peek_parent()
     
-    index := len(parent.ui.stack)
-    append_nothing(&parent.ui.stack)
-    result := &parent.ui.stack[index]
+    index := len(parent.ui.elements)
+    append_nothing(&parent.ui.elements)
+    result := &parent.ui.elements[index]
     result^ = {}
     
     result.info = parent.info
@@ -633,6 +639,8 @@ make_ui_element :: proc () -> ^Element {
     
     return result
 }
+
+////////////////////////////////////////////////
 
 begin_horizontal :: proc () {
     result := begin_ui_element_calculated()
@@ -646,6 +654,8 @@ end_horizontal :: proc () {
     element := ui_pop_parent()
     end_ui_element(element)
 }
+
+////////////////////////////////////////////////
 
 ui_push_parent :: proc (parent: ^Element) {
     append(&parent_stack, parent)
@@ -662,15 +672,27 @@ ui_peek_parent :: proc (loc := #caller_location) -> ^Element {
     return result
 }
 
+////////////////////////////////////////////////
+
 // @api should .interaction just be a maybe, even if we already have a .flags?
-ui_element_set_interaction :: proc (element: ^Element, interaction: Interaction) {
+ui_element_interaction :: proc (element: ^Element, interaction: Interaction) {
     element.flags      += { .has_interaction }
     element.interaction = interaction
 }
 
-ui_element_set_border :: proc (element: ^Element, color := Red) {
+ui_element_border :: proc (element: ^Element, color := Red) {
     element.flags += { .has_border }
-    element.border_color = color
+    element.theme.border = color
+}
+ui_element_background :: proc (element: ^Element, color: v4) {
+    element.flags += { .has_background }
+    element.theme.background = color
+}
+ui_element_text :: proc (element: ^Element, text, shadow: v4, format: string, args: ..any) {
+    element.text = tprint(format, ..args)
+    element.flags += { .has_text }
+    element.theme.text = text
+    element.theme.shadow = shadow
 }
 
 ui_element_min :: proc (element: ^Element) -> v2 {
@@ -678,7 +700,7 @@ ui_element_min :: proc (element: ^Element) -> v2 {
     
     result: v2
     switch element.size_kind {
-    case .Fixed:     unimplemented()
+    case .Fixed:     result = ui_element_min(element.parent)
     case .Allocated: result = element.bounds.min
         
     case .Calculated:
@@ -740,7 +762,7 @@ end_ui_element :: proc (element: ^Element) {
     element_dim: v2
     switch element.size_kind {
         case .Allocated:  unimplemented()
-        case .Fixed:      element_dim = element.size
+        case .Fixed:      element_dim = element.size + element.padding * 2
         case .Calculated: element_dim = calculate_size(element)
     }
     
@@ -766,10 +788,22 @@ end_ui_element :: proc (element: ^Element) {
         }
     }
     
-    if border != 0 {
-        draw_rectangle_outline(element.bounds, border, element.border_color)
+    if .has_border in element.flags {
+        draw_rectangle_outline(element.bounds, border, element.theme.border)
     }
     
+    if .has_background in element.flags {
+        draw_rectangle(element.bounds, element.theme.background)
+    }
+    
+    if .has_text in element.flags {
+        // @todo(viktor): should alignment be a parameter?
+        text_size := measure_text(&element.info, element.text)
+        text_bounds := rect_center_dimension(rect_get_center(element.bounds), text_size)
+        draw_text(&element.info, element.text, text_bounds.min, element.theme.text, element.theme.shadow)
+    }
+    
+    // @todo(viktor): maybe move this to end_ui?
     ui := element.ui
     if .has_interaction in element.flags && rect_contains(element.bounds, ui.mouse_p) {
         ui.next_hot_interaction = element.interaction
@@ -780,15 +814,15 @@ end_ui_element :: proc (element: ^Element) {
 
 theme_button :: proc (is_hot: bool, is_active: bool) -> Theme {
     result: Theme
-    result.outline     = DarkGreen
+    result.border     = DarkGreen
     result.background  = DarkGreen
     result.text        = Jasmine
-    result.text_shadow = Black
+    result.shadow = Black
     if is_hot {
-        result.outline = Green
+        result.border = Green
         result.background = Isabelline
         result.text = Green
-        result.text_shadow = 0
+        result.shadow = 0
     } else if is_active {
         result.background = Green
         result.text = Isabelline
@@ -801,6 +835,7 @@ theme_dragger :: proc (is_hot_or_active: bool) -> Theme {
     // @todo(viktor): default theme
     result: Theme
     result.text = Jasmine
+    result.shadow = Black
     if is_hot_or_active {
         result.text = Isabelline
     }

@@ -85,6 +85,6 @@ View_Percentage_Formatter :: proc (info: ^fmt.Info, arg: any, verb: rune) -> boo
     info.prec = 2
     info.prec_set = true
     fmt.fmt_float(info, view.value * 100, 8 * size_of(view.value), 'f')
-    fmt.fmt_rune(info, '%', 'v')
+    fmt.fmt_rune(info, '%', 'r')
     return true
 }
