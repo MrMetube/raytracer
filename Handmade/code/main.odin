@@ -264,6 +264,8 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
     screen_bounds := rect_zero_dimension(vec_cast(f32, state.window_size))
     layout_bounds := rect_add_radius(screen_bounds, -10)
     layout_begin(layout, ui, layout_bounds, delta_time)
+    ui_push_parent(layout)
+    defer ui_pop_parent()
     
     {
         small_factor :: 6
@@ -340,24 +342,26 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
     rerender := state.fast_render.requested
     defer state.fast_render.requested = rerender
     
-    bar := begin_horizontal_element(layout)
+    bar := begin_horizontal_element()
+    ui_push_parent(bar)
         for kind in Debug_View_Kind {
-            if ui_radio_button(bar, &Debug_View, kind, "%v", kind) {
+            if ui_radio_button(&Debug_View, kind, "%v", kind) {
                 rerender = true
             }
         }
-        if ui_toggle(bar, &Sort_Subnodes,     "Sort Subnodes")     do rerender = true
-        if ui_toggle(bar, &Early_Elimination, "Early Elimination") do rerender = true
+        if ui_toggle(&Sort_Subnodes,     "Sort Subnodes")     do rerender = true
+        if ui_toggle(&Early_Elimination, "Early Elimination") do rerender = true
+    ui_pop_parent()
     end_ui_element(bar)
     
     layout_advance(layout, layout.spacing)
     tests := bit_set[Debug_View_Kind] { .Triangle_Tests, .Rectangle_Tests, .Both_Tests }
     if Debug_View in tests {
-        if ui_dragger(layout, &Triangle_Threshold, "Triangle Threshold %v", view_magnitude(Triangle_Threshold, precision = 1), speed = 1, min = 1, max = 100000, logarithmic = true) {
+        if ui_dragger(&Triangle_Threshold, "Triangle Threshold %v", view_magnitude(Triangle_Threshold, precision = 1), speed = 1, min = 1, max = 100000, logarithmic = true) {
             rerender = true
         }
         
-        if ui_dragger(layout, &Rectangle_Threshold, "Rectangle Threshold %v", view_magnitude(Rectangle_Threshold, precision = 1), speed = 1, min = 1, max = 100000, logarithmic = true) {
+        if ui_dragger(&Rectangle_Threshold, "Rectangle Threshold %v", view_magnitude(Rectangle_Threshold, precision = 1), speed = 1, min = 1, max = 100000, logarithmic = true) {
             rerender = true
         }
     }
@@ -373,18 +377,18 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
     
     ////////////////////////////////////////////////
     
-    if ui_collapser(layout, &state.ojects_is_open, "Objects") {
+    if ui_collapser(&state.ojects_is_open, "Objects") {
         layout_indent_scope(layout)
         
         // @api maybe make an iterator?
         for object_index in 1..=state.world.last_used_object_index {
             object := &state.world.objects[object_index]
             
-            ui_radio_button(layout, &state.selected_object_id, object_index, "Object %v", object_index)
+            ui_radio_button(&state.selected_object_id, object_index, "Object %v", object_index)
             if state.selected_object_id == object_index {
                 layout_indent_scope(layout)
                 
-                ui_radio_button(layout, &state.previewed_object_id, object_index, "Focus")
+                ui_radio_button(&state.previewed_object_id, object_index, "Focus")
                 if state.previewed_object_id == object_index {
                     if state.previewed_object_id == object_index {
                         state.previewed_object_id = 0
@@ -394,15 +398,15 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
                     }
                 }
                 
-                if ui_dragger(layout, &object.transform.x.x, "scale x = %v",       object.transform.x.x) do rerender = true
-                if ui_dragger(layout, &object.transform.y.y, "scale y = %v",       object.transform.y.y) do rerender = true
-                if ui_dragger(layout, &object.transform.z.z, "scale z = %v",       object.transform.z.z) do rerender = true
-                if ui_dragger(layout, &object.transform.t.x, "translation x = %v", object.transform.t.x) do rerender = true
-                if ui_dragger(layout, &object.transform.t.y, "translation y = %v", object.transform.t.y) do rerender = true
-                if ui_dragger(layout, &object.transform.t.z, "translation z = %v", object.transform.t.z) do rerender = true
+                if ui_dragger(&object.transform.x.x, "scale x = %v",       object.transform.x.x) do rerender = true
+                if ui_dragger(&object.transform.y.y, "scale y = %v",       object.transform.y.y) do rerender = true
+                if ui_dragger(&object.transform.z.z, "scale z = %v",       object.transform.z.z) do rerender = true
+                if ui_dragger(&object.transform.t.x, "translation x = %v", object.transform.t.x) do rerender = true
+                if ui_dragger(&object.transform.t.y, "translation y = %v", object.transform.t.y) do rerender = true
+                if ui_dragger(&object.transform.t.z, "translation z = %v", object.transform.t.z) do rerender = true
                 
                 max_material_id := cast(Material_Id) len(state.world.materials)-1
-                if ui_dragger(layout, &object.material, "material %v", object.material, min = 1, max = max_material_id) {
+                if ui_dragger(&object.material, "material %v", object.material, min = 1, max = max_material_id) {
                     rerender = true
                 }
             }
@@ -410,31 +414,33 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
     }
     
     layout_advance(layout, layout.spacing)
-    if ui_collapser(layout, &state.materials_is_open, "Materials") {
+    if ui_collapser(&state.materials_is_open, "Materials") {
         layout_indent_scope(layout)
         
         for &material, index in state.world.materials {
             id := cast(Material_Id) index
             
-            ui_radio_button(layout, &state.selected_material_id, id, "Material %v %v", id, state.world.material_names[id])
+            ui_radio_button(&state.selected_material_id, id, "Material %v %v", id, state.world.material_names[id])
             if state.selected_material_id == id {
                 layout_indent_scope(layout)
                 
                 material.emit_strength = max(0.000001, material.emit_strength)
-                if ui_dragger(layout, &material.emit_strength,     "Emission %f",          material.emit_strength,     logarithmic = true, min = 0.00001, max = 1000) do rerender = true
-                if ui_dragger(layout, &material.roughness,         "Roughness %f",         material.roughness,         speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(layout, &material.specular_strength, "specular_strength %f", material.specular_strength, speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(layout, &material.anisotropic,       "anisotropic %f",       material.anisotropic,       speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(layout, &material.subsurface,        "subsurface %f",        material.subsurface,        speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(layout, &material.sheen,             "sheen %f",             material.sheen,             speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(layout, &material.sheen_tint,        "sheen_tint %f",        material.sheen_tint,        speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(layout, &material.metallic,          "metallic %f",          material.metallic,          speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(layout, &material.clearcoat,         "clearcoat %f",         material.clearcoat,         speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(layout, &material.clearcoat_gloss,   "clearcoat_gloss %f",   material.clearcoat_gloss,   speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(&material.emit_strength,     "Emission %f",          material.emit_strength,     logarithmic = true, min = 0.00001, max = 1000) do rerender = true
+                if ui_dragger(&material.roughness,         "Roughness %f",         material.roughness,         speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(&material.specular_strength, "specular_strength %f", material.specular_strength, speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(&material.anisotropic,       "anisotropic %f",       material.anisotropic,       speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(&material.subsurface,        "subsurface %f",        material.subsurface,        speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(&material.sheen,             "sheen %f",             material.sheen,             speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(&material.sheen_tint,        "sheen_tint %f",        material.sheen_tint,        speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(&material.metallic,          "metallic %f",          material.metallic,          speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(&material.clearcoat,         "clearcoat %f",         material.clearcoat,         speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(&material.clearcoat_gloss,   "clearcoat_gloss %f",   material.clearcoat_gloss,   speed = 0.001,      min = 0,       max = 1)    do rerender = true
                 
-                bar = begin_horizontal_element(layout)
-                    if ui_color_picker(bar, &material.emit_color, "Emit")      do rerender = true
-                    if ui_color_picker(bar, &material.base_tint,  "base tint") do rerender = true
+                bar = begin_horizontal_element()
+                ui_push_parent(bar)
+                    if ui_color_picker(&material.emit_color, "Emit")      do rerender = true
+                    if ui_color_picker(&material.base_tint,  "base tint") do rerender = true
+                ui_pop_parent()
                 end_ui_element(bar)
             }
         }
@@ -445,28 +451,30 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
 
 draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Render_Settings, name: string, is_focused: bool, can_be_focused: bool, window_size: v2i) -> bool { 
     result: bool
-    if ui_collapser(layout, &settings.is_open, name) {
+    if ui_collapser(&settings.is_open, name) {
         layout_indent_scope(layout)
         
-        bar := begin_horizontal_element(layout)
+        bar := begin_horizontal_element()
+        ui_push_parent(bar)
             if can_be_focused {
                 // @todo(viktor): is_focused -> highlighted
-                result = ui_button(bar, { kind = .SetValue, target = settings, value = name }, "Focus")
+                result = ui_button({ kind = .SetValue, target = settings, value = name }, "Focus")
             }
             
-            ui_toggle(bar, &settings.display_progress, "Display Progress")
-            ui_toggle(bar, &settings.requested,        "Render")
+            ui_toggle(&settings.display_progress, "Display Progress")
+            ui_toggle(&settings.requested,        "Render")
             
             if settings.active {
-                ui_text(bar, "%v", time.since(settings.start))
+                ui_text("%v", time.since(settings.start))
             } else {
-                ui_text(bar, "%v", time.diff(settings.start, settings.end))
+                ui_text("%v", time.diff(settings.start, settings.end))
             }
+        ui_pop_parent()
         end_ui_element(bar)
         layout_advance(layout, layout.spacing)
         
         layout_indent(layout)
-            if ui_button(layout,  {kind = .SetValue, target = &settings.render_time }, "Reset") {
+            if ui_button({kind = .SetValue, target = &settings.render_time }, "Reset") {
                 if !settings.active {
                     stat_init(&settings.render_time, time.diff(settings.start, settings.end))
                 } else {
@@ -476,40 +484,45 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Ren
                 stat_init(&settings.time_per_ray)
                 stat_finalize(&settings.time_per_ray)
             }
-            ui_text(layout, "Time: min %v, avg %v, max %v",         settings.render_time.min,  cast(time.Duration) settings.render_time.avg,  settings.render_time.max)
-            ui_text(layout, "Time per Ray: min %v, avg %v, max %v", settings.time_per_ray.min, cast(time.Duration) settings.time_per_ray.avg, settings.time_per_ray.max)
+            ui_text("Time: min %v, avg %v, max %v",         settings.render_time.min,  cast(time.Duration) settings.render_time.avg,  settings.render_time.max)
+            ui_text("Time per Ray: min %v, avg %v, max %v", settings.time_per_ray.min, cast(time.Duration) settings.time_per_ray.avg, settings.time_per_ray.max)
         layout_unindent(layout)
         layout_advance(layout, layout.spacing)
         
         if settings.active {
-            bar = begin_horizontal_element(layout)
+            bar = begin_horizontal_element()
+            ui_push_parent(bar)
                 total_pixels := settings.image.width * settings.image.height
                 done_percentage := cast(f32) settings.stats.pixels_done / cast(f32) total_pixels
-                ui_progress_bar(bar, done_percentage, 120)
+                ui_progress_bar(done_percentage, 120)
                 
-                ui_toggle(bar, &state.renderer.canceled, "Cancel Render")
+                ui_toggle(&state.renderer.canceled, "Cancel Render")
+            ui_pop_parent()
             end_ui_element(bar)
         } else {
             layout_advance(layout, {0, layout.font_size})
         }
         layout_advance(layout, layout.spacing)
         
-        bar = begin_horizontal_element(layout)
-            if ui_button(bar, set_value_interaction(&settings.rays_per_pixel, settings.rays_per_pixel / 2 ), "-") do settings.rays_per_pixel /= 2 
-            if ui_button(bar, set_value_interaction(&settings.rays_per_pixel, settings.rays_per_pixel * 2), "+") do settings.rays_per_pixel *= 2
-            ui_text(bar, "rays per_pixel %v", settings.rays_per_pixel)
+        bar = begin_horizontal_element()
+        ui_push_parent(bar)
+            if ui_button(set_value_interaction(&settings.rays_per_pixel, settings.rays_per_pixel / 2 ), "-") do settings.rays_per_pixel /= 2 
+            if ui_button(set_value_interaction(&settings.rays_per_pixel, settings.rays_per_pixel * 2), "+") do settings.rays_per_pixel *= 2
+            ui_text("rays per_pixel %v", settings.rays_per_pixel)
             settings.rays_per_pixel = clamp(settings.rays_per_pixel, LaneWidth, 8192)
+        ui_pop_parent()
         end_ui_element(bar)
         layout_advance(layout, layout.spacing)
         
-        ui_dragger(layout, &settings.max_bounce_count, "Bounces %v", settings.max_bounce_count, min = 1, max = 64)
+        ui_dragger(&settings.max_bounce_count, "Bounces %v", settings.max_bounce_count, min = 1, max = 64)
         
-        bar = begin_horizontal_element(layout)
+        bar = begin_horizontal_element()
+        ui_push_parent(bar)
             if !settings.active {
                 // @todo(viktor): this generally sucks to use and should just allow the user to set a resolution maybe from a small selection of reasonable ones
                 before := settings.image_size_factor
-                if ui_button(bar, set_value_interaction(&settings.image_size_factor, settings.image_size_factor + 1), "-") do settings.image_size_factor += 1
-                if ui_button(bar, set_value_interaction(&settings.image_size_factor, settings.image_size_factor - 1), "+") do settings.image_size_factor -= 1
+                if ui_button(set_value_interaction(&settings.image_size_factor, settings.image_size_factor + 1), "-") do settings.image_size_factor += 1
+                if ui_button(set_value_interaction(&settings.image_size_factor, settings.image_size_factor - 1), "+") do settings.image_size_factor -= 1
                 settings.image_size_factor = clamp(settings.image_size_factor, 1, 16)
                 
                 if settings.image_size_factor != before {
@@ -518,7 +531,8 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Ren
             }
             
             layout_advance(bar, layout.spacing)
-            ui_text(bar, "resolution %vx%v", settings.image.width, settings.image.height)
+            ui_text("resolution %vx%v", settings.image.width, settings.image.height)
+        ui_pop_parent()
         end_ui_element(bar)
         layout_advance(layout, layout.spacing)
     }
