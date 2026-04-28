@@ -14,6 +14,7 @@ layout_init :: proc (layout: ^Layout, font: rl.Font, font_size: f32, spacing: f3
     rl.GuiSetFont(layout.font)
     rl.GuiSetStyle(.DEFAULT, auto_cast rl.GuiDefaultProperty.TEXT_SIZE, cast(i32) layout.font_size)
     
+    // @theme
     Background := color_to_u8(DarkGreen)
     Foreground := color_to_u8(Jasmine)
     Highlight  := color_to_u8(Green)
@@ -52,41 +53,13 @@ layout_begin :: proc (layout: ^Layout, ui: ^UI, bounds: Rectangle2, dt: f32) {
     layout.child_count = {}
 }
 
-layout_advance :: proc { layout_advance_1, layout_advance_2_bounds, layout_advance_2_dim }
-layout_advance_1 :: proc (layout: ^Layout, size: f32) {
-    if .grow_horizontal in layout.flags {
-        layout.allocated.min.x += size
-    } else {
-        layout.allocated.min.y += size
-    }
-}
-
-layout_advance_2_bounds :: proc (layout: ^Layout, rect: Rectangle2) {
-    layout_advance_2_dim(layout, rect_get_dimension(rect))
-}
-layout_advance_2_dim :: proc (layout: ^Layout, dimension: v2) {
+layout_advance :: proc (layout: ^Layout, dimension: v2) {
     if .grow_horizontal in layout.flags {
         layout.allocated.min.x += dimension.x
         layout.size_children.y = max(layout.size_children.y, dimension.y)
     } else {
         layout.allocated.min.y += dimension.y
     }
-}
-
-layout_begin_horizontal :: proc (layout: ^Layout) {
-    assert(.grow_horizontal not_in layout.flags)
-    layout.flags += { .grow_horizontal }
-    
-    layout.base_x = layout.allocated.min.x
-    layout.size_children.y = 0
-}
-
-layout_end_horizontal :: proc (layout: ^Layout) {
-    assert(.grow_horizontal in layout.flags)
-    layout.flags -= { .grow_horizontal }
-    
-    layout.allocated.min.x  = layout.base_x
-    layout.allocated.min.y += layout.size_children.y
 }
 
 layout_indent :: proc (layout: ^Layout) {

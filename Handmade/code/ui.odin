@@ -416,19 +416,24 @@ __ui_dragger_raw :: proc (layout: ^Layout, interaction: Interaction, format: str
 
 ////////////////////////////////////////////////
 
-ui_color_picker :: proc (layout: ^Layout, rgb: ^v3, format: string) -> bool {
-    ui_text(layout, format)
-    layout_advance(layout, layout.spacing)
+ui_color_picker :: proc (parent: ^UI_Element, rgb: ^v3, format: string) -> bool {
+    ui_text(parent, format)
+    layout_advance(parent, parent.spacing)
     
-    size :: 40
-    bounds := rect_min_dimension(layout.allocated.min, size)
-    layout_advance_2_dim(layout, size + {40, 0})
-    layout_advance(layout, layout.spacing)
+    theme := theme_button(false, false)
+    
+    picker := v2{ 40, 40 }
+    size := picker + v2{ 20, 0 }
+    element := begin_ui_element(parent, &size)
+    ui_element_set_border(&element, theme.outline)
+    end_ui_element(&element)
+    
+    layout_advance(parent, parent.spacing)
     
     color := color_to_rl(rgb^)
     before := color
     
-    rl.GuiColorPicker(rect_to_rl(bounds), "", &color)
+    rl.GuiColorPicker(rect_to_rl(rect_min_dimension(element.bounds.min, picker)), "", &color)
     
     result := color != before
     rgb^ = color_from_rl(color).rgb
@@ -438,47 +443,48 @@ ui_color_picker :: proc (layout: ^Layout, rgb: ^v3, format: string) -> bool {
 
 ////////////////////////////////////////////////
 
-ui_text :: proc (layout: ^Layout, format: string, args: ..any) {
+ui_text :: proc (parent: ^UI_Element, format: string, args: ..any) {
     text := tprint(format, ..args)
-    text_p := layout.allocated.min
-    size := measure_text(layout, text)
-    // @theme
-    draw_text(layout, text, text_p, Jasmine)
-    layout_advance(layout, size)
+    text_size := measure_text(parent, text)
+    
+    element := begin_ui_element(parent, &text_size)
+    end_ui_element(&element)
+    
+    theme := theme_button(false, false)
+    draw_text(parent, text, element.bounds.min, theme.text, theme.text_shadow)
 }
 
-ui_progress_bar :: proc (layout: ^Layout, percentage: f32, width: f32) {
-    border_size :: 2
-    size := v2{width, layout.font_size - border_size*2}
-    at := layout.allocated.min
-    rect     := rect_min_dimension(at+border_size, size)
-    progress := rect_min_dimension(at+border_size, size * v2{percentage, 1}) 
+ui_progress_bar :: proc (parent: ^UI_Element, percentage: f32, width: f32) {
+    theme := theme_button(false, true)
     
-    // @theme
-    draw_rectangle_outline(rect, border_size, DarkGreen)
-    draw_rectangle(rect, Green)
-    draw_rectangle(progress, Isabelline)
+    size := v2{width, parent.font_size}
+    element := begin_ui_element(parent, &size)
+    ui_element_set_border(&element, theme.outline)
+    end_ui_element(&element)
     
-    layout_advance(layout, size)
+    rect     := element.bounds
+    progress := rect_min_dimension(rect.min, rect_get_dimension(rect) * v2{percentage, 1}) 
+    rest     := rect_min_max(v2{progress.max.x, rect.min.y}, rect.max)
     
-    layout_advance(layout, layout.spacing)
+    draw_rectangle(progress, theme.text)
+    draw_rectangle(rest,     theme.background)
 }
 
 ////////////////////////////////////////////////
 
-measure_text :: proc (layout: ^Layout, text: string) -> v2 {
+measure_text :: proc (element: ^UI_Element, text: string) -> v2 {
     ctext := ctprint(text)
-    result := rl.MeasureTextEx(layout.font, ctext, layout.font_size, 1)
+    result := rl.MeasureTextEx(element.font, ctext, element.font_size, 1)
     return result
 }
 
 // @theme
-draw_text :: proc (layout: ^Layout, text: string, p: v2, color: v4, shadow_color := Black) {
+draw_text :: proc (element: ^UI_Element, text: string, p: v2, color: v4, shadow_color := Black) {
     ctext := ctprint(text)
     if shadow_color.a != 0 {
-        rl.DrawTextEx(layout.font, ctext, p+2, layout.font_size, 1, color_to_rl(shadow_color))
+        rl.DrawTextEx(element.font, ctext, p+2, element.font_size, 1, color_to_rl(shadow_color))
     }
-    rl.DrawTextEx(layout.font, ctext, p,   layout.font_size, 1, color_to_rl(color))
+    rl.DrawTextEx(element.font, ctext, p,   element.font_size, 1, color_to_rl(color))
 }
 
 draw_rectangle :: proc (rect: Rectangle2, color: v4) {
@@ -666,10 +672,10 @@ end_ui_element :: proc (element: ^UI_Element) {
         
     case .Calculated:
         if parent.child_count != 0 {
-            mask  := .grow_horizontal in parent.flags ? v2{ 1, 0 } : v2{ 0, 1 }
-            space := parent.spacing * mask
-            parent.child_p   += space
-            parent.child_max += space
+            // mask  := .grow_horizontal in parent.flags ? v2{ 1, 0 } : v2{ 0, 1 }
+            // space := parent.spacing * mask
+            // parent.child_p   += space
+            // parent.child_max += space
         }
         
         total_min = parent.child_p
@@ -691,6 +697,9 @@ end_ui_element :: proc (element: ^UI_Element) {
     total_bounds  := rect_min_dimension(total_min,          total_dim)
     element.bounds = rect_min_dimension(total_min + border, element_dim)
     
+    // draw_rectangle(rect_center_dimension(element.child_p, 4), Emerald)
+    // draw_rectangle(rect_center_dimension(element.child_max, 4), Blue)
+    // draw_rectangle(rect_center_dimension(element.child_min, 4), Orange)
     if border != 0 {
         draw_rectangle_outline(element.bounds, border, element.border_color)
     }

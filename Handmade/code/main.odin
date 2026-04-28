@@ -339,29 +339,15 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
     
     rerender := state.fast_render.requested
     defer state.fast_render.requested = rerender
-    if true {
-        bar := begin_ui_element_calculated(layout)
-        bar.spacing = 20
-        for kind in Debug_View_Kind {
-            if ui_radio_button(&bar, &Debug_View, kind, "%v", kind) {
-                rerender = true
-            }
+    bar := begin_ui_element_calculated(layout)
+    for kind in Debug_View_Kind {
+        if ui_radio_button(&bar, &Debug_View, kind, "%v", kind) {
+            rerender = true
         }
-        if ui_toggle(&bar, &Sort_Subnodes,     "Sort Subnodes")     do rerender = true
-        if ui_toggle(&bar, &Early_Elimination, "Early Elimination") do rerender = true
-        end_ui_element(&bar)
-    } else {
-        layout_begin_horizontal(layout)
-        layout.spacing = 10
-        for kind in Debug_View_Kind {
-            if ui_radio_button(layout, &Debug_View, kind, "%v", kind) {
-                rerender = true
-            }
-        }
-        if ui_toggle(layout, &Sort_Subnodes,     "Sort Subnodes")     do rerender = true
-        if ui_toggle(layout, &Early_Elimination, "Early Elimination") do rerender = true
-        layout_end_horizontal(layout)
     }
+    if ui_toggle(&bar, &Sort_Subnodes,     "Sort Subnodes")     do rerender = true
+    if ui_toggle(&bar, &Early_Elimination, "Early Elimination") do rerender = true
+    end_ui_element(&bar)
     
     layout_advance(layout, layout.spacing)
     tests := bit_set[Debug_View_Kind] { .Triangle_Tests, .Rectangle_Tests, .Both_Tests }
@@ -445,11 +431,10 @@ draw_ui :: proc (layout: ^Layout, ui: ^UI, state: ^State, delta_time: f32) {
                 if ui_dragger(layout, &material.clearcoat,         "clearcoat %f",         material.clearcoat,         speed = 0.001,      min = 0,       max = 1)    do rerender = true
                 if ui_dragger(layout, &material.clearcoat_gloss,   "clearcoat_gloss %f",   material.clearcoat_gloss,   speed = 0.001,      min = 0,       max = 1)    do rerender = true
                 
-                layout_begin_horizontal(layout)
-                    if ui_color_picker(layout, &material.emit_color, "Emit")      do rerender = true
-                    if ui_color_picker(layout, &material.base_tint,  "base tint") do rerender = true
-                layout_end_horizontal(layout)
-                
+                bar = begin_ui_element_calculated(layout)
+                    if ui_color_picker(&bar, &material.emit_color, "Emit")      do rerender = true
+                    if ui_color_picker(&bar, &material.base_tint,  "base tint") do rerender = true
+                end_ui_element(&bar)
             }
         }
     }
@@ -462,21 +447,21 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Layout, settings: ^Rend
     if ui_collapser(layout, &settings.is_open, name) {
         layout_indent_scope(layout)
         
-        layout_begin_horizontal(layout)
+        bar := begin_ui_element_calculated(layout)
             if can_be_focused {
                 // @todo(viktor): is_focused -> highlighted
-                result = ui_button(layout, { kind = .SetValue, target = settings, value = name }, "Focus")
+                result = ui_button(&bar, { kind = .SetValue, target = settings, value = name }, "Focus")
             }
             
-            ui_toggle(layout, &settings.display_progress, "Display Progress")
-            ui_toggle(layout, &settings.requested,        "Render")
+            ui_toggle(&bar, &settings.display_progress, "Display Progress")
+            ui_toggle(&bar, &settings.requested,        "Render")
             
             if settings.active {
-                ui_text(layout, "%v", time.since(settings.start))
+                ui_text(&bar, "%v", time.since(settings.start))
             } else {
-                ui_text(layout, "%v", time.diff(settings.start, settings.end))
+                ui_text(&bar, "%v", time.diff(settings.start, settings.end))
             }
-        layout_end_horizontal(layout)
+        end_ui_element(&bar)
         layout_advance(layout, layout.spacing)
         
         layout_indent(layout)
@@ -496,34 +481,34 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Layout, settings: ^Rend
         layout_advance(layout, layout.spacing)
         
         if settings.active {
-            layout_begin_horizontal(layout)
+            bar = begin_ui_element_calculated(layout)
                 total_pixels := settings.image.width * settings.image.height
                 done_percentage := cast(f32) settings.stats.pixels_done / cast(f32) total_pixels
-                ui_progress_bar(layout, done_percentage, 120)
+                ui_progress_bar(&bar, done_percentage, 120)
                 
-                ui_toggle(layout, &state.renderer.canceled, "Cancel Render")
-            layout_end_horizontal(layout)
+                ui_toggle(&bar, &state.renderer.canceled, "Cancel Render")
+            end_ui_element(&bar)
         } else {
-            layout_advance(layout, layout.font_size)
+            layout_advance(layout, {0, layout.font_size})
         }
         layout_advance(layout, layout.spacing)
         
-        layout_begin_horizontal(layout)
-            if ui_button(layout, set_value_interaction(&settings.rays_per_pixel, settings.rays_per_pixel / 2 ), "-") do settings.rays_per_pixel /= 2 
-            if ui_button(layout, set_value_interaction(&settings.rays_per_pixel, settings.rays_per_pixel * 2), "+") do settings.rays_per_pixel *= 2
-            ui_text(layout, "rays per_pixel %v", settings.rays_per_pixel)
+        bar = begin_ui_element_calculated(layout)
+            if ui_button(&bar, set_value_interaction(&settings.rays_per_pixel, settings.rays_per_pixel / 2 ), "-") do settings.rays_per_pixel /= 2 
+            if ui_button(&bar, set_value_interaction(&settings.rays_per_pixel, settings.rays_per_pixel * 2), "+") do settings.rays_per_pixel *= 2
+            ui_text(&bar, "rays per_pixel %v", settings.rays_per_pixel)
             settings.rays_per_pixel = clamp(settings.rays_per_pixel, LaneWidth, 8192)
-        layout_end_horizontal(layout)
+        end_ui_element(&bar)
         layout_advance(layout, layout.spacing)
         
         ui_dragger(layout, &settings.max_bounce_count, "Bounces %v", settings.max_bounce_count, min = 1, max = 64)
         
-        layout_begin_horizontal(layout)
+        bar = begin_ui_element_calculated(layout)
             if !settings.active {
                 // @todo(viktor): this generally sucks to use and should just allow the user to set a resolution maybe from a small selection of reasonable ones
                 before := settings.image_size_factor
-                if ui_button(layout, set_value_interaction(&settings.image_size_factor, settings.image_size_factor + 1), "-") do settings.image_size_factor += 1
-                if ui_button(layout, set_value_interaction(&settings.image_size_factor, settings.image_size_factor - 1), "+") do settings.image_size_factor -= 1
+                if ui_button(&bar, set_value_interaction(&settings.image_size_factor, settings.image_size_factor + 1), "-") do settings.image_size_factor += 1
+                if ui_button(&bar, set_value_interaction(&settings.image_size_factor, settings.image_size_factor - 1), "+") do settings.image_size_factor -= 1
                 settings.image_size_factor = clamp(settings.image_size_factor, 1, 16)
                 
                 if settings.image_size_factor != before {
@@ -531,9 +516,9 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Layout, settings: ^Rend
                 }
             }
             
-            layout_advance(layout, layout.spacing)
-            ui_text(layout, "resolution %vx%v", settings.image.width, settings.image.height)
-        layout_end_horizontal(layout)
+            layout_advance(&bar, layout.spacing)
+            ui_text(&bar, "resolution %vx%v", settings.image.width, settings.image.height)
+        end_ui_element(&bar)
         layout_advance(layout, layout.spacing)
     }
     
