@@ -12,6 +12,8 @@ UI :: struct {
     
     mouse_p:  v2,
     mouse_dp: v2,
+    
+    stack: [dynamic; 256] Element,
 }
 
 Interaction :: struct {
@@ -56,9 +58,66 @@ Theme :: struct {
 
 ////////////////////////////////////////////////
 
+// @todo(viktor): move sizing to be per axis
+Element :: struct {
+    using info: UI_Info,
+    
+    parent: ^Element,
+    first_child: ^Element,
+    next_child:  ^Element,
+    
+    flags:       UI_Flags,
+    interaction: Interaction,
+    
+    border_color: v4,
+    spacing: v2,
+    padding: v2,
+    
+    size_kind: UI_Size_Kind,
+    
+    ////////////////////////////////////////////////
+    // Fixed Size
+    size: v2,
+    
+    ////////////////////////////////////////////////
+    // Calculated Size
+    child_offset: v2,
+    child_count: f32,
+    
+    ////////////////////////////////////////////////
+    // result for user
+    bounds:  Rectangle2,
+}
+
+UI_Info :: struct {
+    ui: ^UI,
+    font: rl.Font,
+    font_size: f32,
+    
+    dt: f32,
+}
+
+UI_Size_Kind :: enum {
+    Allocated,
+    Fixed,   // by user
+    Calculated, // from children
+}
+
+UI_Flags :: bit_set[UI_Flag]
+UI_Flag :: enum {
+    has_interaction,
+    has_border,
+    
+    grow_horizontal,
+}
+
+////////////////////////////////////////////////
+
 begin_ui :: proc (ui: ^UI) {
     ui.mouse_p  = rl.GetMousePosition()
     ui.mouse_dp = rl.GetMouseDelta()
+    
+    clear(&ui.stack)
 }
 
 
@@ -258,12 +317,12 @@ ui_themed_button :: proc (parent: ^Element, interaction: Interaction, theme: The
     text_size := measure_text(parent, text)
     
     button := begin_ui_element_calculated(parent)
-    ui_element_set_interaction(&button, interaction)
-    ui_element_set_border(&button, theme.outline)
-    ui_element_set_padding(&button, { 4, 2 })
-        text_element := begin_ui_element(&button, text_size)
-        end_ui_element(&text_element)
-    end_ui_element(&button)
+    ui_element_set_interaction(button, interaction)
+    ui_element_set_border(button, theme.outline)
+    button.padding = { 4, 2 }
+        text_element := begin_ui_element(button, text_size)
+        end_ui_element(text_element)
+    end_ui_element(button)
     
     draw_rectangle(button.bounds, theme.background)
     draw_text(parent, text, text_element.bounds.min, theme.text, theme.text_shadow)
@@ -370,8 +429,8 @@ ui_dragger_base :: proc (parent: ^Element, value: ^f32, speed: f32, interaction:
     text_size := measure_text(parent, text)
     
     element := begin_ui_element(parent, text_size)
-    ui_element_set_interaction(&element, interaction)
-    end_ui_element(&element)
+    ui_element_set_interaction(element, interaction)
+    end_ui_element(element)
     
     draw_text(parent, text, element.bounds.min, theme.text)
     
@@ -411,8 +470,8 @@ ui_color_picker :: proc (parent: ^Element, rgb: ^v3, format: string) -> bool {
     picker := v2{ 40, 40 }
     size := picker + v2{ 20, 0 }
     element := begin_ui_element(parent, size)
-    ui_element_set_border(&element, theme.outline)
-    end_ui_element(&element)
+    ui_element_set_border(element, theme.outline)
+    end_ui_element(element)
     
     layout_advance(parent, parent.spacing)
     
@@ -434,7 +493,7 @@ ui_text :: proc (parent: ^Element, format: string, args: ..any) {
     text_size := measure_text(parent, text)
     
     element := begin_ui_element(parent, text_size)
-    end_ui_element(&element)
+    end_ui_element(element)
     
     theme := theme_button(false, false)
     draw_text(parent, text, element.bounds.min, theme.text, theme.text_shadow)
@@ -445,8 +504,8 @@ ui_progress_bar :: proc (parent: ^Element, percentage: f32, width: f32) {
     
     size := v2{width, parent.font_size}
     element := begin_ui_element(parent, size)
-    ui_element_set_border(&element, theme.outline)
-    end_ui_element(&element)
+    ui_element_set_border(element, theme.outline)
+    end_ui_element(element)
     
     rect     := element.bounds
     progress := rect_min_dimension(rect.min, rect_get_dimension(rect) * v2{percentage, 1}) 
@@ -520,68 +579,7 @@ color_from_rl :: proc (color: rl.Color) -> v4 {
 
 ////////////////////////////////////////////////
 
-Element :: struct {
-    using info: UI_Info,
-    
-    parent: ^Element,
-    
-    flags:       UI_Flags,
-    interaction: Interaction,
-    
-    border_color: v4,
-    spacing: v2,
-    padding: v2,
-    
-    size_kind: UI_Size_Kind,
-    
-    ////////////////////////////////////////////////
-    // Fixed Size
-    size: v2,
-    
-    ////////////////////////////////////////////////
-    // Allocated Size
-    allocated: Rectangle2,
-    
-    ////////////////////////////////////////////////
-    // Calculated Size
-    child_sum: v2,
-    child_min: v2,
-    child_max: v2,
-    child_count: f32,
-    
-    ////////////////////////////////////////////////
-    // result for user
-    bounds:  Rectangle2,
-    
-    ////////////////////////////////////////////////
-    // Linear Layout
-    // @naming
-    size_children: v2,
-}
-
-UI_Info :: struct {
-    ui: ^UI,
-    font: rl.Font,
-    font_size: f32,
-    
-    dt: f32,
-}
-
-UI_Size_Kind :: enum {
-    Allocated,
-    Fixed,   // by user
-    Calculated, // from children
-}
-
-UI_Flags :: bit_set[UI_Flag]
-UI_Flag :: enum {
-    has_interaction,
-    has_border,
-    
-    grow_horizontal,
-}
-
-begin_ui_element :: proc (parent: ^Element, size: v2) -> Element {
+begin_ui_element :: proc (parent: ^Element, size: v2) -> ^Element {
     result := make_ui_element(parent)
     
     result.size      = size
@@ -590,24 +588,18 @@ begin_ui_element :: proc (parent: ^Element, size: v2) -> Element {
     return result
 }
 
-begin_ui_element_calculated :: proc (parent: ^Element) -> Element {
+begin_ui_element_calculated :: proc (parent: ^Element) -> ^Element {
     result := make_ui_element(parent)
     result.size_kind = .Calculated
-    
-    // @todo(viktor): 
-    switch parent.size_kind {
-    case .Fixed:   unimplemented()
-    case .Allocated:  result.child_min = parent.allocated.min
-    case .Calculated: result.child_min = ui_element_min(parent)
-    }
-    result.child_max = result.child_min
-    result.child_sum = 0
     
     return result
 }
 
-make_ui_element :: proc (parent: ^Element) -> Element {
-    result: Element
+make_ui_element :: proc (parent: ^Element) -> ^Element {
+    index := len(parent.ui.stack)
+    append_nothing(&parent.ui.stack)
+    result := &parent.ui.stack[index]
+    result^ = {}
     
     result.info = parent.info
     result.parent = parent
@@ -615,7 +607,7 @@ make_ui_element :: proc (parent: ^Element) -> Element {
     return result
 }
 
-begin_horizontal_element :: proc (parent: ^Element) -> Element {
+begin_horizontal_element :: proc (parent: ^Element) -> ^Element {
     result := begin_ui_element_calculated(parent)
     result.flags += { .grow_horizontal }
     result.spacing = 10
@@ -633,27 +625,17 @@ ui_element_set_border :: proc (element: ^Element, color := Red) {
     element.border_color = color
 }
 
-ui_element_set_padding :: proc (element: ^Element, padding: v2) {
-    element.padding = padding
-    switch element.size_kind {
-    case .Fixed, .Allocated: // nothing
-    case .Calculated: 
-        element.child_min += padding
-        element.child_max += padding * 2
-    }
-}
-
 ui_element_min :: proc (element: ^Element) -> v2 {
     if element == nil do return 0
     
     result: v2
     switch element.size_kind {
     case .Fixed:     unimplemented()
-    case .Allocated: result = element.allocated.min
+    case .Allocated: result = element.bounds.min
         
     case .Calculated:
         result = ui_element_min(element.parent)
-        result += element.child_sum
+        result += element.child_offset
         result += element.padding
         mask := .grow_horizontal in element.flags ? v2{ 1, 0 } : v2{ 0, 1 }
         result += element.spacing * element.child_count * mask
@@ -677,14 +659,38 @@ end_ui_element :: proc (element: ^Element) {
     }
     
     parent := element.parent
+    
     total_min := ui_element_min(parent)
+    
+    element.next_child = parent.first_child
+    parent.first_child = element
     parent.child_count += 1
     
     element_dim: v2
     switch element.size_kind {
         case .Allocated:  unimplemented()
         case .Fixed:      element_dim = element.size
-        case .Calculated: element_dim = element.child_max + element.padding - element.child_min
+        case .Calculated: 
+            size: v2
+            
+            for link := element.first_child; link != nil; link = link.next_child {
+                sum_mask := .grow_horizontal in element.flags ? v2{1, 0} : {0, 1}
+                max_mask := .grow_horizontal in element.flags ? v2{0, 1} : {1, 0}
+                
+                if link != element.first_child {
+                    size += element.spacing * sum_mask
+                }
+                
+                sum_delta := rect_get_dimension(link.bounds)
+                max_delta := vec_max(size, sum_delta) - size
+                
+                size += max_delta * max_mask
+                size += sum_delta * sum_mask
+            }
+            
+            size += element.padding * 2
+            
+            element_dim = size
     }
     
     total_dim := element_dim + border * 2
@@ -696,21 +702,16 @@ end_ui_element :: proc (element: ^Element) {
     
     case .Allocated:
         if .grow_horizontal in parent.flags {
-            parent.allocated.min.x = total_bounds.max.x
-            parent.size_children.y = max(parent.size_children.y, total_dim.y)
+            parent.bounds.min.x = total_bounds.max.x
         } else {
-            parent.allocated.min.y = total_bounds.max.y
+            parent.bounds.min.y = total_bounds.max.y
         }
         
     case .Calculated:
         if .grow_horizontal in parent.flags {
-            parent.child_sum.x   += total_dim.x
-            parent.child_max.x += total_dim.x
-            parent.child_max.y  = max(parent.child_max.y, total_bounds.max.y)
+            parent.child_offset.x += total_dim.x
         } else {
-            parent.child_sum.y += total_dim.y
-            parent.child_max.x  = max(parent.child_max.x, total_bounds.max.x)
-            parent.child_max.y += total_dim.y
+            parent.child_offset.y += total_dim.y
         }
     }
     

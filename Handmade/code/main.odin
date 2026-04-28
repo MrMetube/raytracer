@@ -342,13 +342,13 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
     
     bar := begin_horizontal_element(layout)
         for kind in Debug_View_Kind {
-            if ui_radio_button(&bar, &Debug_View, kind, "%v", kind) {
+            if ui_radio_button(bar, &Debug_View, kind, "%v", kind) {
                 rerender = true
             }
         }
-        if ui_toggle(&bar, &Sort_Subnodes,     "Sort Subnodes")     do rerender = true
-        if ui_toggle(&bar, &Early_Elimination, "Early Elimination") do rerender = true
-    end_ui_element(&bar)
+        if ui_toggle(bar, &Sort_Subnodes,     "Sort Subnodes")     do rerender = true
+        if ui_toggle(bar, &Early_Elimination, "Early Elimination") do rerender = true
+    end_ui_element(bar)
     
     layout_advance(layout, layout.spacing)
     tests := bit_set[Debug_View_Kind] { .Triangle_Tests, .Rectangle_Tests, .Both_Tests }
@@ -433,9 +433,9 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
                 if ui_dragger(layout, &material.clearcoat_gloss,   "clearcoat_gloss %f",   material.clearcoat_gloss,   speed = 0.001,      min = 0,       max = 1)    do rerender = true
                 
                 bar = begin_horizontal_element(layout)
-                    if ui_color_picker(&bar, &material.emit_color, "Emit")      do rerender = true
-                    if ui_color_picker(&bar, &material.base_tint,  "base tint") do rerender = true
-                end_ui_element(&bar)
+                    if ui_color_picker(bar, &material.emit_color, "Emit")      do rerender = true
+                    if ui_color_picker(bar, &material.base_tint,  "base tint") do rerender = true
+                end_ui_element(bar)
             }
         }
     }
@@ -451,18 +451,18 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Ren
         bar := begin_horizontal_element(layout)
             if can_be_focused {
                 // @todo(viktor): is_focused -> highlighted
-                result = ui_button(&bar, { kind = .SetValue, target = settings, value = name }, "Focus")
+                result = ui_button(bar, { kind = .SetValue, target = settings, value = name }, "Focus")
             }
             
-            ui_toggle(&bar, &settings.display_progress, "Display Progress")
-            ui_toggle(&bar, &settings.requested,        "Render")
+            ui_toggle(bar, &settings.display_progress, "Display Progress")
+            ui_toggle(bar, &settings.requested,        "Render")
             
             if settings.active {
-                ui_text(&bar, "%v", time.since(settings.start))
+                ui_text(bar, "%v", time.since(settings.start))
             } else {
-                ui_text(&bar, "%v", time.diff(settings.start, settings.end))
+                ui_text(bar, "%v", time.diff(settings.start, settings.end))
             }
-        end_ui_element(&bar)
+        end_ui_element(bar)
         layout_advance(layout, layout.spacing)
         
         layout_indent(layout)
@@ -485,21 +485,21 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Ren
             bar = begin_horizontal_element(layout)
                 total_pixels := settings.image.width * settings.image.height
                 done_percentage := cast(f32) settings.stats.pixels_done / cast(f32) total_pixels
-                ui_progress_bar(&bar, done_percentage, 120)
+                ui_progress_bar(bar, done_percentage, 120)
                 
-                ui_toggle(&bar, &state.renderer.canceled, "Cancel Render")
-            end_ui_element(&bar)
+                ui_toggle(bar, &state.renderer.canceled, "Cancel Render")
+            end_ui_element(bar)
         } else {
             layout_advance(layout, {0, layout.font_size})
         }
         layout_advance(layout, layout.spacing)
         
         bar = begin_horizontal_element(layout)
-            if ui_button(&bar, set_value_interaction(&settings.rays_per_pixel, settings.rays_per_pixel / 2 ), "-") do settings.rays_per_pixel /= 2 
-            if ui_button(&bar, set_value_interaction(&settings.rays_per_pixel, settings.rays_per_pixel * 2), "+") do settings.rays_per_pixel *= 2
-            ui_text(&bar, "rays per_pixel %v", settings.rays_per_pixel)
+            if ui_button(bar, set_value_interaction(&settings.rays_per_pixel, settings.rays_per_pixel / 2 ), "-") do settings.rays_per_pixel /= 2 
+            if ui_button(bar, set_value_interaction(&settings.rays_per_pixel, settings.rays_per_pixel * 2), "+") do settings.rays_per_pixel *= 2
+            ui_text(bar, "rays per_pixel %v", settings.rays_per_pixel)
             settings.rays_per_pixel = clamp(settings.rays_per_pixel, LaneWidth, 8192)
-        end_ui_element(&bar)
+        end_ui_element(bar)
         layout_advance(layout, layout.spacing)
         
         ui_dragger(layout, &settings.max_bounce_count, "Bounces %v", settings.max_bounce_count, min = 1, max = 64)
@@ -508,8 +508,8 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Ren
             if !settings.active {
                 // @todo(viktor): this generally sucks to use and should just allow the user to set a resolution maybe from a small selection of reasonable ones
                 before := settings.image_size_factor
-                if ui_button(&bar, set_value_interaction(&settings.image_size_factor, settings.image_size_factor + 1), "-") do settings.image_size_factor += 1
-                if ui_button(&bar, set_value_interaction(&settings.image_size_factor, settings.image_size_factor - 1), "+") do settings.image_size_factor -= 1
+                if ui_button(bar, set_value_interaction(&settings.image_size_factor, settings.image_size_factor + 1), "-") do settings.image_size_factor += 1
+                if ui_button(bar, set_value_interaction(&settings.image_size_factor, settings.image_size_factor - 1), "+") do settings.image_size_factor -= 1
                 settings.image_size_factor = clamp(settings.image_size_factor, 1, 16)
                 
                 if settings.image_size_factor != before {
@@ -517,9 +517,9 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Ren
                 }
             }
             
-            layout_advance(&bar, layout.spacing)
-            ui_text(&bar, "resolution %vx%v", settings.image.width, settings.image.height)
-        end_ui_element(&bar)
+            layout_advance(bar, layout.spacing)
+            ui_text(bar, "resolution %vx%v", settings.image.width, settings.image.height)
+        end_ui_element(bar)
         layout_advance(layout, layout.spacing)
     }
     

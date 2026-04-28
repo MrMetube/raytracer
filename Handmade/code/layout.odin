@@ -43,29 +43,26 @@ layout_init :: proc (layout: ^Element, font: rl.Font, font_size: f32, spacing: f
 
 layout_begin :: proc (layout: ^Element, ui: ^UI, bounds: Rectangle2, dt: f32) {
     layout.ui = ui
-    
-    layout.allocated = bounds
-    layout.flags = {}
-    layout.size_children = {}
     layout.dt = dt
     
+    layout.bounds = bounds
+    layout.flags       = {}
     layout.child_count = {}
 }
 
 layout_advance :: proc (layout: ^Element, dimension: v2) {
     if .grow_horizontal in layout.flags {
-        layout.allocated.min.x += dimension.x
-        layout.size_children.y = max(layout.size_children.y, dimension.y)
+        layout.bounds.min.x += dimension.x
     } else {
-        layout.allocated.min.y += dimension.y
+        layout.bounds.min.y += dimension.y
     }
 }
 
 layout_indent :: proc (layout: ^Element) {
-    layout.allocated.min.x += 20
+    layout.bounds.min.x += 20
 }
 layout_unindent :: proc (layout: ^Element) {
-    layout.allocated.min.x -= 20
+    layout.bounds.min.x -= 20
 }
 
 @(deferred_in=layout_unindent)
