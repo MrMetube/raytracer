@@ -813,11 +813,7 @@ end_ui_element :: proc (element: ^Element) {
 ////////////////////////////////////////////////
 
 theme_button :: proc (is_hot: bool, is_active: bool) -> Theme {
-    result: Theme
-    result.border     = DarkGreen
-    result.background  = DarkGreen
-    result.text        = Jasmine
-    result.shadow = Black
+    result := theme_default()
     if is_hot {
         result.border = Green
         result.background = Isabelline
@@ -832,13 +828,19 @@ theme_button :: proc (is_hot: bool, is_active: bool) -> Theme {
 }
 
 theme_dragger :: proc (is_hot_or_active: bool) -> Theme {
-    // @todo(viktor): default theme
-    result: Theme
-    result.text = Jasmine
-    result.shadow = Black
+    result:= theme_default()
     if is_hot_or_active {
         result.text = Isabelline
     }
     
+    return result
+}
+
+theme_default :: proc () -> Theme {
+    result: Theme
+    result.border     = DarkGreen
+    result.background = DarkGreen
+    result.text       = Jasmine
+    result.shadow     = Black
     return result
 }
