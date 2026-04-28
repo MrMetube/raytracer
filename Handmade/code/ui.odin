@@ -634,19 +634,26 @@ make_ui_element :: proc () -> ^Element {
     return result
 }
 
-begin_horizontal_element :: proc () -> ^Element {
+begin_horizontal :: proc () {
     result := begin_ui_element_calculated()
     result.flags += { .grow_horizontal }
     result.spacing = 10
-    return result
+    
+    ui_push_parent(result)
+}
+
+end_horizontal :: proc () {
+    element := ui_pop_parent()
+    end_ui_element(element)
 }
 
 ui_push_parent :: proc (parent: ^Element) {
     append(&parent_stack, parent)
 }
 
-ui_pop_parent :: proc () {
-    pop(&parent_stack)
+ui_pop_parent :: proc () -> ^Element {
+    result := pop(&parent_stack)
+    return result
 }
 
 ui_peek_parent :: proc (loc := #caller_location) -> ^Element {
