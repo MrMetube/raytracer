@@ -307,7 +307,12 @@ ui_collapser :: proc (is_open: ^bool, format: string, args: ..any) -> bool {
     return result
 }
 
-ui_radio_button :: proc (target: ^$T, value: T, format: string, args: ..any) -> bool {
+radio_comm :: struct {
+    clicked:     bool,
+    is_selected: bool,
+}
+
+ui_radio_button :: proc (target: ^$T, value: T, format: string, args: ..any) -> radio_comm {
     interaction := set_value_interaction(target, value)
     
     parent := ui_peek_parent()
@@ -318,12 +323,16 @@ ui_radio_button :: proc (target: ^$T, value: T, format: string, args: ..any) -> 
     theme := theme_button(hot, active)
     clicked := ui_themed_button(interaction, theme, format, ..args)
     
-    result: bool
+    result: radio_comm
     if clicked {
         if !active {
             target^ = value
-            result = true
+            result.clicked = true
         }
+    }
+    
+    if target^ == value {
+        result.is_selected = true
     }
     
     return result
@@ -581,6 +590,12 @@ draw_rectangle_outline :: proc (rect: Rectangle2, thickness: v2, color: v4) {
     draw_rectangle(rig, color)
 }
 
+draw_texture :: proc (texture: rl.Texture, rect: Rectangle2, tint := White) {
+    source := rect_zero_dimension(vec_cast(f32, texture.width, texture.height)) // @note(viktor): can be larger than 1 to repeat
+    origin := v2{0,0}
+    rl.DrawTexturePro(texture, rect_to_rl(source), rect_to_rl(rect), origin, 0, color_to_rl(tint))
+}
+
 ////////////////////////////////////////////////
 
 rect_to_rl :: proc (rect: Rectangle2) -> rl.Rectangle {
@@ -651,6 +666,18 @@ begin_horizontal :: proc () {
 }
 
 end_horizontal :: proc () {
+    element := ui_pop_parent()
+    end_ui_element(element)
+}
+
+begin_vertical :: proc () {
+    result := begin_ui_element_calculated()
+    result.spacing = 10
+    
+    ui_push_parent(result)
+}
+
+end_vertical :: proc () {
     element := ui_pop_parent()
     end_ui_element(element)
 }
@@ -788,6 +815,7 @@ end_ui_element :: proc (element: ^Element) {
         }
     }
     
+    // @api should this be an extra call, so that this default path can be used, but does not need to happen in this order?
     if .has_border in element.flags {
         draw_rectangle_outline(element.bounds, border, element.theme.border)
     }

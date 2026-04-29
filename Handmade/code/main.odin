@@ -26,10 +26,9 @@ State :: struct {
     
     ui: UI,
     previewed_object_id:  Object_Id,
-    selected_object_id: Object_Id,
+    selected_object_id:   Object_Id,
     selected_material_id: Material_Id,
     ojects_is_open:    bool,
-    tree_info_is_open: bool,
     materials_is_open: bool,
     
     ////////////////////////////////////////////////
@@ -263,24 +262,23 @@ main :: proc () {
 ////////////////////////////////////////////////
 
 draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
-    screen_bounds := rect_zero_dimension(vec_cast(f32, state.window_size))
+    screen_dim    := vec_cast(f32, state.window_size)
+    screen_bounds := rect_zero_dimension(screen_dim)
     layout_bounds := rect_add_radius(screen_bounds, -10)
     layout_begin(layout, ui, layout_bounds, delta_time)
     ui_push_parent(layout)
     defer ui_pop_parent()
     
     {
-        small_factor :: 6
-        small_size := state.window_size / small_factor
-        p := state.window_size - small_size
-        p.y = 0
+        factor :: 0.2
+        small_bounds := rect_min_dimension(v2{screen_dim.x * (1 - factor), 0}, screen_dim * factor)
         
         if state.fast_image_is_focussed {
-            rl.DrawTextureEx(state.fast_render.texture, 0, 0, cast(f32) state.fast_render.image_size_factor, rl.WHITE)
-            rl.DrawTextureEx(state.quality_render.texture, vec_cast(f32, p), 0, cast(f32) state.quality_render.image_size_factor / small_factor, rl.WHITE)
+            draw_texture(state.fast_render.texture, screen_bounds)
+            draw_texture(state.quality_render.texture, small_bounds)
         } else {
-            rl.DrawTextureEx(state.quality_render.texture, 0, 0, cast(f32) state.quality_render.image_size_factor, rl.WHITE)
-            rl.DrawTextureEx(state.fast_render.texture, vec_cast(f32, p), 0, cast(f32) state.fast_render.image_size_factor / small_factor, rl.WHITE)
+            draw_texture(state.quality_render.texture, screen_bounds)
+            draw_texture(state.fast_render.texture, small_bounds)
         }
     }
     
@@ -289,7 +287,7 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
         
         p := state.preview_render_p
         draw_rectangle_outline(rect_min_dimension(p, preview_render_size), 1, Black)
-        rl.DrawTextureEx(state.preview_render.texture, p, 0, cast(f32) state.preview_render.image_size_factor, rl.WHITE)
+        draw_texture(state.preview_render.texture, rect_min_dimension(p, preview_render_size))
         
         if rl.IsWindowFocused() {
             // @api how can one hot surface have multiple interactions?
@@ -346,7 +344,7 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
     
     begin_horizontal()
         for kind in Debug_View_Kind {
-            if ui_radio_button(&Debug_View, kind, "%v", kind) {
+            if ui_radio_button(&Debug_View, kind, "%v", kind).clicked {
                 rerender = true
             }
         }
@@ -366,7 +364,6 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
         }
     }
     
-    
     if draw_render_settings_ui(state, layout, &state.quality_render, "Quality", !state.fast_image_is_focussed, true, state.window_size) {
         state.fast_image_is_focussed = false
     }
@@ -374,7 +371,6 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
         state.fast_image_is_focussed = true
     }
     draw_render_settings_ui(state, layout, &state.preview_render, "Focus", false, false, 256)
-    
     ////////////////////////////////////////////////
     
     if ui_collapser(&state.ojects_is_open, "Objects") {
@@ -384,12 +380,11 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
         for object_index in 1..=state.world.last_used_object_index {
             object := &state.world.objects[object_index]
             
-            ui_radio_button(&state.selected_object_id, object_index, "Object %v", object_index)
-            if state.selected_object_id == object_index {
+            
+            if ui_radio_button(&state.selected_object_id, object_index, "Object %v", object_index).is_selected {
                 layout_indent_scope(layout)
                 
-                ui_radio_button(&state.previewed_object_id, object_index, "Focus")
-                if state.previewed_object_id == object_index {
+                if ui_radio_button(&state.previewed_object_id, object_index, "Focus").clicked {
                     if state.previewed_object_id == object_index {
                         state.previewed_object_id = 0
                     } else {
@@ -420,8 +415,8 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
         for &material, index in state.world.materials {
             id := cast(Material_Id) index
             
-            ui_radio_button(&state.selected_material_id, id, "Material %v %v", id, state.world.material_names[id])
-            if state.selected_material_id == id {
+            
+            if ui_radio_button(&state.selected_material_id, id, "Material %v %v", id, state.world.material_names[id]).is_selected {
                 layout_indent_scope(layout)
                 
                 material.emit_strength = max(0.000001, material.emit_strength)
@@ -447,7 +442,7 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
 
 ////////////////////////////////////////////////
 
-draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Render_Settings, name: string, is_focused: bool, can_be_focused: bool, window_size: v2i) -> bool { 
+draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Render_Settings, name: string, is_focused: bool, can_be_focused: bool, window_size: v2i) -> bool {
     result: bool
     if ui_collapser(&settings.is_open, name) {
         layout_indent_scope(layout)
