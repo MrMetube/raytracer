@@ -14,9 +14,9 @@ v2  :: [2] f32
 v3  :: [3] f32
 v4  :: [4] f32
 
-v2i :: [2] i32
-v3i :: [3] i32
-v4i :: [4] i32
+iv2 :: [2] i32
+iv3 :: [3] i32
+iv4 :: [4] i32
 
 uv2 :: [2] u32
 uv3 :: [3] u32
@@ -52,7 +52,7 @@ m4 :: matrix[4,4] f32
 Rectangle   :: struct($T: typeid) { min, max: T }
 Rectangle2  :: Rectangle(v2)
 Rectangle3  :: Rectangle(v3)
-Rectangle2i :: Rectangle(v2i)
+Rectangle2i :: Rectangle(iv2)
 
 ////////////////////////////////////////////////
 // Constants

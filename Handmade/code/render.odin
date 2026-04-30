@@ -23,6 +23,7 @@ Render_Stats :: struct {
 
 Render_Settings :: struct {
     is_open: bool,
+    resolution_open: bool,
     
     requested: bool,
     active:    bool,
@@ -30,8 +31,6 @@ Render_Settings :: struct {
     
     image:   Image,
     texture: rl.Texture,
-    
-    image_size_factor: i32,
     
     arena:     mem.Arena,
     allocator: Allocator,
@@ -270,28 +269,26 @@ render_end :: proc (render: ^Render, settings: ^Render_Settings, materials: [] M
 
 ////////////////////////////////////////////////
 
-init_render_settings :: proc (settings: ^Render_Settings, rays_per_pixel: u32, max_bounce_count: u32, window_size: v2i, image_size_factor: i32) {
+init_render_settings :: proc (settings: ^Render_Settings, rays_per_pixel: u32, max_bounce_count: u32, image_size: iv2) {
     settings.rays_per_pixel    = rays_per_pixel
     settings.max_bounce_count  = max_bounce_count
-    settings.image_size_factor = image_size_factor
     
     backing, err := make([] u8, 1 * Gigabyte, context.allocator); assert(err == nil)
     mem.arena_init(&settings.arena, backing)
     settings.allocator = mem.arena_allocator(&settings.arena)
     
-    init_render_image(settings, window_size)
+    init_render_image(settings, image_size)
 }
 
 init_render :: proc (render: ^Render, thread_count: u32) {
     init_work_queue(&render.queue, "Render", thread_count)
 }
 
-init_render_image :: proc (settings: ^Render_Settings, window_size: v2i) {
+init_render_image :: proc (settings: ^Render_Settings, image_size: iv2) {
     assert(!settings.active)
     
     delete(settings.image.data, context.allocator)
     
-    image_size := window_size / settings.image_size_factor
     settings.image.width  = image_size.x
     settings.image.height = image_size.y
     settings.image.data   = make([] Color, settings.image.width * settings.image.height, context.allocator)
@@ -364,7 +361,7 @@ render_start :: proc (render: ^Render, settings: ^Render_Settings, camera: Camer
     // @todo(viktor): make this a copy and preserve the image until this is completed and so canceling isn't so bad
     zero_slice(settings.image.data)
     
-    tile_size := cast(v2i) max(settings.image.width, settings.image.height) / cast(i32) render.queue.thread_count / 2
+    tile_size := cast(iv2) max(settings.image.width, settings.image.height) / cast(i32) render.queue.thread_count / 2
     tile_cols  := (settings.image.width  + tile_size.x - 1) / tile_size.x
     tile_rows  := (settings.image.height + tile_size.y - 1) / tile_size.y
     tile_count := tile_cols * tile_rows

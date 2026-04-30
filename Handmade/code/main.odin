@@ -12,7 +12,7 @@ Is_Optimized :: ODIN_OPTIMIZATION_MODE == .Speed
 ////////////////////////////////////////////////
 
 State :: struct {
-    window_size: v2i,
+    window_size: iv2,
     
     ////////////////////////////////////////////////
     
@@ -71,9 +71,13 @@ state_init :: proc (state: ^State) {
     
     state.fast_image_is_focussed = true
     
-    init_render_settings(&state.quality_render, 64, 16, state.window_size, 2)
-    init_render_settings(&state.fast_render,     8,  8, state.window_size, 6)
-    init_render_settings(&state.preview_render, 32,  8, 128, 1)
+    init_render_settings(&state.quality_render, 64, 16, state.window_size)
+    init_render_settings(&state.fast_render,     8,  8, state.window_size / 4)
+    init_render_settings(&state.preview_render, 32,  8, 128)
+    
+    font_size :: 18
+    font := rl.LoadFontEx("./fonts/VictorMono-Bold.otf", font_size, nil, 0)
+    ui_init(&state.ui, font, font_size)
 }
 
 main :: proc () {
@@ -91,7 +95,7 @@ main :: proc () {
     state := &the_state
     ui := &state.ui
     
-    state.window_size = v2i { 1920, 1080 }
+    state.window_size = iv2 { 1920, 1080 }
     
     rl.SetTraceLogLevel(.WARNING)
     rl.InitWindow(state.window_size.x, state.window_size.y, window_title)
@@ -100,11 +104,6 @@ main :: proc () {
     ////////////////////////////////////////////////
     the_layout: Element
     layout := &the_layout
-    {
-        font_size :: 20
-        font := rl.LoadFontEx("./fonts/VictorMono-Bold.otf", font_size, nil, 0)
-        layout_init(layout, font, font_size)
-    }
     
     init_render(&state.renderer, core_count)
     defer {
@@ -133,7 +132,7 @@ main :: proc () {
         rl.ClearBackground({0x00, 0x00, 0x00, 0xff})
         
         delta_time := rl.GetFrameTime()
-        layout.dt = delta_time
+        ui.dt = delta_time
         
         if !rl.IsWindowFocused() {
             state.is_controlling_camera = false
@@ -240,12 +239,9 @@ main :: proc () {
         
         ////////////////////////////////////////////////
         
-        begin_ui(ui)
-        
-        draw_ui(layout, ui, state, delta_time)
-        
-        interact(ui)
-        
+        begin_ui(ui, delta_time)
+            draw_ui(layout, state)
+            interact(ui)
         end_ui(ui)
         
         ////////////////////////////////////////////////
@@ -261,11 +257,13 @@ main :: proc () {
 
 ////////////////////////////////////////////////
 
-draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
+draw_ui :: proc (layout: ^Element, state: ^State) {
     screen_dim    := vec_cast(f32, state.window_size)
     screen_bounds := rect_zero_dimension(screen_dim)
     layout_bounds := rect_add_radius(screen_bounds, -10)
-    layout_begin(layout, ui, layout_bounds, delta_time)
+    
+    layout_begin(layout, layout_bounds, 8)
+    
     ui_push_parent(layout)
     defer ui_pop_parent()
     
@@ -283,7 +281,7 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
     }
     
     if state.previewed_object_id != 0 {
-        preview_render_size := vec_cast(f32, state.preview_render.image.width, state.preview_render.image.height) * cast(f32) state.preview_render.image_size_factor
+        preview_render_size := vec_cast(f32, state.preview_render.image.width, state.preview_render.image.height)
         
         p := state.preview_render_p
         draw_rectangle_outline(rect_min_dimension(p, preview_render_size), 1, Black)
@@ -293,11 +291,11 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
             // @api how can one hot surface have multiple interactions?
             interaction := Interaction { kind = .NOP, target = &state.preview_camera, right = true, middle = true }
             rect := rect_min_dimension(state.preview_render_p, preview_render_size)
-            if rect_contains(rect, layout.ui.mouse_p) {
-                layout.ui.next_hot_interaction = interaction
+            if rect_contains(rect, the_ui.mouse_p) {
+                the_ui.next_hot_interaction = interaction
             }
             
-            if is_active(layout.ui, interaction) {
+            if is_active(the_ui, interaction) {
                 changed_camera := false
                 dmousep := rl.GetMouseDelta()
                 if rl.IsMouseButtonDown(.LEFT) {
@@ -323,7 +321,7 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
                 state.preview_camera.t += object.transform.t
             }
             
-            ui_mover(ui, &state.preview_render_p, state.preview_render_drag_size)
+            ui_mover(the_ui, &state.preview_render_p, state.preview_render_drag_size)
         }
         
         settings := &state.preview_render
@@ -364,13 +362,29 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
         }
     }
     
-    if draw_render_settings_ui(state, layout, &state.quality_render, "Quality", !state.fast_image_is_focussed, true, state.window_size) {
-        state.fast_image_is_focussed = false
+    {
+        resolutions := [?] iv2 {
+            {1920, 1080},
+            {1280,  720},
+            { 960,  540},
+            { 640,  360},
+            { 480,  270},
+            { 320,  180},
+        }
+        square_resolutions := [?] iv2 {
+            { 1024, 1024},
+            {  512,  512},
+            {  256,  256},
+            {  128,  128},
+        }
+        if draw_render_settings_ui(state, layout, &state.quality_render, "Quality", !state.fast_image_is_focussed, true, resolutions[:]) {
+            state.fast_image_is_focussed = false
+        }
+        if draw_render_settings_ui(state, layout, &state.fast_render, "Fast", state.fast_image_is_focussed, true, resolutions[:]) {
+            state.fast_image_is_focussed = true
+        }
+        draw_render_settings_ui(state, layout, &state.preview_render, "Focus", false, false, square_resolutions[:])
     }
-    if draw_render_settings_ui(state, layout, &state.fast_render, "Fast", state.fast_image_is_focussed, true, state.window_size) {
-        state.fast_image_is_focussed = true
-    }
-    draw_render_settings_ui(state, layout, &state.preview_render, "Focus", false, false, 256)
     ////////////////////////////////////////////////
     
     if ui_collapser(&state.ojects_is_open, "Objects") {
@@ -401,7 +415,7 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
                 if ui_dragger(&object.transform.t.z, "translation z = %v", object.transform.t.z) do rerender = true
                 
                 max_material_id := cast(Material_Id) len(state.world.materials)-1
-                if ui_dragger(&object.material, "material %v", object.material, min = 1, max = max_material_id) {
+                if ui_dragger(&object.material, "material = %v: %v", object.material, state.world.material_names[object.material], min = 1, max = max_material_id) {
                     rerender = true
                 }
             }
@@ -416,24 +430,24 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
             id := cast(Material_Id) index
             
             
-            if ui_radio_button(&state.selected_material_id, id, "Material %v %v", id, state.world.material_names[id]).is_selected {
+            if ui_radio_button(&state.selected_material_id, id, "%v: %v", id, state.world.material_names[id]).is_selected {
                 layout_indent_scope(layout)
                 
                 material.emit_strength = max(0.000001, material.emit_strength)
-                if ui_dragger(&material.emit_strength,     "Emission %f",          material.emit_strength,     logarithmic = true, min = 0.00001, max = 1000) do rerender = true
-                if ui_dragger(&material.roughness,         "Roughness %f",         material.roughness,         speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(&material.specular_strength, "specular_strength %f", material.specular_strength, speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(&material.anisotropic,       "anisotropic %f",       material.anisotropic,       speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(&material.subsurface,        "subsurface %f",        material.subsurface,        speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(&material.sheen,             "sheen %f",             material.sheen,             speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(&material.sheen_tint,        "sheen_tint %f",        material.sheen_tint,        speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(&material.metallic,          "metallic %f",          material.metallic,          speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(&material.clearcoat,         "clearcoat %f",         material.clearcoat,         speed = 0.001,      min = 0,       max = 1)    do rerender = true
-                if ui_dragger(&material.clearcoat_gloss,   "clearcoat_gloss %f",   material.clearcoat_gloss,   speed = 0.001,      min = 0,       max = 1)    do rerender = true
+                if ui_dragger(&material.emit_strength, "emit strength %f", material.emit_strength, logarithmic = true, min = 0.00001, max = 1000) do rerender = true
+                if ui_dragger_01(&material.roughness,         "roughness %f",         material.roughness)         do rerender = true
+                if ui_dragger_01(&material.specular_strength, "specular_strength %f", material.specular_strength) do rerender = true
+                if ui_dragger_01(&material.anisotropic,       "anisotropic %f",       material.anisotropic)       do rerender = true
+                if ui_dragger_01(&material.subsurface,        "subsurface %f",        material.subsurface)        do rerender = true
+                if ui_dragger_01(&material.sheen,             "sheen %f",             material.sheen)             do rerender = true
+                if ui_dragger_01(&material.sheen_tint,        "sheen_tint %f",        material.sheen_tint)        do rerender = true
+                if ui_dragger_01(&material.metallic,          "metallic %f",          material.metallic)          do rerender = true
+                if ui_dragger_01(&material.clearcoat,         "clearcoat %f",         material.clearcoat)         do rerender = true
+                if ui_dragger_01(&material.clearcoat_gloss,   "clearcoat_gloss %f",   material.clearcoat_gloss)   do rerender = true
                 
                 begin_horizontal()
-                    if ui_color_picker(&material.emit_color, "Emit")      do rerender = true
-                    if ui_color_picker(&material.base_tint,  "base tint") do rerender = true
+                    if ui_color_picker(&material.emit_color, "emit color") do rerender = true
+                    if ui_color_picker(&material.base_tint,  "base tint")  do rerender = true
                 end_horizontal()
             }
         }
@@ -442,7 +456,7 @@ draw_ui :: proc (layout: ^Element, ui: ^UI, state: ^State, delta_time: f32) {
 
 ////////////////////////////////////////////////
 
-draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Render_Settings, name: string, is_focused: bool, can_be_focused: bool, window_size: v2i) -> bool {
+draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Render_Settings, name: string, is_focused: bool, can_be_focused: bool, resolutions: [] iv2) -> bool {
     result: bool
     if ui_collapser(&settings.is_open, name) {
         layout_indent_scope(layout)
@@ -489,7 +503,7 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Ren
                 ui_toggle(&state.renderer.canceled, "Cancel Render")
             end_horizontal()
         } else {
-            layout_advance(layout, {0, layout.font_size})
+            layout_advance(layout, {0, the_ui.font_size})
         }
         layout_advance(layout, layout.spacing)
         
@@ -503,21 +517,20 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Ren
         
         ui_dragger(&settings.max_bounce_count, "Bounces %v", settings.max_bounce_count, min = 1, max = 64)
         
-        begin_horizontal()
-            if !settings.active {
-                // @todo(viktor): this generally sucks to use and should just allow the user to set a resolution maybe from a small selection of reasonable ones
-                before := settings.image_size_factor
-                if ui_button(set_value_interaction(&settings.image_size_factor, settings.image_size_factor + 1), "-") do settings.image_size_factor += 1
-                if ui_button(set_value_interaction(&settings.image_size_factor, settings.image_size_factor - 1), "+") do settings.image_size_factor -= 1
-                settings.image_size_factor = clamp(settings.image_size_factor, 1, 16)
-                
-                if settings.image_size_factor != before {
-                    init_render_image(settings, window_size)
+        if ui_collapser(&settings.resolution_open, "resolution %vx%v", settings.image.width, settings.image.height) {
+            begin_horizontal()
+                if !settings.active {
+                    for size, index in resolutions {
+                        if ui_button(interaction(.SetValue, settings, index), "%vx%v", size.x, size.y) {
+                            if size.x != settings.image.width || size.y != settings.image.height {
+                                init_render_image(settings, size)
+                            }
+                        }
+                    }
                 }
-            }
-            
-            ui_text("resolution %vx%v", settings.image.width, settings.image.height)
-        end_horizontal()
+                
+            end_horizontal()
+        }
         layout_advance(layout, layout.spacing)
     }
     
