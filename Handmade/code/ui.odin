@@ -12,13 +12,14 @@ UI :: struct {
     
     mouse_p:  v2,
     mouse_dp: v2,
+    dt: f32,
     
     elements: [dynamic; 256] Element,
     
+    ////////////////////////////////////////////////
+    
     font: rl.Font,
     font_size: f32,
-    
-    dt: f32,
 }
 
 the_ui: ^UI
@@ -52,23 +53,18 @@ Interaction_Kind :: enum {
     Select,
 }
 
-DraggerFlag :: enum {
-    logarithmic,
-}
-DraggerFlags :: bit_set[DraggerFlag]
-
 Theme :: struct {
-    border: v4,
+    border:     v4,
     background: v4,
-    text: v4,
-    shadow: v4,
+    text:       v4,
+    shadow:     v4,
 }
 
 ////////////////////////////////////////////////
 
 // @todo(viktor): move sizing to be per axis
 Element :: struct {
-    parent: ^Element,
+    parent:      ^Element,
     first_child: ^Element,
     next_child:  ^Element,
     
@@ -90,11 +86,11 @@ Element :: struct {
     ////////////////////////////////////////////////
     // Calculated Size
     child_offset: v2,
-    child_count: f32,
+    child_count:  f32,
     
     ////////////////////////////////////////////////
     // result for user
-    bounds:  Rectangle2,
+    bounds: Rectangle2,
 }
 
 UI_Size_Kind :: enum {
@@ -169,39 +165,36 @@ interact :: proc (ui: ^UI) {
     // if none are active based on hot_interaction
     ui.ended_interaction = {}
     
-    if ui.active_interaction.kind != .None {
-        switch ui.active_interaction.kind {
-        case .None: unreachable()
-        case .NOP, .SetValue, .Select, .Move: // @note(viktor): nothing
-        case .Drag:
-            width  := cast(f32) rl.GetScreenWidth()
-            height := cast(f32) rl.GetScreenHeight()
-            
-            wrapped := false
-            
-            new_p := ui.mouse_p
-            if ui.mouse_p.x <= 0 {
-                new_p.x = width - 2
+    switch ui.active_interaction.kind {
+    case .None: // nothing
+    case .NOP, .SetValue, .Select, .Move: // @note(viktor): nothing
+    case .Drag:
+        width  := cast(f32) rl.GetScreenWidth()
+        height := cast(f32) rl.GetScreenHeight()
+        
+        screen_size := v2 { width, height }
+        padding :: 1
+        
+        new_p := ui.mouse_p
+        
+        wrapped := false
+        for axis in 0..<2 {
+            if ui.mouse_p[axis] <= 0 {
+                new_p[axis] = screen_size[axis] - 1 - padding
                 wrapped = true
-            } else if ui.mouse_p.x >= width - 1 {
-                new_p.x = 1
+            } else if ui.mouse_p[axis] >= screen_size[axis] - 1 {
+                new_p[axis] = padding
                 wrapped = true
-            }
-            
-            if ui.mouse_p.y <= 0 {
-                new_p.y = height - 2
-                wrapped = true
-            } else if ui.mouse_p.y >= height - 1 {
-                new_p.y = 1
-                wrapped = true
-            }
-            
-            if wrapped {
-                rl.SetMousePosition(cast(i32) new_p.x, cast(i32) new_p.y)
-                ui.mouse_dp = {0, 0}
             }
         }
         
+        if wrapped {
+            rl.SetMousePosition(cast(i32) new_p.x, cast(i32) new_p.y)
+            ui.mouse_dp = {0, 0}
+        }
+    }
+    
+    if ui.active_interaction.kind != .None {
         if is_interacting_release(ui) do end_interaction(ui)
         if is_interacting_press(ui)   do begin_interaction(ui)
     } else {
@@ -222,15 +215,14 @@ begin_interaction :: proc (ui: ^UI) {
 }
 
 end_interaction :: proc (ui: ^UI) {
-    action := &ui.active_interaction
-    switch action.kind {
+    switch ui.active_interaction.kind {
     case .None: unreachable()
     case .NOP:  // nothing
     case .SetValue, .Drag, .Select, .Move:
-        ui.ended_interaction = action^
+        ui.ended_interaction = ui.active_interaction
     }
     
-    action^ = {}
+    ui.active_interaction = {}
 }
 
 is_interacting_press :: proc (ui: ^UI) -> bool {
@@ -301,7 +293,7 @@ ui_button :: proc (interaction: Interaction, format: string, args: ..any) -> boo
     hot    := is_hot(the_ui, interaction)
     active := is_active(the_ui, interaction)
     
-    theme := theme_button(hot, active)
+    theme  := theme_button(hot, active)
     result := ui_themed_button(interaction, theme, format, ..args)
     
     return result
@@ -313,7 +305,7 @@ ui_toggle :: proc (condition: ^bool, format: string, args: ..any) -> bool {
     hot    := is_hot(the_ui, interaction)
     active := is_active(the_ui, interaction) || condition^
     
-    theme := theme_button(hot, active)
+    theme   := theme_button(hot, active)
     clicked := ui_themed_button(interaction, theme, format, ..args)
     
     if clicked {
@@ -331,7 +323,6 @@ ui_collapser :: proc (is_open: ^bool, format: string, args: ..any) -> bool {
     active := is_active(the_ui, interaction) || was_open
     
     theme := theme_button(hot, active)
-    
     if ui_themed_button(interaction, theme, format, ..args) {
         is_open^ = !was_open
     }
@@ -341,12 +332,12 @@ ui_collapser :: proc (is_open: ^bool, format: string, args: ..any) -> bool {
     return result
 }
 
-radio_comm :: struct {
+Communication_Radio :: struct {
     clicked:     bool,
     is_selected: bool,
 }
 
-ui_radio_button :: proc (target: ^$T, value: T, format: string, args: ..any) -> radio_comm {
+ui_radio_button :: proc (target: ^$T, value: T, format: string, args: ..any) -> Communication_Radio {
     interaction := set_value_interaction(target, value)
     
     hot    := is_hot(the_ui, interaction)
@@ -355,7 +346,7 @@ ui_radio_button :: proc (target: ^$T, value: T, format: string, args: ..any) -> 
     theme := theme_button(hot, active)
     clicked := ui_themed_button(interaction, theme, format, ..args)
     
-    result: radio_comm
+    result: Communication_Radio
     if clicked {
         if !active {
             target^ = value
@@ -425,15 +416,15 @@ ui_dragger_01 :: proc (value: ^f32, format: string, args: ..any) -> bool {
 // @todo(viktor): dragger should be only for unclamped values, for clamped values there should just be a slider that shows the user the range and where the current value lies within that range
 ui_dragger :: proc { ui_dragger_float, ui_dragger_int, ui_dragger_clamp_float, ui_dragger_clamp_int, ui_dragger_clamp_uint }
 // @copypasta clamps
-ui_dragger_clamp_float :: proc (value: ^f32, speed, min, max: f32, format: string, args: ..any, flags := DraggerFlags{}) -> bool {
+ui_dragger_clamp_float :: proc (value: ^f32, speed, min, max: f32, format: string, args: ..any, logarithmic := false) -> bool {
     interaction := Interaction{ kind = .Drag, target = value }
     
-    changed, released := ui_dragger_base(value, speed, interaction, flags, format, ..args)
-    if changed {
+    result := ui_dragger_base(value, speed, interaction, logarithmic, format, ..args)
+    if result.changed {
         value^ = clamp(value^, min, max)
     }
     
-    return released
+    return result.released
 }
 ui_dragger_clamp_int :: proc (value: ^$I, format: string, args: ..any, speed: f32 = 1, min: int = min(int), max: int = max(int), logarithmic := false) -> bool where !intrinsics.type_is_unsigned(I), intrinsics.type_is_integer(I) {
     before := value^
@@ -457,34 +448,34 @@ ui_dragger_int :: proc (value: ^$I, format: string, args: ..any, speed: f32 = 1,
     interaction := Interaction{ kind = .Drag, target = value }
     
     temp := cast(f32) value^
-    flags : DraggerFlags
-    if logarithmic do flags += { .logarithmic }
-    changed, released := ui_dragger_base(&temp, speed, interaction, flags, format, ..args)
+    result := ui_dragger_base(&temp, speed, interaction, logarithmic, format, ..args)
     
-    if changed {
+    if result.changed {
         next := round(I, temp)
-        changed = next != value^
+        result.changed = next != value^
         value^  = next
     }
     
-    released = is_ended(the_ui, interaction)
-    
-    return released
+    return result.released
 }
 ui_dragger_float :: proc (value: ^f32, format: string, args: ..any, speed: f32 = 1, min := min(f32), max := max(f32), logarithmic := false) -> bool {
     interaction := Interaction{ kind = .Drag, target = value }
     
-    flags : DraggerFlags
-    if logarithmic do flags += { .logarithmic }
-    changed, released := ui_dragger_base(value, speed, interaction, flags, format, ..args)
+    result := ui_dragger_base(value, speed, interaction, logarithmic, format, ..args)
     
-    if changed {
+    if result.changed {
         value^ = clamp(value^, min, max)
     }
-    return released
+    
+    return result.released
 }
 
-ui_dragger_base :: proc (value: ^f32, speed: f32, interaction: Interaction, flags: DraggerFlags, format: string, args: ..any) -> (changed: bool, released: bool) {
+Communication_Dragger :: struct {
+    changed: bool, 
+    released: bool,
+}
+
+ui_dragger_base :: proc (value: ^f32, speed: f32, interaction: Interaction, logarithmic: bool, format: string, args: ..any) -> Communication_Dragger {
     theme := theme_dragger(is_hot(the_ui, interaction) || is_active(the_ui, interaction))
     
     text := tprint(format, ..args)
@@ -495,29 +486,30 @@ ui_dragger_base :: proc (value: ^f32, speed: f32, interaction: Interaction, flag
     ui_element_text(element, theme.text, theme.shadow, format, ..args)
     end_ui_element(element)
     
+    result: Communication_Dragger
     if is_active(the_ui, interaction) {
         before := value^
         val    := value^
         
         speed := speed
-        if .logarithmic in flags {
+        if logarithmic {
             val = math.ln(val)
             speed /= 1000
         }
         
         val += speed * the_ui.mouse_dp.x
         
-        if .logarithmic in flags {
+        if logarithmic {
             val = math.exp(val)
         }
         
         value^  = val
-        changed = val != before
+        result.changed = val != before
     }
     
-    released = is_ended(the_ui, interaction)
+    result.released = is_ended(the_ui, interaction)
     
-    return changed, released
+    return result
 }
 
 ////////////////////////////////////////////////

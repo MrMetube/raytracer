@@ -6,7 +6,7 @@ import "core:thread"
 import "core:sync"
 import win "core:sys/windows"
 
-WorkQueueCallback :: #type proc(data: pmm)
+WorkQueueCallback :: #type proc (data: pmm)
 
 WorkQueue :: struct {
     name: string,
@@ -68,8 +68,8 @@ close_work_queue_and_wait_for_threads :: proc (queue: ^WorkQueue) {
 ////////////////////////////////////////////////
 
 enqueue_work_or_do_immediatly :: proc { enqueue_work_or_do_immediatly_t, enqueue_work_or_do_immediatly_any }
-enqueue_work_or_do_immediatly_t :: proc(queue: ^WorkQueue, callback: proc(data: ^$T), data: ^T) { enqueue_work_or_do_immediatly_any(queue, auto_cast callback, data) }
-enqueue_work_or_do_immediatly_any :: proc(queue: ^WorkQueue, callback: WorkQueueCallback, data: pmm) {
+enqueue_work_or_do_immediatly_t   :: proc (queue: ^WorkQueue, callback: proc (data: ^$T),  data: ^T)  { enqueue_work_or_do_immediatly_any(queue, auto_cast callback, data) }
+enqueue_work_or_do_immediatly_any :: proc (queue: ^WorkQueue, callback: WorkQueueCallback, data: pmm) {
     if queue != nil {
         enqueue_work(queue, callback, data)
     } else {
@@ -78,8 +78,8 @@ enqueue_work_or_do_immediatly_any :: proc(queue: ^WorkQueue, callback: WorkQueue
 }
 
 enqueue_work :: proc { enqueue_work_t, enqueue_work_any }
-enqueue_work_t :: proc(queue: ^WorkQueue, callback: proc (data: ^$T), data: ^T) { enqueue_work_any(queue, auto_cast callback, data) }
-enqueue_work_any :: proc(queue: ^WorkQueue, callback: WorkQueueCallback, data: pmm) {
+enqueue_work_t   :: proc (queue: ^WorkQueue, callback: proc (data: ^$T),  data: ^T)  { enqueue_work_any(queue, auto_cast callback, data) }
+enqueue_work_any :: proc (queue: ^WorkQueue, callback: WorkQueueCallback, data: pmm) {
     old_next_entry := queue.next_entry_to_write
     new_next_entry := (old_next_entry + 1) % len(queue.entries)
     assert(new_next_entry != queue.next_entry_to_read, "too many units of work enqueued") 
@@ -93,7 +93,7 @@ enqueue_work_any :: proc(queue: ^WorkQueue, callback: WorkQueueCallback, data: p
     sync.sema_post(&queue.semaphore, 1)
 }
 
-complete_all_work :: proc(queue: ^WorkQueue) {
+complete_all_work :: proc (queue: ^WorkQueue) {
     if queue == nil do return
     
     for !work_is_completed(queue) {
@@ -108,7 +108,7 @@ work_is_completed :: proc (queue: ^WorkQueue) -> bool {
     return queue.completion_count == queue.completion_goal
 }
 
-do_next_work_queue_entry :: proc(queue: ^WorkQueue) -> (should_sleep: b32) {
+do_next_work_queue_entry :: proc (queue: ^WorkQueue) -> (should_sleep: b32) {
     old_next_entry := queue.next_entry_to_read
     
     if old_next_entry != queue.next_entry_to_write {
