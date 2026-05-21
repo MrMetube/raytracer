@@ -41,8 +41,8 @@ Debug_View_Kind :: enum {
     Binormals,
 }
 
-Sort_Subnodes := true
-Early_Elimination := false
+Sort_Subnodes     :: true
+Early_Elimination :: true
 
 Debug_View: Debug_View_Kind
 Triangle_Threshold  := 500

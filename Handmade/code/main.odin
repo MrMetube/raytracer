@@ -349,8 +349,6 @@ draw_ui :: proc (layout: ^Element, state: ^State) {
                 rerender = true
             }
         }
-        if ui_toggle(&Sort_Subnodes,     "Sort Subnodes")     do rerender = true
-        if ui_toggle(&Early_Elimination, "Early Elimination") do rerender = true
     end_horizontal()
     
     layout_advance(layout, layout.spacing)
