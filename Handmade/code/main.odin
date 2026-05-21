@@ -289,7 +289,9 @@ draw_ui :: proc (layout: ^Element, state: ^State) {
         
         if rl.IsWindowFocused() {
             // @api how can one hot surface have multiple interactions?
-            interaction := Interaction { kind = .NOP, target = &state.preview_camera, right = true, middle = true }
+            interaction := interaction_make(.NOP, &state.preview_camera)
+            interaction_buttons(&interaction, left = true, middle = true, right = true)
+            
             rect := rect_min_dimension(state.preview_render_p, preview_render_size)
             if rect_contains(rect, the_ui.mouse_p) {
                 the_ui.next_hot_interaction = interaction
@@ -298,16 +300,17 @@ draw_ui :: proc (layout: ^Element, state: ^State) {
             if is_active(the_ui, interaction) {
                 changed_camera := false
                 dmousep := rl.GetMouseDelta()
-                if rl.IsMouseButtonDown(.LEFT) {
+                
+                if mouse_button_down(the_ui, .left) {
                     rotation_speed :: 0.001 * Tau
                     state.preview_camera_orbit += -dmousep.x * rotation_speed
                     state.preview_camera_pitch += -dmousep.y * rotation_speed
                     changed_camera = true
-                } else if rl.IsMouseButtonDown(.RIGHT) {
+                } else if mouse_button_down(the_ui, .right) {
                     zoom_speed := 0.005 * (state.preview_camera_offset.z - state.preview_camera_dolly)
                     state.preview_camera_dolly += -dmousep.y * zoom_speed
                     changed_camera = true
-                } else if rl.IsMouseButtonDown(.MIDDLE) {
+                } else if mouse_button_down(the_ui, .middle) {
                     state.preview_camera = state.camera
                     state.preview_render.requested = true
                 }
@@ -341,8 +344,8 @@ draw_ui :: proc (layout: ^Element, state: ^State) {
     defer state.fast_render.requested = rerender
     
     begin_horizontal()
-        for kind in Debug_View_Kind {
-            if ui_radio_button(&Debug_View, kind, "%v", kind).clicked {
+        for kind, index in Debug_View_Kind {
+            if ui_radio_button(&Debug_View, kind, "%v", kind, index = index).clicked {
                 rerender = true
             }
         }
@@ -395,7 +398,7 @@ draw_ui :: proc (layout: ^Element, state: ^State) {
             object := &state.world.objects[object_index]
             
             
-            if ui_radio_button(&state.selected_object_id, object_index, "Object %v", object_index).is_selected {
+            if ui_radio_button(&state.selected_object_id, object_index, "Object %v", object_index, index = object_index).is_selected {
                 layout_indent_scope(layout)
                 
                 if ui_radio_button(&state.previewed_object_id, object_index, "Focus").clicked {
@@ -430,7 +433,7 @@ draw_ui :: proc (layout: ^Element, state: ^State) {
             id := cast(Material_Id) index
             
             
-            if ui_radio_button(&state.selected_material_id, id, "%v: %v", id, state.world.material_names[id]).is_selected {
+            if ui_radio_button(&state.selected_material_id, id, "%v: %v", id, state.world.material_names[id], index = index).is_selected {
                 layout_indent_scope(layout)
                 
                 material.emit_strength = max(0.000001, material.emit_strength)
@@ -456,7 +459,7 @@ draw_ui :: proc (layout: ^Element, state: ^State) {
 
 ////////////////////////////////////////////////
 
-draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Render_Settings, name: string, is_focused: bool, can_be_focused: bool, resolutions: [] iv2) -> bool {
+draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Render_Settings, name: string, is_focused: bool, can_be_focused: bool, resolutions: [] iv2, loc := #caller_location) -> bool {
     result: bool
     if ui_collapser(&settings.is_open, name) {
         layout_indent_scope(layout)
@@ -464,7 +467,7 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Ren
         begin_horizontal()
             if can_be_focused {
                 // @todo(viktor): is_focused -> highlighted
-                result = ui_button({ kind = .SetValue, target = settings, value = name }, "Focus")
+                result = ui_button(set_value_interaction_(settings, loc = loc), "Focus")
             }
             
             ui_toggle(&settings.display_progress, "Display Progress")
@@ -479,7 +482,7 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Ren
         layout_advance(layout, layout.spacing)
         
         layout_indent(layout)
-            if ui_button({kind = .SetValue, target = &settings.render_time }, "Reset") {
+            if ui_button(set_value_interaction_(&settings.render_time, loc = loc), "Reset") {
                 if !settings.active {
                     stat_init(&settings.render_time, time.diff(settings.start, settings.end))
                 } else {
@@ -508,8 +511,8 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Ren
         layout_advance(layout, layout.spacing)
         
         begin_horizontal()
-            if ui_button(set_value_interaction(&settings.rays_per_pixel, settings.rays_per_pixel / 2 ), "-") do settings.rays_per_pixel /= 2 
-            if ui_button(set_value_interaction(&settings.rays_per_pixel, settings.rays_per_pixel * 2), "+") do settings.rays_per_pixel *= 2
+            if ui_button(set_value_interaction_(&settings.rays_per_pixel, 0, loc), "-") do settings.rays_per_pixel /= 2 
+            if ui_button(set_value_interaction_(&settings.rays_per_pixel, 1, loc), "+") do settings.rays_per_pixel *= 2
             ui_text("rays per_pixel %v", settings.rays_per_pixel)
             settings.rays_per_pixel = clamp(settings.rays_per_pixel, LaneWidth, 8192)
         end_horizontal()
@@ -521,7 +524,7 @@ draw_render_settings_ui :: proc (state: ^State, layout: ^Element, settings: ^Ren
             begin_horizontal()
                 if !settings.active {
                     for size, index in resolutions {
-                        if ui_button(interaction(.SetValue, settings, index), "%vx%v", size.x, size.y) {
+                        if ui_button(set_value_interaction_(&settings.image, index, loc), "%vx%v", size.x, size.y) {
                             if size.x != settings.image.width || size.y != settings.image.height {
                                 init_render_image(settings, size)
                             }

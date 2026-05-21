@@ -1,6 +1,7 @@
 package main
 
 import "base:intrinsics"
+import "base:runtime"
 import "core:math"
 import rl "vendor:raylib"
 
@@ -13,6 +14,7 @@ UI :: struct {
     mouse_p:  v2,
     mouse_dp: v2,
     dt: f32,
+    mouse_buttons: [Mouse_Button_Kind] Mouse_Button,
     
     elements: [dynamic; 256] Element,
     
@@ -22,26 +24,32 @@ UI :: struct {
     font_size: f32,
 }
 
+Mouse_Button :: struct {
+    down, pressed, released, up: bool,
+}
+
+Mouse_Button_Kind :: enum {
+    left,
+    middle,
+    right,
+    /* side, extra, forward, back */
+}
+
 the_ui: ^UI
 parent_stack: [dynamic; 256] ^Element
 
 Interaction :: struct {
     kind: Interaction_Kind,
-    target: pmm,
     
-    right, middle: bool,
+    id: Interaction_Id,
     
-    value:  union {
-        string,
-        bool,
-        u32,
-        i32,
-        f32,
-        int,
-        Object_Id,
-        Material_Id,
-        Debug_View_Kind,
-    },
+    buttons: bit_set[Mouse_Button_Kind],
+}
+
+Interaction_Id :: struct {
+    pointer:  pmm,
+    index:    int,
+    location: runtime.Source_Code_Location,
 }
 
 Interaction_Kind :: enum {
@@ -151,6 +159,17 @@ begin_ui :: proc (ui: ^UI, delta_time: f32) {
     ui.mouse_dp = rl.GetMouseDelta()
     ui.dt = delta_time
     
+    for rl_button, kind in ([Mouse_Button_Kind] rl.MouseButton {
+        .left   = .LEFT,
+        .middle = .MIDDLE,
+        .right  = .RIGHT,
+    }) {
+        ui.mouse_buttons[kind].down     = rl.IsMouseButtonDown(rl_button)
+        ui.mouse_buttons[kind].pressed  = rl.IsMouseButtonPressed(rl_button)
+        ui.mouse_buttons[kind].released = rl.IsMouseButtonReleased(rl_button)
+        ui.mouse_buttons[kind].up       = rl.IsMouseButtonUp(rl_button)
+    }
+    
     clear(&ui.elements)
     
     the_ui = ui
@@ -232,9 +251,9 @@ is_interacting_press :: proc (ui: ^UI) -> bool {
     }
     
     result: bool
-    result ||= rl.IsMouseButtonPressed(.LEFT)
-    if it.middle do result ||= rl.IsMouseButtonPressed(.MIDDLE)
-    if it.right  do result ||= rl.IsMouseButtonPressed(.RIGHT)
+    for button in it.buttons {
+        result ||= mouse_button_pressed(ui, button)
+    }
     
     return result
 }
@@ -246,43 +265,74 @@ is_interacting_release :: proc (ui: ^UI) -> bool {
     }
     
     result: bool
-    result ||= rl.IsMouseButtonReleased(.LEFT)
-    if it.middle do result ||= rl.IsMouseButtonReleased(.MIDDLE)
-    if it.right  do result ||= rl.IsMouseButtonReleased(.RIGHT)
+    for button in it.buttons {
+        result ||= mouse_button_released(ui, button)
+    }
     
     return result
 }
 
+mouse_button_pressed  :: proc (ui: ^UI, button: Mouse_Button_Kind) -> bool { return ui.mouse_buttons[button].pressed  }
+mouse_button_released :: proc (ui: ^UI, button: Mouse_Button_Kind) -> bool { return ui.mouse_buttons[button].released }
+mouse_button_up       :: proc (ui: ^UI, button: Mouse_Button_Kind) -> bool { return ui.mouse_buttons[button].up       }
+mouse_button_down     :: proc (ui: ^UI, button: Mouse_Button_Kind) -> bool { return ui.mouse_buttons[button].down     }
+
 ////////////////////////////////////////////////
 
 is_hot :: proc (ui: ^UI, interaction: Interaction) -> bool {
-    result := ui.hot_interaction == interaction
+    result := interaction_equal(ui.hot_interaction, interaction)
     return result
 }
 
 is_active :: proc (ui: ^UI, interaction: Interaction) -> bool {
-    result := ui.active_interaction == interaction
+    result := interaction_equal(ui.active_interaction, interaction)
     return result
 }
 
 // @naming
 is_ended :: proc (ui: ^UI, interaction: Interaction) -> bool {
-    result := ui.ended_interaction == interaction
+    result := interaction_equal(ui.ended_interaction, interaction)
     return result
 }
 
 ////////////////////////////////////////////////
 
-set_value_interaction :: proc (target: ^$T, value: T) -> Interaction {
-    result := interaction(.SetValue, target, value)
+interaction_make :: proc (kind: Interaction_Kind, pointer: ^$T, #any_int index: int = 0, loc := #caller_location) -> Interaction {
+    result: Interaction
+    result.kind   = .SetValue
+    
+    result.buttons = { .left }
+    
+    result.id.pointer  = pointer
+    result.id.index    = index
+    result.id.location = loc
+    
     return result
 }
 
-interaction :: proc (kind: Interaction_Kind, pointer: ^$T, index: $I) -> Interaction {
-    result: Interaction
-    result.kind   = .SetValue
-    result.target = pointer
-    result.value  = index
+interaction_equal :: proc (a, b: Interaction) -> bool {
+    result := a.id == b.id
+    return result
+}
+
+interaction_buttons :: proc { interaction_buttons_1, interaction_buttons_ref }
+interaction_buttons_1 :: proc (interaction: Interaction, left, middle, right: bool) -> Interaction {
+    result := interaction
+    
+    result.buttons = {}
+    if left   { result.buttons += { .left }   }
+    if middle { result.buttons += { .middle } }
+    if right  { result.buttons += { .right }  }
+    
+    return result
+}
+
+interaction_buttons_ref :: proc (interaction: ^Interaction, left, middle, right: bool) {
+    interaction^ = interaction_buttons_1(interaction^, left, middle, right)
+}
+
+set_value_interaction_ :: proc (target: ^$T, index := 0, loc := #caller_location) -> Interaction {
+    result := interaction_make(.SetValue, target, index, loc)
     return result
 }
 
@@ -299,8 +349,8 @@ ui_button :: proc (interaction: Interaction, format: string, args: ..any) -> boo
     return result
 }
 
-ui_toggle :: proc (condition: ^bool, format: string, args: ..any) -> bool {
-    interaction := set_value_interaction(condition, !condition^)
+ui_toggle :: proc (condition: ^bool, format: string, args: ..any, loc := #caller_location) -> bool {
+    interaction := set_value_interaction_(condition, loc = loc)
     
     hot    := is_hot(the_ui, interaction)
     active := is_active(the_ui, interaction) || condition^
@@ -315,9 +365,9 @@ ui_toggle :: proc (condition: ^bool, format: string, args: ..any) -> bool {
     return clicked
 }
 
-ui_collapser :: proc (is_open: ^bool, format: string, args: ..any) -> bool {
+ui_collapser :: proc (is_open: ^bool, format: string, args: ..any, loc := #caller_location) -> bool {
     was_open := is_open^
-    interaction := set_value_interaction(is_open, !was_open)
+    interaction := set_value_interaction_(is_open, loc = loc)
     
     hot    := is_hot(the_ui, interaction)
     active := is_active(the_ui, interaction) || was_open
@@ -337,8 +387,8 @@ Communication_Radio :: struct {
     is_selected: bool,
 }
 
-ui_radio_button :: proc (target: ^$T, value: T, format: string, args: ..any) -> Communication_Radio {
-    interaction := set_value_interaction(target, value)
+ui_radio_button :: proc (target: ^$T, value: T, format: string, args: ..any, #any_int index := 0, loc := #caller_location) -> Communication_Radio {
+    interaction := set_value_interaction_(target, index = index, loc = loc)
     
     hot    := is_hot(the_ui, interaction)
     active := is_active(the_ui, interaction) || target^ == value
@@ -385,10 +435,10 @@ ui_themed_button :: proc (interaction: Interaction, theme: Theme, format: string
 
 ////////////////////////////////////////////////
 
-ui_mover :: proc (ui: ^UI, drag: ^v2, size: v2) -> bool {
+ui_mover :: proc (ui: ^UI, drag: ^v2, size: v2, loc := #caller_location) -> bool {
     rect := rect_min_dimension(drag^, size)
     
-    interaction := Interaction { kind = .Move, target = drag }
+    interaction := interaction_make(.Move, drag, loc = loc)
     if rect_contains(rect, ui.mouse_p) {
         ui.next_hot_interaction = interaction
     }
@@ -416,8 +466,8 @@ ui_dragger_01 :: proc (value: ^f32, format: string, args: ..any) -> bool {
 // @todo(viktor): dragger should be only for unclamped values, for clamped values there should just be a slider that shows the user the range and where the current value lies within that range
 ui_dragger :: proc { ui_dragger_float, ui_dragger_int, ui_dragger_clamp_float, ui_dragger_clamp_int, ui_dragger_clamp_uint }
 // @copypasta clamps
-ui_dragger_clamp_float :: proc (value: ^f32, speed, min, max: f32, format: string, args: ..any, logarithmic := false) -> bool {
-    interaction := Interaction{ kind = .Drag, target = value }
+ui_dragger_clamp_float :: proc (value: ^f32, speed, min, max: f32, format: string, args: ..any, logarithmic := false, loc := #caller_location) -> bool {
+    interaction := interaction_make(.Drag, value, loc = loc)
     
     result := ui_dragger_base(value, speed, interaction, logarithmic, format, ..args)
     if result.changed {
@@ -444,8 +494,8 @@ ui_dragger_clamp_uint :: proc (value: ^$T, format: string, args: ..any, speed: f
     
     return released
 }
-ui_dragger_int :: proc (value: ^$I, format: string, args: ..any, speed: f32 = 1, logarithmic := false) -> bool where intrinsics.type_is_integer(I) {
-    interaction := Interaction{ kind = .Drag, target = value }
+ui_dragger_int :: proc (value: ^$I, format: string, args: ..any, speed: f32 = 1, logarithmic := false, loc := #caller_location) -> bool where intrinsics.type_is_integer(I) {
+    interaction := interaction_make(.Drag, value, loc = loc)
     
     temp := cast(f32) value^
     result := ui_dragger_base(&temp, speed, interaction, logarithmic, format, ..args)
@@ -458,8 +508,8 @@ ui_dragger_int :: proc (value: ^$I, format: string, args: ..any, speed: f32 = 1,
     
     return result.released
 }
-ui_dragger_float :: proc (value: ^f32, format: string, args: ..any, speed: f32 = 1, min := min(f32), max := max(f32), logarithmic := false) -> bool {
-    interaction := Interaction{ kind = .Drag, target = value }
+ui_dragger_float :: proc (value: ^f32, format: string, args: ..any, speed: f32 = 1, min := min(f32), max := max(f32), logarithmic := false, loc := #caller_location) -> bool {
+    interaction := interaction_make(.Drag, value, loc = loc)
     
     result := ui_dragger_base(value, speed, interaction, logarithmic, format, ..args)
     
